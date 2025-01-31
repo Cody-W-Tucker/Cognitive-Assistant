@@ -18,6 +18,14 @@
             (with pkgs.python311Packages; [
               pip
               venvShellHook
+              python-dotenv
+              langchain-openai
+              langchain-core
+              langchain-community
+              langgraph
+              notebook
+              jupyter
+              pandas
             ]);
         };
       });

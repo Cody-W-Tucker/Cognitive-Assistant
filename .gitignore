@@ -1,2 +1,5 @@
 .direnv
 .venv
+.env
+
+data
