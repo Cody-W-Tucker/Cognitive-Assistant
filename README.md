@@ -1,9 +1,3 @@
----
-title: Create Cognitive Assistant
-date created: 2024-11-29
-date modified: 2025-01-23
----
-
 # Cognitive AI Assistant
 
 **Introductory Context:**  
