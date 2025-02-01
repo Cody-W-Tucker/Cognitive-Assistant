@@ -1,3 +1,5 @@
+TLDR: I'm building a personal layer to LLMs that will act as an advocate in agent systems.
+
 # Cognitive AI Assistant
 
 **Introductory Context:**  

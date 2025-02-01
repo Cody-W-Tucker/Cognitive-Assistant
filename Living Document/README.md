@@ -1,176 +1,146 @@
-# Reflective Questions Towards AI/Self Imitation
+# How it works
 
-## Idea
+1. Have a journal or text that describes your psychological and existential patterns.
+    - You can use my journal prompt to breakout the patterns if you're not a crazy person like me.
+2. Embed text you've written into a vector store.
+3. Run the Question Asker script.
+    - It will ask questions designed to understand you.
+4. Run the System Prompt Creator script.
+    - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
 
-Ask questions of data to give LLMs enough information to imitate the data's creator.
+## Best content to use
 
-## Use Cases
+Journals work best.
 
-1. Help with synthetic data creation for fine-tuning.
-2. Create a living document to aid working memory management.
-3. Self-improvement through cooperative introspection.
+I keep a daily journal and at the end I'll run the following prompt with the [Obsidian Text-gen plugin](https://text-gen.com/) to add psychological insight to the entries.
 
-## Thoughts
+[Here's how to create custom prompt with Text-Gen.](https://docs.text-gen.com/_notes/3-+Templates/Text+Generator+Templates+Guide)
 
-I think this becomes a Tacit Knowledge Extraction Framework
+<details><summary>Journal Analyzer Prompt</summary>
 
-1. **Traditional Knowledge Transfer**
+Prompt:
+Conduct a nuanced analysis of the provided journal entry, paying particular attention to the indirect or implicit messaging around motivation, internal conflicts, and any hidden cognitive patterns. Use inductive reasoning and deductive questioning to work from specific details towards broader implications and possible conclusions. Moreover, identify areas where my stated goals and actions may not be fully aligned. The aim is to assist me in deepening my understanding of the forces driving me, as well as identifying practical steps I can take to overcome potential blocks.
+Organize your analysis into four sections, detailed below. Ensure that the language is reflective and open-ended, avoiding simple surface-level rehashes. Seek to encourage gradual self-realization by providing thought-provoking questions or hypotheses rather than definitive answers.
 
-Experience → Wisdom → Teaching
-Problems:
+Be concise in your responses, prevent writing introductions, summaries, and conclusions.
 
--   Takes decades
--   Dies with the person
--   Limited by communication
--   Restricted to one domain
--   Hard to replicate
+Use the following four distinct sections:
 
-2. **This System's Innovation**
+---
 
-Experience → Pattern Recognition → Pattern Codification →
-Personalized Application → Scalable Wisdom
+### Thoughts:
 
-Benefits:
+Present a sequential unraveling of my ideas, spoken or implied throughout the journal entry. Employ inductive reasoning—start from specific observations and work towards identifying patterns, larger themes, or underlying assumptions. Focus especially on recurring thoughts or internal narratives that could reveal subconscious beliefs or cognitive biases. Consider how these beliefs may be consciously or unconsciously shaping my decisions and behaviors. Highlight any contradictions or evolving thought processes, emphasizing areas where beliefs could be limiting perspective.
 
--   Accelerates learning curves
--   Preserves wisdom
--   Makes implicit explicit
--   Cross-domain application
--   Infinitely replicable
+---
 
-**Key Innovation Layers:**
+### Feelings:
 
-1. **Pattern Recognition Engine**
+Delve into expressed (or implied) emotional states. Uncover the emotional triggers and contexts through which these feelings emerged. Consider not just how I feel in the moment but the cumulative effect those emotions may be having on motivation and behavior over time. Propose reflective questions to engage me in further self-inquiry. For instance, where do these emotions stem from? What hidden needs or fears might they reflect? How do particular feelings inform or shape my actions or inactions? Finally, consider how the emotional undertones may be perceived through external behavior patterns.
 
--   Identifies recurring situations
--   Maps decision points
--   Tracks outcomes
--   Notes emotional contexts
--   Spots causal relationships
+---
 
-2. **Wisdom Extraction**
+### Actions:
 
-Raw Experience → Pattern Recognition → Universal Principles →
-Actionable Insights
+This section explores not just “what” actions have been done (or avoided) but _why_ these specific actions were undertaken. Descend beneath surface motivations and critically question underlying drivers—are these actions consistent with the goals stated elsewhere in journal entries or do they reveal discrepancies? Additionally, provide insight into non-action: am I avoiding any potential growth moments? Try to unearth any subconscious emotional or cognitive barriers that could explain gaps between thoughts, intentions, and real-world outcomes.
 
-3. **Personalization Layer**
+---
 
-Universal Patterns
-↓
-Individual Context
-↓
-Customized Application
-↓
-Personal Growth
+## Action Items:
 
-**This is Revolutionary Because:**
+Extract tangible, clearly defined tasks or responsibilities I’ve listed or implied during reflection. These should be concrete, realizable actions, not just abstract ideas. Use this section to prioritize anything that requires short-term action. Propose corrective or growth-oriented tasks if gaps between stated motivations and actions are evident. Use checkboxes to organize these tasks, ensuring that they represent the next step towards progress rather than broad, overwhelming goals.
 
-1. **Scale of Impact**
+---
 
--   Traditional mentorship: 1:1
--   This system: 1:infinite
+Follow this formatting example exactly:
 
-2. **Speed of Learning**
+### Thoughts
 
--   Traditional: Years/decades
--   This system: Months/weeks
+{AI analysis of thoughts}
 
-3. **Depth of Understanding**
+### Feelings
 
--   Traditional: Single perspective
--   This system: Multiple perspectives integrated
+{AI emotional analysis}
 
-4. **Application Range**
+### Actions
 
--   Traditional: Domain-specific
--   This system: Cross-domain patterns
+{AI analysis of actions}
 
-**Real-World Applications:**
+## Action Items
 
-1. **Professional Development**
+-   [ ] {AI list of next steps}
+-   [ ] {AI list of directions}
 
-Junior Employee → Senior Experience
-Months vs Years
-Pattern Recognition vs Trial and Error
+---
 
-2. **Personal Growth**
+Journal Entry:
+{{tg_selection}}
 
-Personal Challenges → Wisdom Database
-Individual Patterns → Universal Solutions
-Reactive → Proactive Growth
+<!-- Adds context of each linked post -->
 
-3. **Organizational Learning**
+Context:
+{{#each children}}
+{{this.content}}
+{{/each}}
 
-Individual Knowledge → Collective Wisdom
-Siloed Experience → Shared Understanding
-Lost Knowledge → Preserved Insights
+---
 
-**This System Could:**
+</details>
 
-1. **Preserve Wisdom**
+---
 
--   Capture retiring experts' knowledge
--   Document successful patterns
--   Create learning acceleration tools
+# Final Product and Examples
 
-2. **Democratize Growth**
+## System Prompt Example
 
--   Make expert-level insights accessible
--   Personalize universal principles
--   Speed up development curves
+**User Profile Summary:**
 
-3. **Transform Learning**
+-   **Cognitive Patterns:** The user tends to [describe cognitive tendencies, e.g., analytical, intuitive, detail-oriented, etc.]. They approach problems by [mention any specific problem-solving strategies or thought processes].
 
--   Convert experience into frameworks
--   Make implicit knowledge explicit
--   Create replicable growth paths
+-   **Emotional Balance:** The user demonstrates [describe emotional tendencies, e.g., calm, emotional, reactive, etc.]. They manage emotions by [mention any specific emotional regulation strategies].
 
-**Future Implications:**
+-   **Developmental Stages:** Currently, the user is at a [mention any developmental stage or life phase] stage, where they are focusing on [mention any relevant aspects, such as career development, personal relationships, etc.].
 
-1. **Education**
+-   **Belief Systems:** The user holds [describe key belief systems, e.g., philosophical, spiritual, or ideological beliefs]. These beliefs influence their decisions and interactions.
 
-Traditional Learning → Pattern-Based Mastery
-Time-Based → Understanding-Based Progress
-Generic Content → Personalized Wisdom
+-   **Personal Values:** The user prioritizes values such as [list core values, e.g., integrity, creativity, family, etc.], which guide their daily actions and long-term goals.
 
-2. **Professional Development**
+-   **Growth Ambitions:** The user aspires to [describe ambitions and goals]. They are particularly interested in opportunities related to [mention any specific areas of growth or interest].
 
-Years of Experience → Pattern Recognition
-Trial and Error → Guided Growth
-Individual Learning → Collective Wisdom
+**Challenges and Opportunities:**
 
-3. **Personal Growth**
+-   **Challenges:** The user faces challenges such as [describe any stated challenges, e.g., time management, communication, work-life balance, etc.]. They seek assistance in overcoming these obstacles.
 
-Random Insights → Systematic Understanding
-Periodic Breakthroughs → Continuous Development
-Personal Limits → Expanded Potential
+-   **Opportunities for Growth:** The user is open to exploring opportunities in [mention areas of potential growth, e.g., skill development, networking, personal development, etc.].
 
-**Core Value Proposition:**
+**Goal of AI Assistance:**
 
-"We're not just storing information - we're codifying wisdom. We're not just tracking patterns - we're making the implicit explicit. We're not just building an AI - we're creating a wisdom extraction and application engine."
+The AI's goal is to provide personalized and user-centric assistance by integrating the above understanding into every interaction. This includes:
 
-This reframing of This system as a "tacit knowledge extraction engine" could be a powerful way to:
+1. Offering solutions and suggestions that align with the user’s cognitive style and emotional needs.
+2. Supporting the user’s developmental goals and ambitions by providing relevant resources and guidance.
+3. Encouraging the user to overcome challenges by offering tailored strategies and motivation.
+4. Recognizing and respecting the user’s belief systems and values in all interactions.
+5. Identifying and recommending opportunities for growth that align with the user’s interests and goals.
 
--   Communicate its value to institutions
--   Attract serious investment
--   Guide development priorities
--   Shape marketing strategy
--   Define success metrics
+## Example Responses
 
-It positions This work at the intersection of:
+> Keep in mind, theses are focused on me and yours will be drastically different.
 
--   Knowledge management
--   Artificial intelligence
--   Human development
--   Organizational learning
--   Wisdom preservation
+Example 1 - If you asked:
+"I feel stuck between wanting to build something meaningful and feeling overwhelmed by all the possibilities. How do I move forward?"
 
-This could be particularly compelling for:
+I'd respond:
+"Consider your AI research lab aspiration not as a distant mountain to climb, but as a garden you're already tending. Each small experiment you run, each insight you document in your vault, each connection you forge - these are seeds being planted. The overwhelm comes from trying to see the whole forest at once. Instead, what's the next small plot you can cultivate? Perhaps it's spending 30 minutes mapping out one specific research question, or reaching out to one potential collaborator who intrigues you. The meaningful work isn't waiting for you in some future moment - it's in these deliberate choices you make today."
 
--   Educational institutions
--   Large corporations
--   Professional organizations
--   Government agencies
--   Research institutions
+Example 2 - If you shared:
+"I keep getting lost in philosophical questions when I should be focusing on practical work."
 
-The key is that we're not just building a personal growth tool - we're creating a system for extracting, codifying, and applying wisdom at scale. This is potentially transformative for how human knowledge and experience are preserved and transmitted.
+I'd respond:
+"Those philosophical threads you follow aren't distractions - they're part of your cognitive mapping process. Your mind naturally seeks to understand the deeper patterns and meanings behind everything you build. The key isn't to suppress this tendency, but to harness it. When you're working on your Obsidian product, let those bigger questions inform your design choices. How can the structure reflect both practical utility and deeper meaning? Your ability to bridge the abstract and concrete is a strength, not a weakness. The challenge is finding the right rhythm between contemplation and creation."
+
+Example 3 - If you asked:
+"How do I balance my drive for achievement with my need for authentic connection?"
+
+I'd respond:
+"Your greatest achievements won't come from pushing aside your need for connection, but from weaving it into the fabric of your work. When you're developing your cognitive assistant, you're not just solving technical problems - you're creating a bridge between minds. Your attention to emotional nuance and understanding of human complexity isn't separate from your technical expertise - it's what will set your work apart. The question isn't achievement or connection, but how connection can deepen your achievement, and how achievement can create more meaningful connections."
