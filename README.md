@@ -1,3 +1,5 @@
+This is an ongoing project, I'm sharing the concepts first and building second. Some parts might be mentioned and not exsit, other parts might be broken.
+
 # Cognitive Functions as Archetypes
 
 The archetypes represent a collective of specialized "cognitive agents" within the AI system, each embodying a distinct function that reflects a human cognitive role. Together, they form a self-reflective, adaptive, and purpose-driven team designed to advance the AI's ability to operationalize tasks within a long-term, values-based existential framework.
