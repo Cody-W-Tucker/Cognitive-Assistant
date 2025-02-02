@@ -37,11 +37,12 @@ We ask these questions to the user's journal and create a system prompt that all
 ## How it works
 
 1. Have a journal or text that describes your psychological and existential patterns.
-    - You can use my journal prompt to breakout the patterns if you're not a crazy person like me.
+    - _If you're not a crazy person like me and don't enjoy this type of writing._
+    - You can use my journal prompt below to breakout the patterns. 
 2. Embed text you've written into a vector store.
-3. Run the Question Asker script.
-    - It will ask questions designed to understand you.
-4. Run the System Prompt Creator script.
+3. Run the Question Asker.
+    - It will ask questions to your journals designed to understand you.
+4. Run the System Prompt Creator.
     - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
 
 ## Best content to use
