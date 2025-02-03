@@ -1,6 +1,8 @@
 # Proof of Concept
 
-Ideally the Existential Layer for LLMs will be implicit through the interplay of actions and interactions between the user and Agent System.
+This is a proof of concept for the idea.
+
+Eventually the Existential Layer for LLMs will be implicit through the interplay of actions and interactions between the user and Agent System.
 
 Until we build that. This serves as a proof of concept people could use to get psychological and philosophical benefits.
 
@@ -37,8 +39,7 @@ We ask these questions to the user's journal and create a system prompt that all
 ## How it works
 
 1. Have a journal or text that describes your psychological and existential patterns.
-    - _If you're not a crazy person like me and don't enjoy this type of writing._
-    - You can use my journal prompt below to breakout the patterns. 
+    - You can use my journal prompt below if you don't enjoy this form of writing.
 2. Embed text you've written into a vector store.
 3. Run the Question Asker.
     - It will ask questions to your journals designed to understand you.
@@ -181,3 +182,111 @@ Example 3 - If you asked:
 
 I'd respond:
 "Your greatest achievements won't come from pushing aside your need for connection, but from weaving it into the fabric of your work. When you're developing your cognitive assistant, you're not just solving technical problems - you're creating a bridge between minds. Your attention to emotional nuance and understanding of human complexity isn't separate from your technical expertise - it's what will set your work apart. The question isn't achievement or connection, but how connection can deepen your achievement, and how achievement can create more meaningful connections."
+
+---
+
+# Project Notes
+
+## Assumptions
+
+1. AI alignment should be individual, instead of general.
+2. Generalized alignment will inherently contain bias.
+3. Humans are led via a meta-cognitive layer.
+4. Archetypes exist in repeating narratives in humans.
+5. It's possible to capture some aspects of humans state via their writing.
+
+## Logic Questions
+
+What if we built a system that created a "Living Document" that evolves with user?
+Would mirroring the user cause an emergent meta-cognitive layer?
+
+## How Should We do This?
+
+Ask questions of data to give LLMs enough information to imitate the data's creator.
+
+## Current Use Cases
+
+1. Help with synthetic data creation for fine-tuning.
+2. Create a living document to aid working memory management.
+3. Self-improvement through cooperative introspection.
+
+## Future Use Cases
+
+### Tacit Knowledge Extraction
+
+The Tacit Knowledge Extraction Framework is a system for converting raw, personal experiences into structured, actionable knowledge that can be shared, adapted, and applied across diverse situations. By employing pattern recognition, wisdom codification, and personalization, it transforms learning from a slow, experiential process into one that is scalable, cross-disciplinary, and customizable. This framework redefines how knowledge is preserved and transmitted, ensuring that insights from individuals are not lost but become part of an evolving collective resource for human development.
+
+---
+
+### **How the Framework Works**
+
+The system operates as a layered process, with each layer contributing to the transformation of experience into structured wisdom that can be applied at scale.
+
+#### **1. Pattern Recognition**
+
+The first layer focuses on identifying recurring structures within individual or organizational experiences. This involves mapping decision points, causal relationships, situational factors, outcomes, and the emotional contexts associated with those outcomes. The goal is to extract patterns that repeat reliably across different situations, revealing the underlying dynamics that contributed to success or failure.
+
+This process is systematic and data-driven, providing a structured way to decode tacit knowledge, which often resides in intuition or expertise but is difficult to articulate.
+
+#### **2. Wisdom Codification**
+
+Once patterns have been identified, they are translated into universal principles—abstracted insights that are no longer tied to the specifics of the original scenario. This codification step makes the patterns broadly usable by stripping away unnecessary context, retaining only the essential lessons and relationships. These principles are then turned into actionable frameworks that can be accessed and applied in real-world decision-making.
+
+This stage transforms unstructured, individual experience into scalable knowledge that transcends domains or disciplines. It makes the implicit explicit, converting insights that were previously locked away in people’s minds into tangible and usable resources.
+
+#### **3. Personalization**
+
+The final step is applying universal principles to specific, individualized contexts. Wisdom codified as universal patterns gains value when it is tailored to fit the unique circumstances, goals, or challenges of a particular person, team, or organization. Personalization brings relevance to the insights, ensuring they are practical and effective in diverse scenarios.
+
+In this way, the framework becomes not just a repository of generic wisdom, but a system that yields specific and contextualized guidance for personal growth, professional development, or organizational learning.
+
+---
+
+### **Core Innovations**
+
+This framework fundamentally transforms how knowledge is extracted, shared, and applied. It offers several innovations that overcome limitations of existing knowledge transfer methods:
+
+-   **From Experience to Patterns:** Instead of only passing down raw experiences, the framework identifies the structures underlying those experiences, ensuring that the essence of what works (or doesn't) is retained.
+-   **From Single Domain to Cross-Domain:** Because universal principles are abstracted from their original context, they can be adapted and applied across different fields or industries.
+-   **From Intuitive to Explicit:** Tacit knowledge, which typically resides in the unconscious or is difficult to articulate, is made explicit and accessible for others.
+-   **From 1:1 to Scalable:** Wisdom is no longer tied to one person teaching one other person; insights become shareable across individuals, teams, or even organizations.
+
+---
+
+### **Applications**
+
+The versatility of this system allows for broad applications across several key areas:
+
+1. **Professional Development**
+   In professional contexts, this framework accelerates learning by bridging the experience gap between junior and senior employees. Rather than relying on traditional mentorship over years, employees can access insights derived from real-world patterns. This eliminates reliance on trial-and-error learning and significantly reduces the time needed to gain expertise.
+
+2. **Personal Growth**
+   Individuals navigating challenges in their personal lives often learn reactively and sporadically, relying on chance insights or intuition. By mapping personal struggles to universal principles, this system allows for a more structured approach that turns self-improvement into a proactive, consistent practice. It gives people tools for continuous progress, customized to their specific goals and situations.
+
+3. **Organizational Learning**
+   Institutions often lose knowledge when experienced employees leave or retire. The framework captures and codifies this expertise, allowing organizations to preserve and leverage it for future growth. It shifts knowledge ownership from individuals to the collective, fostering shared understanding and preventing the loss of institutional wisdom.
+
+---
+
+### **How It Is Different**
+
+What sets this framework apart is how it reimagines the core elements of learning, growth, and knowledge transfer. Traditional systems rely on gradual accumulation of experience and individual interpretation of lessons; this framework, by contrast, is designed to extract insights rapidly, formalize them into scalable formats, and deliver them in a way that is directly applicable to the learner’s context.
+
+The emphasis on abstracting patterns and causal relationships makes it agnostic to specific fields, allowing for breakthroughs in cross-domain learning. For instance, a lesson learned in leadership development might be codified into patterns that could also guide decision-making in areas as different as startup management, creative problem solving, or even personal relationships.
+
+Additionally, it dramatically compresses the timeline for learning. Where traditional methods might take years or decades to transmit and understand, this framework allows insights to be applied within weeks or months, opening new possibilities for individually or collectively accelerating growth.
+
+---
+
+### **Potential Areas of Exploration**
+
+This framework offers opportunities for advancing knowledge management across multiple domains:
+
+-   **In Education**  
+     It enables new methods of teaching, emphasizing mastery over memorization. By personalizing learning and abstracting wisdom from practical knowledge into frameworks, students could progress more efficiently and meaningfully through their education.
+
+-   **In Workplaces**  
+     Professional development could shift from a reactive, years-long experience-building process to proactive, guided growth, drawing on lessons codified from others’ experiences.
+
+-   **In Society**  
+     On a broader scale, this framework could ensure that cultural or generational wisdom is preserved for future use. Its capacity for scaling insights ensures that valuable knowledge can be shared widely, democratizing access to personal and professional growth pathways.
