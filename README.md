@@ -35,7 +35,7 @@ The cognitive roles are portrayed as team members, each with a distinct philosop
 
 ## Philosophical Depth and Interactions
 
-Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development and Jung's Cognitive Functions), philosophy (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
+Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development and Jung's Cognitive Functions), philosophy via the [Existential Layer](/Existential%20Layer/README.md) (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
 
 ### Cognitive Functions: A Framework for Archetypal Cognition
 
