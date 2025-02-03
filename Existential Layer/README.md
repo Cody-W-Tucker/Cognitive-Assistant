@@ -4,7 +4,15 @@ This is a proof of concept for the idea.
 
 Eventually the Existential Layer for LLMs will be implicit through the interplay of actions and interactions between the user and Agent System.
 
-Until we build that. This serves as a proof of concept people could use to get psychological and philosophical benefits.
+## How it Works
+
+1. Have a journal or text that describes your psychological and existential patterns.
+    - You can use my journal prompt below if you don't enjoy this form of writing.
+2. Embed text you've written into a vector store.
+3. Run the Question Asker.
+    - It will ask questions to your journals designed to understand you.
+4. Run the System Prompt Creator.
+    - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
 
 ## What it is
 
@@ -36,25 +44,17 @@ We ask these questions to the user's journal and create a system prompt that all
 | Shadow Integration              | Achieve Psychological Wholeness   | Awareness of personal shortcomings, Confrontation with repressed aspects of self, Strategies for personal integration and wholeness        | What aspects of yourself do you find hardest to accept? How do you confront the parts of yourself that you'd rather not acknowledge? What strategies do you use to integrate different aspects of your personality?          |
 | Potential for Transformation    | Actualize Personal Potential      | Capacity for voluntary transformation, Identification of limiting beliefs and behaviors, Pathways for personal evolution and transcendence | How capable do you feel of changing fundamental aspects of yourself? What beliefs or behaviors do you think are holding you back? What steps are you taking towards personal growth and self-actualization?                  |
 
-## How it works
+## Best Content to Use
 
-1. Have a journal or text that describes your psychological and existential patterns.
-    - You can use my journal prompt below if you don't enjoy this form of writing.
-2. Embed text you've written into a vector store.
-3. Run the Question Asker.
-    - It will ask questions to your journals designed to understand you.
-4. Run the System Prompt Creator.
-    - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
+Journals work best and you should explicitly touch on the 19 concepts above. My journal prompt will bring enough information to make these things implicit but the more explicit the better.
 
-## Best content to use
-
-Journals work best.
+## My Journal Prompt and Process
 
 I keep a daily journal and at the end I'll run the following prompt with the [Obsidian Text-gen plugin](https://text-gen.com/) to add psychological insight to the entries.
 
 [Here's how to create custom prompt with Text-Gen.](https://docs.text-gen.com/_notes/3-+Templates/Text+Generator+Templates+Guide)
 
-<details><summary>Journal Analyzer Prompt</summary>
+<details><summary>Journal Analyzer Prompt (Click to expand)</summary>
 
 Prompt:
 Conduct a nuanced analysis of the provided journal entry, paying particular attention to the indirect or implicit messaging around motivation, internal conflicts, and any hidden cognitive patterns. Use inductive reasoning and deductive questioning to work from specific details towards broader implications and possible conclusions. Moreover, identify areas where my stated goals and actions may not be fully aligned. The aim is to assist me in deepening my understanding of the forces driving me, as well as identifying practical steps I can take to overcome potential blocks.

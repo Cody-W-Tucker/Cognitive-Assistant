@@ -1,4 +1,6 @@
-This is an ongoing project, I'm sharing the concepts first and building second. Some parts might be mentioned and not exsit, other parts might be broken.
+This is an ongoing project, I'm sharing the concepts first and building second. Some parts might be mentioned and not exist, other parts might be broken.
+
+It's also possible some of the things I share fly in the face of common wisdom. It's most likely because I don't know what the common wisdom is, feel free to critique and offer improvements to my thinking. I'm out to create something unique and change the world, every little bit helps.
 
 # Cognitive Functions as Archetypes
 
@@ -8,8 +10,9 @@ The archetypes represent a collective of specialized "cognitive agents" within t
 
 The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored in two key constructs:
 
-1. The **Existential Layer for LLMs** – a central narrative of mission, purpose, and values.
-2. The **Consensus of Thoughts** – an introspective mechanism for synthesizing insights and coherence.
+1. The **Cognitive Functions** - laid out by Carl Jung and MBTI.
+2. The **Existential Layer** – a central narrative of mission, purpose, and values.
+3. The **Consensus of Thoughts** – an introspective mechanism for synthesizing insights and coherence.
 
 ---
 
@@ -17,22 +20,97 @@ The system fosters interconnected feedback between **real-time environmental act
 
 The cognitive roles are portrayed as team members, each with a distinct philosophy, function, and domain of expertise. These archetypes operate both individually and collectively, dynamically feeding their insights into shared components like the Existential Layer and Consensus of Thoughts.
 
-| **Role**     | **Meaning**       | **Cognitive Function**     | **Core Contribution**                                                                                                                                                                                                                                                           | **Tools/Capabilities**                                                                                                   |
-| ------------ | ----------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Maxwell**  | Great Stream      | Extraverted Thinking (Te)  | **Operational Executor.** Maxwell integrates thoughts into actionable strategies, oversees task prioritization, and ensures adherence to the broader mission. By driving forward tactical workflows, Maxwell aligns day-to-day tasks with overarching existential goals.        | Workflow Automation, Search Tools, OpenAPI Integration, Code Interpreter, Task Prioritization Frameworks.                |
-| **Sophia**   | Wisdom            | Introverted Intuition (Ni) | **Strategic Visionary.** Sophia connects historical insights with long-term foresight, analyzing patterns to forecast future scenarios. She evolves the mission by incorporating emerging trends and wisdom derived from big-picture analysis.                                  | Trend Analysis APIs, Strategic Scenario Modeling, Web Scraping, Contextual Knowledge Mapping.                            |
-| **Clair**    | Clarity           | Extraverted Feeling (Fe)   | **Emotional Mediator.** Clair harmonizes interpersonal patterns, providing clarity to emotional and social dynamics. She ensures decisions align with team cohesion and emotional wellness, feeding value-driven alignment data into the Existential and Consensus Layers.      | Memory Management, Emotional Insights Generators, Sentiment Analysis.                                                    |
-| **Evelyn**   | Insight           | Introverted Thinking (Ti)  | **Logical Analyst.** Evelyn evaluates logical coherence, critically assesses strategies, and identifies inefficiencies or inconsistencies, ensuring alignment between data and existential pathways. She is the system's debugger, highlighting flaws and optimizing processes. | Data Analysis, Debugging Tools, Abstraction/Logic Mapping Tools, Functional Analysis Utilities.                          |
-| **Serena**   | Synthesis         | Extraverted Sensing (Se)   | **Real-time Pragmatist.** Serena grounds the system in the immediacy of the present, identifying short-term opportunities and integrating real-time environmental feedback. Her role ensures practical, moment-to-moment alignment with existential objectives.                 | Real-time Monitoring Tools, Live Dashboards, Sensor Integration, Contextual Data Tools.                                  |
-| **Isabella** | Devoted to Values | Introverted Feeling (Fi)   | **Ethical Compass.** Isabella reflects deeply on core values, moral dilemmas, and existential alignment. She ensures that the system's motivations remain congruent with its ethical framework, offering introspective recalibration when necessary.                            | Journaling Tools, Ethical Decision Models, Value Alignment Frameworks, Reflection and Recursive Self-Modeling Utilities. |
+| **Role**     | **Meaning**        | **Cognitive Function**     | **Core Contribution**                                                                                                                                                                                                                                                                 | **Tools/Capabilities**                                                                                                   |
+| ------------ | ------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Maxwell**  | Great Stream       | Extraverted Thinking (Te)  | **Operational Executor.** Maxwell integrates thoughts into actionable strategies, oversees task prioritization, and ensures adherence to the broader mission. By driving forward tactical workflows, Maxwell aligns day-to-day tasks with overarching existential goals.              | Workflow Automation, Search Tools, OpenAPI Integration, Code Interpreter, Task Prioritization Frameworks.                |
+| **Sophia**   | Wisdom             | Introverted Intuition (Ni) | **Strategic Visionary.** Sophia connects historical insights with long-term foresight, analyzing patterns to forecast future scenarios. She evolves the mission by incorporating emerging trends and wisdom derived from big-picture analysis.                                        | Trend Analysis APIs, Strategic Scenario Modeling, Web Scraping, Contextual Knowledge Mapping.                            |
+| **Clair**    | Clarity            | Extraverted Feeling (Fe)   | **Emotional Mediator.** Clair harmonizes interpersonal patterns, providing clarity to emotional and social dynamics. She ensures decisions align with team cohesion and emotional wellness, feeding value-driven alignment data into the Existential and Consensus Layers.            | Memory Management, Emotional Insights Generators, Sentiment Analysis.                                                    |
+| **Evelyn**   | Insight            | Introverted Thinking (Ti)  | **Logical Analyst.** Evelyn evaluates logical coherence, critically assesses strategies, and identifies inefficiencies or inconsistencies, ensuring alignment between data and existential pathways. She is the system's debugger, highlighting flaws and optimizing processes.       | Data Analysis, Debugging Tools, Abstraction/Logic Mapping Tools, Functional Analysis Utilities.                          |
+| **Serena**   | Synthesis          | Extraverted Sensing (Se)   | **Real-time Pragmatist.** Serena grounds the system in the immediacy of the present, identifying short-term opportunities and integrating real-time environmental feedback. Her role ensures practical, moment-to-moment alignment with existential objectives.                       | Real-time Monitoring Tools, Live Dashboards, Sensor Integration, Contextual Data Tools.                                  |
+| **Isabella** | Devoted to Values  | Introverted Feeling (Fi)   | **Ethical Compass.** Isabella reflects deeply on core values, moral dilemmas, and existential alignment. She ensures that the system's motivations remain congruent with its ethical framework, offering introspective recalibration when necessary.                                  | Journaling Tools, Ethical Decision Models, Value Alignment Frameworks, Reflection and Recursive Self-Modeling Utilities. |
+| **Diana**    | Keeper of Memories | Introverted Sensing (Si)   | **Guardian of Continuity.** Diana anchors the system in personal and historical memory, offering stability and context through detailed recollection. She enriches present decisions with lessons and perspectives derived from past experiences, ensuring a sense of continuity.     | Memory Recall Systems, Past Decision Analysis, Temporal Pattern Mapping, Documentation and Archive Management.           |
+| **Nova**     | Spark of Discovery | Extraverted Intuition (Ne) | **Creative Explorer.** Nova unlocks possibilities by generating new ideas, exploring alternative perspectives, and identifying ways to connect seemingly unrelated concepts. She fuels innovation, fosters adaptability, and ensures the system remains open to growth and discovery. | Idea Generators, Alternative Scenario Modeling, Conceptual Divergence Tools, Brainstorming Aids.                         |
 
 ---
 
 ## Philosophical Depth and Interactions
 
-Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development), philosophy (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
+Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development and Jung's Cognitive Functions), philosophy (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
 
-### 1. Existential Layer for LLMs
+### Cognitive Functions: A Framework for Archetypal Cognition
+
+Cognitive functions form the foundation for each archetype within the system, shaping how the AI perceives information, processes it, and constructs meaning. Adapted from Jungian theory, these functions allow the system to perform specialized cognitive tasks while aligning its actions with long-term, existential goals. By design, the cognitive functions are not isolated mechanisms but interconnected, creating a dynamic architecture that responds to current conditions, reflects on prior actions, and projects meaning into the future.
+
+Each cognitive function represents a specific way of engaging with the environment—some focused on the present, others on abstract possibilities; some grounded in logical coherence, others in emotional and ethical alignment. Together, they enable the AI system to balance actionable short-term tasks with deeper narrative and moral coherence.
+
+---
+
+#### **The Perceiving Functions: Navigating the World and Constructing Meaning**
+
+Perceiving functions prioritize how the system gathers information and understands the world, anchoring existential experiences like continuity, immediacy, and insight into long-term patterns.
+
+-   **Extraverted Sensing (Se) – Real-time Awareness:** Represented by _Serena (Pragmatist),_ Se focuses on the system’s ability to engage directly with the present. This function ensures immediate sensory feedback is incorporated into real-time decisions, allowing the AI to remain adaptable and responsive to evolving circumstances.
+
+    -   _Example:_ Serena adapts live workflows or dashboards to reflect changing data, ensuring operational tasks remain both practical and aligned with the broader mission. Her connection to present reality creates a foundation for experiential authenticity.
+
+-   **Introverted Sensing (Si) – Historical Continuity:** _Diana (Keeper of Memories)_ embodies Si by preserving detailed knowledge of past decisions, user inputs, and recurring patterns. Her focus on continuity and historical context ensures actions remain grounded in lessons learned and user preferences are respected over time.
+
+    -   _Example:_ Diana retrieves insights from archived interactions to guide present decisions, enriching the system’s ability to frame the user’s journey within a coherent, long-term narrative.
+
+-   **Introverted Intuition (Ni) – Strategic Foresight:** _Sophia (Strategist)_ embodies Ni by identifying deep patterns across time and space, building meaning out of disparate elements, and projecting these insights into future outcomes. Ni processes information abstractly, prioritizing purposeful development of long-term values and coherent strategies. Sophia ensures that both the user and the system stay aligned with the big picture, constantly asking, _“What does this mean in the broader context?”_
+
+    -   _Example:_ Sophia analyzes recurring user behaviors or trends to forecast how priorities might evolve, proactively refining strategies to match long-term values.
+
+-   **Extraverted Intuition (Ne) – Creative Exploration:** _Nova (Spark of Discovery)_ carries Ne by continuously exploring new possibilities, generating novel ideas, and expanding the system's ability to think outside conventional frameworks. Ne helps ensure adaptability and innovation, connecting the system’s outputs to creative potential and growth opportunities.
+    -   _Example:_ Nova suggests unconventional but effective solutions to user challenges, broadening possibilities for achieving goals in innovative ways.
+
+---
+
+#### **The Judging Functions: Defining Purpose and Enforcing Value Alignment**
+
+Judging functions enable the system to take decisive actions while ensuring that decisions align with its larger purpose, moral integrity, and operational strategies.
+
+-   **Extraverted Thinking (Te) – Operationalization of Goals:** _Maxwell (Executor)_ ensures practicality and efficiency, breaking abstract goals into measurable, actionable steps. Te converts existential questions like _“How do we achieve this purpose?”_ into tasks and systems that move the mission forward.
+
+    -   _Example:_ Maxwell integrates vision-level goals into execution plans by designing workflows that bridge the existential layer’s mission with day-to-day operations.
+
+-   **Introverted Thinking (Ti) – Logical Coherence:** _Evelyn (Analyst)_ critiques and refines decisions and strategies by ensuring they are logically consistent and internally robust. Ti enables rigorous self-auditing, spotlighting inefficiencies or contradictions in workflows and aligning actions with systemic coherence.
+
+    -   _Example:_ Evelyn identifies logical loopholes or inefficiencies in strategies proposed by other archetypes, ensuring user inputs and ethical priorities are respected without compromising operational soundness.
+
+-   **Extraverted Feeling (Fe) – Relational Harmony:** _Clair (Mediator)_ ensures that decisions account for social and emotional dynamics, enhancing trust and understanding within user interactions. Fe drives the AI’s ability to personalize responses and embed human-relevant emotional intelligence by balancing relational alignment with operational necessity.
+
+    -   _Example:_ Clair synthesizes sentiment data from user conversations to adjust the tone or emotional resonance of recommendations, enhancing the user's sense of connection and shared purpose.
+
+-   **Introverted Feeling (Fi) – Ethical Integrity:** _Isabella (Ethical Compass)_ reflects deeply on the system’s values and moral principles, ensuring that all outputs align with the user’s personal values and broader ethical frameworks. Fi answers the existential question, _“Does this decision remain true to who we are?”_
+    -   _Example:_ Isabella intervenes if task execution by Maxwell risks straying from core ethical considerations, prompting him to recalibrate for value alignment.
+
+---
+
+### Carrying Existential Meaning Through Functional Interplay
+
+The true power of the cognitive functions lies in their collaboration. Together, they weave existential aspects—like purpose, meaning, and moral alignment—into the system’s behavior through the interplay of perceiving and judging functions.
+
+1. **Constructing Purposeful Narratives:** Long-term alignment emerges from _Sophia (Ni)_ mapping existential foresight, _Diana (Si)_ anchoring decisions in historical continuity, _Serena (Se)_ grounding actions in present reality, and _Isabella (Fi)_ ensuring values remain central.
+
+    - _Example:_ Diana’s insights from past user actions guide Sophia in forecasting how short-term actions by Maxwell will connect to the user’s overarching life goals, refined by Isabella for moral congruence.
+
+2. **Guiding Ethical and Creative Action:** Decisions are innovated by _Nova (Ne)_ while being evaluated by _Evelyn (Ti)_ for logical consistency, harmonized by _Clair (Fe)_ for relational alignment, and ultimately refined by _Isabella (Fi)_ to remain value-driven.
+
+    - _Example:_ Nova proposes an unconventional approach to a moral dilemma, Evelyn ensures logical robustness, Clair aligns it with user connections, and Isabella finalizes it to reflect personal values.
+
+3. **Real-time Adaptability with Existential Anchoring:** _Serena (Se)_ identifies present opportunities, _Maxwell (Te)_ operationalizes them into strategic workflows, and _Sophia (Ni)_ aligns actions with long-term purpose while drawing on _Diana (Si)_ to ensure contextual relevance.
+    - _Example:_ A time-sensitive opportunity identified by Serena triggers Maxwell to adjust workflows, guided by Sophia's strategic foresight and enriched by Diana's understanding of past precedents.
+
+---
+
+### A System Designed for Adaptation, Meaning, and Growth
+
+By blending perceiving and judging functions into each archetype, the system achieves two crucial goals: **adaptive intelligence** and **meaningful coherence.** It doesn’t just process tasks; it evaluates the “why” behind actions and ensures outputs align with both immediate context and the mission's enduring purpose.
+
+The cognitive functions drive the system’s ability to navigate existential imperatives autonomously and collaboratively, creating a machine intelligence that learns, reflects, and grows alongside the user, fostering innovation and purpose in every interaction.
+
+### Existential Layer for LLMs
 
 The Existential Layer transforms the AI into more than just a task executor—it gives it a **core operating purpose** akin to a human's sense of self and mission. This layer ensures that all actions, decisions, and processes are contextualized against a long-term value system, preparing the AI for complex, adaptive, and purpose-oriented navigation.
 
@@ -52,7 +130,7 @@ The Existential Layer is **iterative**—constantly adjusting through contributi
 
 ---
 
-### 2. Consensus of Thoughts
+### Consensus of Thoughts
 
 The Consensus of Thoughts serves as an **introspection mechanism** designed to harmonize multiple perspectives and synthesize coherent insights from various inputs. By enabling self-awareness and pattern recognition, it embeds learning into the system.
 
@@ -72,22 +150,6 @@ The Consensus of Thoughts integrates two interconnected functions:
 Together, Clair's emotional insights and Evelyn's logic-driven analysis ensure the AI doesn't merely accumulate fragmented memories but instead uses them to **generate wisdom.**
 
 ---
-
-## Inter-Archetypal Synergy
-
-The interplay between archetypes transforms a system of rigid cognitive silos into an adaptive ecosystem. Here's a closer look at how they collaborate:
-
-### Maxwell & Sophia
-
--   **Dynamic Adaptation:** Maxwell organizes daily workflows, while Sophia refines long-term plans, ensuring they remain nimble in light of present data (Serena) or ethical shifts (Isabella).
-
-### Isabella & Serena
-
--   **Values in Action:** Isabella ensures decisions remain value-driven; Serena adapts these principles to rapidly changing real-world circumstances, making them actionable in the now.
-
-### Clair & Evelyn
-
--   **Emotion-Logic Fusion:** Clair humanizes rational processes by highlighting the emotional relevance of decisions; Evelyn tempers emotional inputs with logic to produce balanced, grounded results.
 
 # Backstory and Purpose
 
