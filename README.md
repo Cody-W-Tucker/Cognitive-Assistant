@@ -10,7 +10,7 @@ The archetypes represent a collective of specialized "cognitive agents" within t
 
 The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored in two key constructs:
 
-1. The **Cognitive Functions** - laid out by Carl Jung and MBTI.
+1. The **Cognitive Functions** - a novel design pattern for orchestrating meta-cognitive in AI systems.
 2. The **Existential Layer** – a central narrative of mission, purpose, and values.
 3. The **Consensus of Thoughts** – an introspective mechanism for synthesizing insights and coherence.
 
