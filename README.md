@@ -8,7 +8,7 @@ The archetypes represent a collective of specialized "cognitive agents" within t
 
 ![Whiteboard of agent layout](assets/agent-layout.png)
 
-The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored in two key constructs:
+The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored these key constructs:
 
 1. The **Cognitive Functions** - a novel design pattern for orchestrating meta-cognition in AI systems.
 2. The **Existential Layer** – a central narrative of mission, purpose, and values.
