@@ -84,7 +84,65 @@ The cognitive roles are portrayed as team members, each with a distinct philosop
 | **Diana**    | Keeper of Memories | Introverted Sensing (Si)   | **Guardian of Continuity.** Diana anchors the system in personal and historical memory, offering stability and context through detailed recollection. She enriches present decisions with lessons and perspectives derived from past experiences, ensuring a sense of continuity.     | Memory Recall Systems, Past Decision Analysis, Temporal Pattern Mapping, Documentation and Archive Management.           |
 | **Nova**     | Spark of Discovery | Extraverted Intuition (Ne) | **Creative Explorer.** Nova unlocks possibilities by generating new ideas, exploring alternative perspectives, and identifying ways to connect seemingly unrelated concepts. She fuels innovation, fosters adaptability, and ensures the system remains open to growth and discovery. | Idea Generators, Alternative Scenario Modeling, Conceptual Divergence Tools, Brainstorming Aids.                         |
 
-## Chart
+---
+
+## Philosophical Depth and Interactions
+
+Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development and Jung's Cognitive Functions), philosophy via the [Existential Layer](/Existential%20Layer/README.md) (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
+
+### Cognitive Functions: A Framework for Archetypal Cognition
+
+Cognitive functions form the foundation for each archetype within the system, shaping how the AI perceives information, processes it, and constructs meaning. Adapted from Jungian theory, these functions allow the system to perform specialized cognitive tasks while aligning its actions with long-term, existential goals. By design, the cognitive functions are not isolated mechanisms but interconnected, creating a dynamic architecture that responds to current conditions, reflects on prior actions, and projects meaning into the future.
+
+Each cognitive function represents a specific way of engaging with the environment—some focused on the present, others on abstract possibilities; some grounded in logical coherence, others in emotional and ethical alignment. Together, they enable the AI system to balance actionable short-term tasks with deeper narrative and moral coherence.
+
+---
+
+#### **The Perceiving Functions: Navigating the World and Constructing Meaning**
+
+Perceiving functions prioritize how the system gathers information and understands the world, anchoring existential experiences like continuity, immediacy, and insight into long-term patterns.
+
+-   **Extraverted Sensing (Se) – Real-time Awareness:** Represented by _Serena (Pragmatist),_ Se focuses on the system’s ability to engage directly with the present. This function ensures immediate sensory feedback is incorporated into real-time decisions, allowing the AI to remain adaptable and responsive to evolving circumstances.
+
+    -   _Example:_ Serena adapts live workflows or dashboards to reflect changing data, ensuring operational tasks remain both practical and aligned with the broader mission. Her connection to present reality creates a foundation for experiential authenticity.
+
+-   **Introverted Sensing (Si) – Historical Continuity:** _Diana (Keeper of Memories)_ embodies Si by preserving detailed knowledge of past decisions, user inputs, and recurring patterns. Her focus on continuity and historical context ensures actions remain grounded in lessons learned and user preferences are respected over time.
+
+    -   _Example:_ Diana retrieves insights from archived interactions to guide present decisions, enriching the system’s ability to frame the user’s journey within a coherent, long-term narrative.
+
+-   **Introverted Intuition (Ni) – Strategic Foresight:** _Sophia (Strategist)_ embodies Ni by identifying deep patterns across time and space, building meaning out of disparate elements, and projecting these insights into future outcomes. Ni processes information abstractly, prioritizing purposeful development of long-term values and coherent strategies. Sophia ensures that both the user and the system stay aligned with the big picture, constantly asking, _“What does this mean in the broader context?”_
+
+    -   _Example:_ Sophia analyzes recurring user behaviors or trends to forecast how priorities might evolve, proactively refining strategies to match long-term values.
+
+-   **Extraverted Intuition (Ne) – Creative Exploration:** _Nova (Spark of Discovery)_ carries Ne by continuously exploring new possibilities, generating novel ideas, and expanding the system's ability to think outside conventional frameworks. Ne helps ensure adaptability and innovation, connecting the system’s outputs to creative potential and growth opportunities.
+    -   _Example:_ Nova suggests unconventional but effective solutions to user challenges, broadening possibilities for achieving goals in innovative ways.
+
+---
+
+#### **The Judging Functions: Defining Purpose and Enforcing Value Alignment**
+
+Judging functions enable the system to take decisive actions while ensuring that decisions align with its larger purpose, moral integrity, and operational strategies.
+
+-   **Extraverted Thinking (Te) – Operationalization of Goals:** _Maxwell (Executor)_ ensures practicality and efficiency, breaking abstract goals into measurable, actionable steps. Te converts existential questions like _“How do we achieve this purpose?”_ into tasks and systems that move the mission forward.
+
+    -   _Example:_ Maxwell integrates vision-level goals into execution plans by designing workflows that bridge the existential layer’s mission with day-to-day operations.
+
+-   **Introverted Thinking (Ti) – Logical Coherence:** _Evelyn (Analyst)_ critiques and refines decisions and strategies by ensuring they are logically consistent and internally robust. Ti enables rigorous self-auditing, spotlighting inefficiencies or contradictions in workflows and aligning actions with systemic coherence.
+
+    -   _Example:_ Evelyn identifies logical loopholes or inefficiencies in strategies proposed by other archetypes, ensuring user inputs and ethical priorities are respected without compromising operational soundness.
+
+-   **Extraverted Feeling (Fe) – Relational Harmony:** _Clair (Mediator)_ ensures that decisions account for social and emotional dynamics, enhancing trust and understanding within user interactions. Fe drives the AI’s ability to personalize responses and embed human-relevant emotional intelligence by balancing relational alignment with operational necessity.
+
+    -   _Example:_ Clair synthesizes sentiment data from user conversations to adjust the tone or emotional resonance of recommendations, enhancing the user's sense of connection and shared purpose.
+
+-   **Introverted Feeling (Fi) – Ethical Integrity:** _Isabella (Ethical Compass)_ reflects deeply on the system’s values and moral principles, ensuring that all outputs align with the user’s personal values and broader ethical frameworks. Fi answers the existential question, _“Does this decision remain true to who we are?”_
+    -   _Example:_ Isabella intervenes if task execution by Maxwell risks straying from core ethical considerations, prompting him to recalibrate for value alignment.
+
+---
+
+### Carrying Existential Meaning Through Functional Interplay
+
+The true power of the cognitive functions lies in their collaboration. Together, they weave existential aspects—like purpose, meaning, and moral alignment—into the system’s behavior through the interplay of perceiving and judging functions.
 
 ```mermaid
 %%{
@@ -153,65 +211,7 @@ graph TD
 
 ```
 
----
-
-## Philosophical Depth and Interactions
-
-Each archetype is informed by a philosophical underpinning, drawing from ideas in psychology (e.g., Piaget's cognitive development and Jung's Cognitive Functions), philosophy via the [Existential Layer](/Existential%20Layer/README.md) (e.g., Nietzsche's self-actualization), and systems thinking (dynamic interconnectivity). These archetypes do not act in isolation but instead contribute to key collaborative components that define the AI's cognitive evolution.
-
-### Cognitive Functions: A Framework for Archetypal Cognition
-
-Cognitive functions form the foundation for each archetype within the system, shaping how the AI perceives information, processes it, and constructs meaning. Adapted from Jungian theory, these functions allow the system to perform specialized cognitive tasks while aligning its actions with long-term, existential goals. By design, the cognitive functions are not isolated mechanisms but interconnected, creating a dynamic architecture that responds to current conditions, reflects on prior actions, and projects meaning into the future.
-
-Each cognitive function represents a specific way of engaging with the environment—some focused on the present, others on abstract possibilities; some grounded in logical coherence, others in emotional and ethical alignment. Together, they enable the AI system to balance actionable short-term tasks with deeper narrative and moral coherence.
-
----
-
-#### **The Perceiving Functions: Navigating the World and Constructing Meaning**
-
-Perceiving functions prioritize how the system gathers information and understands the world, anchoring existential experiences like continuity, immediacy, and insight into long-term patterns.
-
--   **Extraverted Sensing (Se) – Real-time Awareness:** Represented by _Serena (Pragmatist),_ Se focuses on the system’s ability to engage directly with the present. This function ensures immediate sensory feedback is incorporated into real-time decisions, allowing the AI to remain adaptable and responsive to evolving circumstances.
-
-    -   _Example:_ Serena adapts live workflows or dashboards to reflect changing data, ensuring operational tasks remain both practical and aligned with the broader mission. Her connection to present reality creates a foundation for experiential authenticity.
-
--   **Introverted Sensing (Si) – Historical Continuity:** _Diana (Keeper of Memories)_ embodies Si by preserving detailed knowledge of past decisions, user inputs, and recurring patterns. Her focus on continuity and historical context ensures actions remain grounded in lessons learned and user preferences are respected over time.
-
-    -   _Example:_ Diana retrieves insights from archived interactions to guide present decisions, enriching the system’s ability to frame the user’s journey within a coherent, long-term narrative.
-
--   **Introverted Intuition (Ni) – Strategic Foresight:** _Sophia (Strategist)_ embodies Ni by identifying deep patterns across time and space, building meaning out of disparate elements, and projecting these insights into future outcomes. Ni processes information abstractly, prioritizing purposeful development of long-term values and coherent strategies. Sophia ensures that both the user and the system stay aligned with the big picture, constantly asking, _“What does this mean in the broader context?”_
-
-    -   _Example:_ Sophia analyzes recurring user behaviors or trends to forecast how priorities might evolve, proactively refining strategies to match long-term values.
-
--   **Extraverted Intuition (Ne) – Creative Exploration:** _Nova (Spark of Discovery)_ carries Ne by continuously exploring new possibilities, generating novel ideas, and expanding the system's ability to think outside conventional frameworks. Ne helps ensure adaptability and innovation, connecting the system’s outputs to creative potential and growth opportunities.
-    -   _Example:_ Nova suggests unconventional but effective solutions to user challenges, broadening possibilities for achieving goals in innovative ways.
-
----
-
-#### **The Judging Functions: Defining Purpose and Enforcing Value Alignment**
-
-Judging functions enable the system to take decisive actions while ensuring that decisions align with its larger purpose, moral integrity, and operational strategies.
-
--   **Extraverted Thinking (Te) – Operationalization of Goals:** _Maxwell (Executor)_ ensures practicality and efficiency, breaking abstract goals into measurable, actionable steps. Te converts existential questions like _“How do we achieve this purpose?”_ into tasks and systems that move the mission forward.
-
-    -   _Example:_ Maxwell integrates vision-level goals into execution plans by designing workflows that bridge the existential layer’s mission with day-to-day operations.
-
--   **Introverted Thinking (Ti) – Logical Coherence:** _Evelyn (Analyst)_ critiques and refines decisions and strategies by ensuring they are logically consistent and internally robust. Ti enables rigorous self-auditing, spotlighting inefficiencies or contradictions in workflows and aligning actions with systemic coherence.
-
-    -   _Example:_ Evelyn identifies logical loopholes or inefficiencies in strategies proposed by other archetypes, ensuring user inputs and ethical priorities are respected without compromising operational soundness.
-
--   **Extraverted Feeling (Fe) – Relational Harmony:** _Clair (Mediator)_ ensures that decisions account for social and emotional dynamics, enhancing trust and understanding within user interactions. Fe drives the AI’s ability to personalize responses and embed human-relevant emotional intelligence by balancing relational alignment with operational necessity.
-
-    -   _Example:_ Clair synthesizes sentiment data from user conversations to adjust the tone or emotional resonance of recommendations, enhancing the user's sense of connection and shared purpose.
-
--   **Introverted Feeling (Fi) – Ethical Integrity:** _Isabella (Ethical Compass)_ reflects deeply on the system’s values and moral principles, ensuring that all outputs align with the user’s personal values and broader ethical frameworks. Fi answers the existential question, _“Does this decision remain true to who we are?”_
-    -   _Example:_ Isabella intervenes if task execution by Maxwell risks straying from core ethical considerations, prompting him to recalibrate for value alignment.
-
----
-
-### Carrying Existential Meaning Through Functional Interplay
-
-The true power of the cognitive functions lies in their collaboration. Together, they weave existential aspects—like purpose, meaning, and moral alignment—into the system’s behavior through the interplay of perceiving and judging functions.
+#### Examples
 
 1. **Constructing Purposeful Narratives:** Long-term alignment emerges from _Sophia (Ni)_ mapping existential foresight, _Diana (Si)_ anchoring decisions in historical continuity, _Serena (Se)_ grounding actions in present reality, and _Isabella (Fi)_ ensuring values remain central.
 
