@@ -109,6 +109,58 @@ Each cognitive function represents a specific way of engaging with the environme
 
 Perceiving functions prioritize how the system gathers information and understands the world, anchoring existential experiences like continuity, immediacy, and insight into long-term patterns.
 
+```mermaid
+
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#1A365D',
+      'primaryTextColor': '#E2E8F0',
+      'primaryBorderColor': '#4A5568',
+      'lineColor': '#718096',
+      'secondaryColor': '#2D3748',
+      'tertiaryColor': '#283141'
+    }
+  }
+}%%
+
+graph TD
+    linkStyle default stroke:#718096,stroke-width:2px
+
+    classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
+    classDef outputNode fill:#22543D,color:#9AE6B4,stroke:#48BB78,stroke-width:3px;
+    classDef cognitiveNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
+    classDef collaborativeNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
+
+    User[User Input]:::inputNode --> Serena
+    Environment[Environmental Data]:::inputNode --> Serena
+
+    subgraph "Perceiving Functions"
+        Serena[Serena - Se<br>Real-time Awareness]:::cognitiveNode
+        Diana[Diana - Si<br>Historical Continuity]:::cognitiveNode
+        Sophia[Sophia - Ni<br>Strategic Foresight]:::cognitiveNode
+        Nova[Nova - Ne<br>Creative Exploration]:::cognitiveNode
+
+        Serena <--> |Present Reality| Diana
+        Diana <--> |Past Patterns| Sophia
+        Sophia <--> |Future Insights| Nova
+        Nova <--> |New Possibilities| Serena
+    end
+
+    Serena --> Output[System Output]:::outputNode
+
+    ExistentialLayer[Existential Layer]:::collaborativeNode
+
+    Serena -.-> ExistentialLayer
+    Diana -.-> ExistentialLayer
+    Sophia -.-> ExistentialLayer
+    Nova -.-> ExistentialLayer
+
+    ExistentialLayer -.-> Serena
+
+```
+
 -   **Extraverted Sensing (Se) – Real-time Awareness:** Represented by _Serena (Pragmatist),_ Se focuses on the system’s ability to engage directly with the present. This function ensures immediate sensory feedback is incorporated into real-time decisions, allowing the AI to remain adaptable and responsive to evolving circumstances.
 
     -   _Example:_ Serena adapts live workflows or dashboards to reflect changing data, ensuring operational tasks remain both practical and aligned with the broader mission. Her connection to present reality creates a foundation for experiential authenticity.
@@ -129,6 +181,60 @@ Perceiving functions prioritize how the system gathers information and understan
 #### **The Judging Functions: Defining Purpose and Enforcing Value Alignment**
 
 Judging functions enable the system to take decisive actions while ensuring that decisions align with its larger purpose, moral integrity, and operational strategies.
+
+```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#1A365D',
+      'primaryTextColor': '#E2E8F0',
+      'primaryBorderColor': '#4A5568',
+      'lineColor': '#718096',
+      'secondaryColor': '#2D3748',
+      'tertiaryColor': '#283141'
+    }
+  }
+}%%
+
+graph TD
+    linkStyle default stroke:#718096,stroke-width:2px
+
+    classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
+    classDef outputNode fill:#22543D,color:#9AE6B4,stroke:#48BB78,stroke-width:3px;
+    classDef judgingNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
+    classDef collaborativeNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
+
+    User[User Input]:::inputNode --> Maxwell
+
+    subgraph "Judging Functions System"
+        Maxwell[Maxwell - Te<br>Operationalization of Goals]:::judgingNode
+        Evelyn[Evelyn - Ti<br>Logical Coherence]:::judgingNode
+        Clair[Clair - Fe<br>Relational Harmony]:::judgingNode
+        Isabella[Isabella - Fi<br>Ethical Integrity]:::judgingNode
+
+        Maxwell <--> |Practical strategies| Evelyn
+        Evelyn --> |Logical refinement| Maxwell
+        Clair --> |Social dynamics| Maxwell
+        Isabella --> |Ethical alignment| Maxwell
+
+        Evelyn <--> |Logical consistency| Clair
+        Clair <--> |Emotional intelligence| Isabella
+        Isabella --> |Value reflection| Evelyn
+    end
+
+    Maxwell --> Output[System Output]:::outputNode
+
+    PurposeAlignment[Consensus of Thoughts]:::collaborativeNode
+
+    Maxwell -.-> PurposeAlignment
+    Evelyn -.-> PurposeAlignment
+    Clair -.-> PurposeAlignment
+    Isabella -.-> PurposeAlignment
+
+    PurposeAlignment -.-> Maxwell
+
+```
 
 -   **Extraverted Thinking (Te) – Operationalization of Goals:** _Maxwell (Executor)_ ensures practicality and efficiency, breaking abstract goals into measurable, actionable steps. Te converts existential questions like _“How do we achieve this purpose?”_ into tasks and systems that move the mission forward.
 
