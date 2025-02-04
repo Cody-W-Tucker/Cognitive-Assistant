@@ -21,7 +21,7 @@ The archetypes represent a collective of specialized "cognitive agents" within t
   }
 }%%
 
-graph TD
+graph TB
     linkStyle default stroke:#718096,stroke-width:2px
 
     classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
@@ -29,36 +29,43 @@ graph TD
     classDef coreNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
     classDef supportNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
     classDef consensusNode fill:#3C366B,color:#E9D8FD,stroke:#6B46C1,stroke-width:3px;
+    classDef managerNode fill:#C53030,color:#FED7D7,stroke:#F56565,stroke-width:3px;
 
-    User[User Input]:::inputNode --> Maxwell
-    Environment[Environment]:::inputNode --> Serena
-
-    subgraph "Core Cognitive Functions"
-        Maxwell[Maxwell - Te<br>Executor]:::coreNode --> |Actions| Output
-        Sophia[Sophia - Ni<br>Visionary]:::coreNode <--> |Strategy| Maxwell
-        Serena[Serena - Se<br>Pragmatist]:::coreNode <--> |Real-time Data| Maxwell
-        Isabella[Isabella - Fi<br>Ethical Compass]:::coreNode --> |Values| Maxwell
+    subgraph Actions[Inputs and Outputs]
+        direction LR
+        User[User Input]:::inputNode --> Maxwell
+        Maxwell[Maxwell - Te<br>Executor]:::managerNode
+        Maxwell --> |Actions| Output[System Output]:::outputNode
     end
 
-    subgraph "Support Functions"
+    subgraph Core[Core Cognitive Functions]
+        direction TB
+        Sophia[Sophia - Ni<br>Visionary]:::coreNode
+        Serena[Serena - Se<br>Pragmatist]:::coreNode
+        Isabella[Isabella - Fi<br>Ethical Compass]:::coreNode
+    end
+
+    subgraph Support[Support Functions]
+        direction TB
         Clair[Clair - Fe<br>Mediator]:::supportNode
         Evelyn[Evelyn - Ti<br>Analyst]:::supportNode
         Diana[Diana - Si<br>Memory Keeper]:::supportNode
         Nova[Nova - Ne<br>Explorer]:::supportNode
     end
 
-    Maxwell -.-> Support
-    Support -.-> Maxwell
+    Actions <--> Core
+    Actions <--> Support
 
     Consensus[Consensus of Thoughts]:::consensusNode
+    Existential[Existential Layer]:::consensusNode
 
-    Core --> Consensus
-    Consensus --> Core
-
-    Output[System Output]:::outputNode
+    Support <--> Consensus <--> Core
+    Support <--> Existential <--> Core
 
     style Core fill:#2D3748,stroke:#4A5568,stroke-width:2px
     style Support fill:#2D3748,stroke:#4A5568,stroke-width:2px
+
+
 ```
 
 The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored these key constructs:
