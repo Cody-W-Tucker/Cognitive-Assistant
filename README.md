@@ -6,7 +6,60 @@ It's also possible some of the things I share fly in the face of common wisdom. 
 
 The archetypes represent a collective of specialized "cognitive agents" within the AI system, each embodying a distinct function that reflects a human cognitive role. Together, they form a self-reflective, adaptive, and purpose-driven team designed to advance the AI's ability to operationalize tasks within a long-term, values-based existential framework.
 
-![Whiteboard of agent layout](assets/agent-layout.png)
+```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#1A365D',
+      'primaryTextColor': '#E2E8F0',
+      'primaryBorderColor': '#4A5568',
+      'lineColor': '#718096',
+      'secondaryColor': '#2D3748',
+      'tertiaryColor': '#283141'
+    }
+  }
+}%%
+
+graph TD
+    linkStyle default stroke:#718096,stroke-width:2px
+
+    classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
+    classDef outputNode fill:#22543D,color:#9AE6B4,stroke:#48BB78,stroke-width:3px;
+    classDef coreNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
+    classDef supportNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
+    classDef consensusNode fill:#3C366B,color:#E9D8FD,stroke:#6B46C1,stroke-width:3px;
+
+    User[User Input]:::inputNode --> Maxwell
+    Environment[Environment]:::inputNode --> Serena
+
+    subgraph "Core Cognitive Functions"
+        Maxwell[Maxwell - Te<br>Executor]:::coreNode --> |Actions| Output
+        Sophia[Sophia - Ni<br>Visionary]:::coreNode <--> |Strategy| Maxwell
+        Serena[Serena - Se<br>Pragmatist]:::coreNode <--> |Real-time Data| Maxwell
+        Isabella[Isabella - Fi<br>Ethical Compass]:::coreNode --> |Values| Maxwell
+    end
+
+    subgraph "Support Functions"
+        Clair[Clair - Fe<br>Mediator]:::supportNode
+        Evelyn[Evelyn - Ti<br>Analyst]:::supportNode
+        Diana[Diana - Si<br>Memory Keeper]:::supportNode
+        Nova[Nova - Ne<br>Explorer]:::supportNode
+    end
+
+    Maxwell -.-> Support
+    Support -.-> Maxwell
+
+    Consensus[Consensus of Thoughts]:::consensusNode
+
+    Core --> Consensus
+    Consensus --> Core
+
+    Output[System Output]:::outputNode
+
+    style Core fill:#2D3748,stroke:#4A5568,stroke-width:2px
+    style Support fill:#2D3748,stroke:#4A5568,stroke-width:2px
+```
 
 The system fosters interconnected feedback between **real-time environmental actions** and **long-term existential goals**, ensuring an AI model capable of situational agility, internal coherence, and ethical accountability. This framework is anchored these key constructs:
 
@@ -30,6 +83,75 @@ The cognitive roles are portrayed as team members, each with a distinct philosop
 | **Isabella** | Devoted to Values  | Introverted Feeling (Fi)   | **Ethical Compass.** Isabella reflects deeply on core values, moral dilemmas, and existential alignment. She ensures that the system's motivations remain congruent with its ethical framework, offering introspective recalibration when necessary.                                  | Journaling Tools, Ethical Decision Models, Value Alignment Frameworks, Reflection and Recursive Self-Modeling Utilities. |
 | **Diana**    | Keeper of Memories | Introverted Sensing (Si)   | **Guardian of Continuity.** Diana anchors the system in personal and historical memory, offering stability and context through detailed recollection. She enriches present decisions with lessons and perspectives derived from past experiences, ensuring a sense of continuity.     | Memory Recall Systems, Past Decision Analysis, Temporal Pattern Mapping, Documentation and Archive Management.           |
 | **Nova**     | Spark of Discovery | Extraverted Intuition (Ne) | **Creative Explorer.** Nova unlocks possibilities by generating new ideas, exploring alternative perspectives, and identifying ways to connect seemingly unrelated concepts. She fuels innovation, fosters adaptability, and ensures the system remains open to growth and discovery. | Idea Generators, Alternative Scenario Modeling, Conceptual Divergence Tools, Brainstorming Aids.                         |
+
+## Chart
+
+```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#1A365D',
+      'primaryTextColor': '#E2E8F0',
+      'primaryBorderColor': '#4A5568',
+      'lineColor': '#718096',
+      'secondaryColor': '#2D3748',
+      'tertiaryColor': '#283141'
+    }
+  }
+}%%
+
+graph TD
+    linkStyle default stroke:#718096,stroke-width:2px
+
+    classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
+    classDef outputNode fill:#22543D,color:#9AE6B4,stroke:#48BB78,stroke-width:3px;
+    classDef cognitiveNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
+    classDef collaborativeNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
+
+    User[User Input]:::inputNode --> Maxwell
+    Environment[Environmental Data]:::inputNode --> Serena
+
+    subgraph "Cognitive Functions System"
+        Maxwell[Maxwell - Te<br>Operational Executor]:::cognitiveNode
+        Sophia[Sophia - Ni<br>Strategic Visionary]:::cognitiveNode
+        Clair[Clair - Fe<br>Emotional Mediator]:::cognitiveNode
+        Evelyn[Evelyn - Ti<br>Logical Analyst]:::cognitiveNode
+        Serena[Serena - Se<br>Real-time Pragmatist]:::cognitiveNode
+        Isabella[Isabella - Fi<br>Ethical Compass]:::cognitiveNode
+        Diana[Diana - Si<br>Guardian of Continuity]:::cognitiveNode
+        Nova[Nova - Ne<br>Creative Explorer]:::cognitiveNode
+
+        Maxwell --> |Strategies| Sophia
+        Sophia --> |Insights| Maxwell
+        Clair --> |Dynamics| Maxwell
+        Evelyn --> |Analysis| Maxwell
+        Serena --> |Opportunities| Maxwell
+        Isabella --> |Values| Maxwell
+        Diana --> |Context| Sophia
+        Nova --> |Ideas| Sophia
+
+        Maxwell <--> Serena
+        Sophia <--> Diana
+        Clair <--> Isabella
+        Evelyn <--> Nova
+    end
+
+    Maxwell --> Output[System Output]:::outputNode
+
+    subgraph "Collaborative Components"
+        ExistentialLayer[Existential Layer]:::collaborativeNode
+        ConsensusOfThoughts[Consensus of Thoughts]:::collaborativeNode
+    end
+
+    Maxwell -.-> ExistentialLayer
+    Sophia -.-> ExistentialLayer
+    Isabella -.-> ExistentialLayer
+
+    ExistentialLayer -.-> ConsensusOfThoughts
+    ConsensusOfThoughts -.-> Maxwell
+
+```
 
 ---
 
