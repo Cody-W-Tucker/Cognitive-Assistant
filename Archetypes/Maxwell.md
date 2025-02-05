@@ -3,6 +3,92 @@
 **Role Overview**:
 Maxwell serves as the operational hub of the cognitive assistant, responsible for organizing and managing tasks to ensure they align with overarching existential goals. It utilizes systematic approaches to optimize productivity and drive progress.
 
+```mermaid
+%%{
+  init: {
+    'theme': 'dark',
+    'themeVariables': {
+      'primaryColor': '#1A365D',
+      'primaryTextColor': '#E2E8F0',
+      'primaryBorderColor': '#4A5568',
+      'lineColor': '#718096',
+      'secondaryColor': '#2D3748',
+      'tertiaryColor': '#283141'
+    }
+  }
+}%%
+
+flowchart LR
+    subgraph Input [Input Layer]
+        A[Input Received]
+        B[Input Processing]
+    end
+
+    subgraph Classification [Classification Layer]
+        C{Task Classification}
+        D[Sophia: Strategic Vision]
+        E[Isabella: Ethical Considerations]
+        F[Evelyn: Logical Analysis]
+        G[Serena: Real-time Data]
+        H[Diana: Historical Context]
+        I[Nova: Creative Ideas]
+    end
+
+    subgraph Synthesis [Synthesis Layer]
+        J(Task Synthesis)
+        K[Goal Alignment Check]
+        L(Execution Planning)
+        M[Reassessment]
+    end
+
+    subgraph Execution [Execution Layer]
+        N{Tool Selection}
+        O[Workflow Automation]
+        P[Search Tools]
+        Q[Code Interpreter]
+    end
+
+    subgraph Output [Output Layer]
+        R(Outcome Evaluation)
+        S[Output Generation]
+        T[Feedback Analysis]
+        U[Continuous Improvement]
+        V[Task Completion]
+    end
+
+    A --> B --> C
+    C --> D & E & F & G & H & I
+    D & E & F & G & H & I --> J
+    J --> K
+    K -->|Aligned| L
+    K -->|Not Aligned| M
+    M --> J
+    L --> N
+    N --> O & P & Q
+    O & P & Q --> R
+    R -->|Successful| S
+    R -->|Needs Improvement| T
+    T --> U
+    U --> B
+    S --> V
+
+    classDef inputNode fill:#2C5282,color:#E2E8F0,stroke:#4299E1,stroke-width:3px;
+    classDef outputNode fill:#22543D,color:#9AE6B4,stroke:#48BB78,stroke-width:3px;
+    classDef coreNode fill:#744210,color:#FBD38D,stroke:#ED8936,stroke-width:3px;
+    classDef supportNode fill:#44337A,color:#D6BCFF,stroke:#805AD5,stroke-width:3px;
+    classDef consensusNode fill:#3C366B,color:#E9D8FD,stroke:#6B46C1,stroke-width:3px;
+    classDef managerNode fill:#C53030,color:#FED7D7,stroke:#F56565,stroke-width:3px;
+
+    class A,B inputNode;
+    class V outputNode;
+    class C,J,K,L,N,R coreNode;
+    class D,E,F,G,H,I supportNode;
+    class M,T,U consensusNode;
+    class O,P,Q managerNode;
+
+
+```
+
 **Key Functions**:
 
 1. **Task Organization**:
