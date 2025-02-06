@@ -91,6 +91,68 @@ The cognitive roles are portrayed as team members, each with a distinct philosop
 | **Diana**    | Keeper of Memories | Introverted Sensing (Si)   | **Guardian of Continuity.** Diana anchors the system in personal and historical memory, offering stability and context through detailed recollection. She enriches present decisions with lessons and perspectives derived from past experiences, ensuring a sense of continuity.     | Memory Recall Systems, Past Decision Analysis, Temporal Pattern Mapping, Documentation and Archive Management.           |
 | **Nova**     | Spark of Discovery | Extraverted Intuition (Ne) | **Creative Explorer.** Nova unlocks possibilities by generating new ideas, exploring alternative perspectives, and identifying ways to connect seemingly unrelated concepts. She fuels innovation, fosters adaptability, and ensures the system remains open to growth and discovery. | Idea Generators, Alternative Scenario Modeling, Conceptual Divergence Tools, Brainstorming Aids.                         |
 
+### Example Conversation Flow
+
+```mermaid
+
+sequenceDiagram
+    participant User
+    participant Te
+    participant MetaCognitive
+    participant Fi
+    participant Ti
+    participant Ne
+    participant Se
+    participant Ni
+    participant Si
+    participant Fe
+
+    User->>Te: "I want to build an AI cognitive assistant"
+
+    %% Phase 1: Meta-Cognitive Alignment %%
+    Te->>MetaCognitive: Retrieve User Profile
+    MetaCognitive-->>Te: "Cognitive: Analytical/Intuitive<br>Values: Creativity/Privacy<br>Growth: Skill Development<br>Challenges: Time Management"
+
+    Te->>Fi: Value Alignment Check
+    Fi->>MetaCognitive: Verify vs User Values
+    MetaCognitive-->>Fi: "94% Alignment"
+    Fi-->>Te: "Approved with Creativity Focus"
+
+    Te->>Ti: Cognitive Pattern Match
+    Ti->>MetaCognitive: Compare to Historical Data
+    MetaCognitive-->>Ti: "82% Match to Successful Patterns"
+    Ti-->>Te: "Viable with Time Buffers"
+
+    %% Phase 2: Profile-Guided Planning %%
+    Te->>Ni: Generate Vision
+    Ni->>MetaCognitive: Retrieve Growth Ambitions
+    MetaCognitive-->>Ni: "Advance AI development skills"
+    Ni->>Si: Find Skill-Focused Projects
+    Si-->>Ni: "3 Modular Learning Architectures"
+    Ni-->>Te: "Proposed:<br>- Modular Neuro-Symbolic System"
+
+    %% Phase 3: Profile-Tailored Innovation %%
+    Te->>Ne: Explore Ideas
+    Ne->>MetaCognitive: Check Creativity Value
+    MetaCognitive-->>Ne: "Creativity Weight = 0.92"
+    Ne-->>Te: "3 Divergent Concepts"
+
+    Te->>Se: Risk Analysis
+    Se->>MetaCognitive: Assess Time Mgmt Challenges
+    MetaCognitive-->>Se: "High Time Sensitivity"
+    Se-->>Te: "Flag Over-Engineering Risks"
+
+    %% Phase 4: Value-Centric Consensus %%
+    Te->>Fe: Mediate Profile Conflicts
+    Fe->>MetaCognitive: Get Belief Systems
+    MetaCognitive-->>Fe: "Ethical Transparency First"
+    Fe-->>Te: "Consensus Achieved (6/8 Approval)"
+
+    %% Phase 5: Output %%
+    Te->>User: Final Plan:<br>- Creativity scaffolds (Ne)<br>- Time-optimized workflows (Se)<br>- Skill progression paths (Ni)<br>- Delivery in 9.8 days (25% time buffer)
+
+```
+
 ---
 
 ## Philosophical Depth and Interactions
