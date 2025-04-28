@@ -26,6 +26,7 @@
               notebook
               jupyter
               pandas
+              scikit-learn
             ]);
           shellHook = ''
             python -m venv .venv
