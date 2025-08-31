@@ -16,7 +16,7 @@ Eventually, the Existential Layer for LLMs will be implicit through the interpla
   
 ### Updated Pipeline Method
 
-Now you can use the [Open-WebUI Pipelines Code](Pipelines/songbird.py) to carry this process out on the fly.
+Now you can use the [Open-WebUI Pipelines Code](pipelines/songbird.py) to carry this process out on the fly.
 
 This new method creates a profile of the question and its semantically similar context, rather than relying on the interview process.
 
