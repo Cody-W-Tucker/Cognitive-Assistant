@@ -2,7 +2,7 @@
 
 This is a proof of concept for the idea.
 
-Eventually the Existential Layer for LLMs will be implicit through the interplay of actions and interactions between the user and Agent System.
+Eventually, the Existential Layer for LLMs will be implicit through the interplay of actions and interactions between the user and the Agent System.
 
 ## How it Works
 
@@ -13,6 +13,12 @@ Eventually the Existential Layer for LLMs will be implicit through the interplay
     - It will ask questions to your journals designed to understand you.
 4. Run the System Prompt Creator.
     - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
+  
+### Updated Pipeline Method
+
+Now you can use the [Open-WebUI Pipelines Code](Pipelines/songbird.py) to carry this process out on the fly.
+
+This new method creates a profile of the question and its semantically similar context, rather than relying on the interview process.
 
 ## What it is
 
