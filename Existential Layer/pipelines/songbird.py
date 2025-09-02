@@ -282,6 +282,8 @@ class Pipeline:
             prompt = f"""
             USER QUERY: {user_message}
 
+            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and reranking of context. You do not need to complete the user's request. Only prepare the documents and context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output.
+
             KNOWLEDGE BASE CONTEXT:
             {knowledge_context}
 
@@ -404,7 +406,7 @@ class Pipeline:
         # Convert standalone closing tags to markdown separators
         text = re.sub(
             r"</think\s*>",
-            "\n\n---\n\n## Reconciling Monolog",
+            "\n\n---\n\n## Reconciling Monologue",
             text,
             flags=re.IGNORECASE
         )
