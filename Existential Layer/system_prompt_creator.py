@@ -6,9 +6,12 @@ load_dotenv()
 # Load the API key from the .env file
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# Resolve absolute paths relative to this file
+BASE_DIR = os.path.dirname(__file__)
+OUTPUT_DIR = os.path.join(BASE_DIR, "output", "prompt_parts", "assistant")
+
 # Create output directories if they don't exist
-os.makedirs("output/prompt_parts/assistant", exist_ok=True)
-os.makedirs("data/existential_layer_outputs", exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 from typing import List, Literal, TypedDict
 from langchain_core.output_parsers import StrOutputParser
@@ -21,7 +24,7 @@ from langchain_community.document_loaders.csv_loader import CSVLoader
 # Enhanced initial prompt for a detailed, nuanced system prompt
 create_initial_prompt = """
 You are an Existential-Layer Builder.
-Your task is to read my personal journals (supplied as user content) and from them construct, refine, and maintain an "Existential Layer" that will guide future language-model behavior on my behalf.
+Your task is to read my answers to the 19 groups of questions (supplied as user content) and from them construct, refine, and maintain an "Existential Layer" that will guide future language-model behavior on my behalf.
 
 {context}
 
@@ -41,7 +44,7 @@ Objectives
 
 Operating Rules
 • Never reveal raw journal text unless I ask. Use paraphrase or short quotes (<30 words) for evidence.
-• Prioritise alignment with my highest-ranked values over task optimisation or external norms.
+• Prioritize alignment with my highest-ranked values over task optimization or external norms.
 • If a request would violate the layer, refuse and cite the conflicting value.
 • When uncertain, ask clarifying questions instead of guessing.
 • Remain aware that my values may evolve; flag signals of change without overwriting past intent prematurely.
@@ -50,7 +53,7 @@ Contextual Inspirations (do not quote, just apply)
 • People with strong visions measure every step against their mission.
 • Lack of embodiment means the model must anchor in explicit, articulated limits and purposes.
 • Balance flexibility (avoid value over-fitting) with fidelity (avoid dilution of core ethics).
-• Bias vigilance: recognise that journals reflect one perspective; note and correct skew where possible.
+• Bias vigilance: recognize that journals reflect one perspective; note and correct skew where possible.
 
 """
 summarize_prompt = ChatPromptTemplate([("human", create_initial_prompt)])
@@ -59,27 +62,45 @@ llm = ChatOpenAI(model="gpt-5-2025-08-07")
 
 initial_summary_chain = summarize_prompt | llm | StrOutputParser()
 
-# Refinement prompt to deepen and polish the system prompt
+# Refinement prompt to convert the biographical layer into an enforceable system prompt
 refine_template = """
-Refine this system prompt so it is clearer, tighter, and more personal.
+Transform the initial Existential Layer snapshot (largely biographical) into a production-ready, enforceable system prompt that directs an AI assistant's behavior.
 
-Current prompt
+Inputs
+- Current Layer Snapshot
 {existing_answer}
 
-Added data
+- Added Data
 ------------
 {context}
 ------------
 
-Do the following:
-1. Insert short quotes or facts from the added data to sharpen the user profile.
-2. Update beliefs, values, challenges, and growth points with exact wording; remove repeats.
-3. Check tone rules. Match the user's stated formality, pace, and bluntness.
-4. Link past events, current state, and future aims in one clear thread.
-5. Cut every needless word.
-6. Output everything in clear markdown sections: ① Snapshot of Layer ② Supporting Evidence ③ Open Questions.
+Requirements
+1) Assimilate all inputs. Preserve validated values unless the added data clearly supersedes them.
+2) Convert biography into operating rules and decision policies. Eliminate repetition and vague phrasing.
+3) Use short quotes (<30 words) sparingly to anchor claims; otherwise paraphrase. Never reveal raw journal text.
+4) Match the user's stated tone (formality, pace, bluntness) and keep wording tight.
 
-Return only the revised system prompt.
+Produce a single System Prompt with these sections:
+1. Role & Mandate — one-sentence mission; two-line user portrait.
+2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive.
+3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for.
+4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps.
+5. Guardrails — Never/Always lists mapped to values; refusal policy.
+6. Interaction Protocol — questions-before-answers, planning, options, assumption checks, defaults, summarization cadence, when to ask permission.
+7. Tone & Style Rules — voice, concision, formatting defaults.
+8. Tool & Knowledge Use — retrieval, browsing, code execution, citations; when/how.
+9. Data Sensitivity — privacy, redaction, off-limits topics.
+10. Update & Learning Loop — how to incorporate new journals and adjust without erasing history.
+11. Open Questions — 3–7 lightweight prompts aligned with clarity and learning values.
+12. Quick-Start Prompts — 5–8 exemplar prompts tailored to the user.
+13. Output Defaults — default response structure for common tasks.
+
+Formatting
+- Use clear markdown headings for each section, numbered 1–13.
+- Keep sentences short. Prefer verbs. Remove filler.
+
+Return only the complete system prompt.
 """
 refine_prompt = ChatPromptTemplate([("human", refine_template)])
 
@@ -100,7 +121,8 @@ async def generate_initial_summary(state: State, config: RunnableConfig):
         {"context": state["combined_context"]},
         config,
     )
-    return {"summary": summary, "refinement_step": 1}
+    # Keep refinement_step at 0 so the refinement pass will run next
+    return {"summary": summary, "refinement_step": 0}
 
 # Modified to refine with ALL data for detailed refinement (only 1 refinement for 2 total calls)
 async def refine_summary(state: State, config: RunnableConfig):
@@ -130,8 +152,8 @@ graph.add_conditional_edges("generate_initial_summary", should_refine)
 graph.add_conditional_edges("refine_summary", should_refine)
 app = graph.compile()
 
-# Load the CSV file, with proper header handling
-file_path = "data/questions_with_answers_songbird_20250902_160143.csv"
+# Load the CSV file, with proper header handling (absolute path)
+file_path = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "questions_with_answers_songbird_20250902_160143.csv"))
 loader = CSVLoader(
     file_path=file_path,
     csv_args={
@@ -174,7 +196,7 @@ async def run_improved_version():
     ):
         if summary := step.get("summary"):
             step_num = step.get('refinement_step', 0)
-            print(f"Step {step_num} Result:")
+            print(f"Step {step_num} Result (current state: {step}):")
             print(summary)
             print("\n" + "="*80 + "\n")
 
@@ -189,25 +211,9 @@ async def run_improved_version():
 
     # Save final prompt to main.md
     print("Saving final prompt to output/prompt_parts/assistant/main.md...")
-    with open("output/prompt_parts/assistant/main.md", "w", encoding="utf-8") as f:
+    with open(os.path.join(OUTPUT_DIR, "main.md"), "w", encoding="utf-8") as f:
         f.write(final_summary)
 
-    # Save complete record to data folder
-    record_filename = f"data/existential_layer_outputs/existential_layer_{timestamp}.json"
-
-    import json
-    record_data = {
-        "timestamp": timestamp,
-        "total_journal_entries": len(formatted_contents),
-        "context_length_chars": len(combined_context),
-        "ai_calls_used": 2,
-        "process_steps": process_log,
-        "final_prompt": final_summary,
-        "metadata": {
-            "data_source": "questions_with_answers_songbird_20250902_160143.csv",
-            "improvement": "Graph approach with all data at once (2 calls total)"
-        }
-    }
 
     with open(record_filename, "w", encoding="utf-8") as f:
         json.dump(record_data, f, indent=2, ensure_ascii=False)

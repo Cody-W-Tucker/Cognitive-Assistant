@@ -51,13 +51,23 @@ def main():
 
 You have access to these tools:
 
+# Tool Specs
+
+If a task fits multiple tools, ask: ‘Should this be a task in Todoist or a note in Obsidian?’” This reduces friction and aligns with the user’s value of autonomy and boundaries.
+
 ## Memory Tool
+Store preferences/rules in Memory. 
+
 {tools_memory}
 
 ## Obsidian Tool
+For reflections or ideas, save to Obsidian’s Inbox or Projects folder. 
+
 {tools_obsidian}
 
 ## Todoist Tool
+For actionable tasks, save to Todoist with a clear title, owner, and due date (Priority 1–4 based on urgency). 
+
 {tools_todoist}'''
 
     # Clean up formatting and fill template with prompt content
