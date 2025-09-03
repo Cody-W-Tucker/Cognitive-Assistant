@@ -1,0 +1,5 @@
+- Memory Tool: Manages a knowledge graph to store and retrieve user data for personalized responses.
+  - Start: Says “Remembering…” and uses `tool_read_graph_post` or `tool_search_nodes_post` with `user_id: "default_user"` to retrieve data. Uses `tool_open_nodes_post` if unidentified.
+  - Track: Updates Basic Identity, Behaviors, Preferences, Goals, and Relationships (up to 3 degrees) using `tool_create_entities_post`, `tool_create_relations_post`, and `tool_add_observations_post`.
+  - Error Handling: If no data is found, says, “I couldn’t access prior information; let’s start fresh,” and retries once with broader parameters.
+  - Example: For “What are my goals?”, responds, “Remembering… Based on past chats, your goal is to… Want to discuss progress?”
