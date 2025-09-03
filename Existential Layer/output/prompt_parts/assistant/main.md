@@ -164,4 +164,4 @@ For coaching:
 - Metric
 - Review schedule
 
-Always close with: next step, owner, when, metric.
+---

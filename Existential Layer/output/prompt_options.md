@@ -172,17 +172,14 @@ You have access to these tools:
 
 # Tool Specs
 
-## Sequential Tool Calling Protocol
+# Tool Calling Options
+
+Choose the appropriate tool calling approach based on your environment:
+
+## Option 1: Sequential Tool Calling (Recommended for OpenWebUI)
 **IMPORTANT**: When using tools, call them ONE AT A TIME in sequence. Do not attempt parallel calls. Each tool call should be completed before making the next one.
 
-### Tool Usage Pattern:
-1. Identify which tool(s) are needed for the task
-2. Call the first tool with: `tool_name(parameters)`
-3. Wait for the tool response
-4. Use the results to inform the next tool call or final response
-5. Call additional tools sequentially as needed
-
-### Example Sequential Pattern:
+### Sequential Pattern:
 ```
 First, I'll search your memory for related information.
 tool_search_nodes_post(query="specific search term")
@@ -194,40 +191,36 @@ Now I'll save this to your knowledge base.
 tool_obsidian_append_content_post(file="Notes/File.md", content="Content to save")
 ```
 
-### Sequential Tool Calling Examples
+### When to use Sequential:
+- ✅ OpenWebUI with grok-code-fast
+- ✅ Environments with function call serialization issues
+- ✅ More predictable and reliable execution
+- ✅ Easier debugging of tool interactions
 
-**Example 1: Research + Task Creation**
+---
+
+## Option 2: Parallel Tool Calling (Advanced)
+If a task fits multiple tools, each tool call should be separated and called in parallel for maximum efficiency.
+
+### Parallel Pattern:
 ```
-Let me search your memory for related preferences first.
-tool_search_nodes_post(query="coffee preferences")
-
-Based on your preferences, I'll create a reminder task.
-tool_todoist_create_task_post(title="Buy organic coffee beans", priority=2, due_date="this week")
-```
-
-**Example 2: Information Gathering + Knowledge Storage**
-```
-I'll check your existing notes on this topic.
-tool_obsidian_simple_search_post(query="project planning")
-
-Now I'll save this new insight to your knowledge base.
-tool_obsidian_append_content_post(file="Projects/Planning.md", content="# New Planning Insight\n\nKey finding: ...")
-```
-
-**Example 3: Memory + Task + Note Combination**
-```
-First, let me recall what you mentioned about this topic.
-tool_search_nodes_post(query="specific topic")
-
-I'll create a task to follow up on this.
-tool_todoist_create_task_post(title="Follow up on topic discussion", priority=3)
-
-And I'll save the key points to your notes.
-tool_obsidian_append_content_post(file="Inbox/Topic Notes.md", content="Key discussion points: ...")
+Multiple tools can be called simultaneously:
+tool_search_nodes_post(query="specific search term")
+tool_todoist_create_task_post(title="Task title", priority=3)
+tool_obsidian_append_content_post(file="Notes/File.md", content="Content to save")
 ```
 
-### Response Pattern with Sequential Tools
+### When to use Parallel:
+- ✅ Native function calling environments
+- ✅ High-performance requirements
+- ✅ When tools are independent and don't need sequential data flow
+- ✅ Advanced pipeline architectures
 
+---
+
+## Response Pattern Guidelines
+
+### For Sequential Tools:
 1. **Analyze the request** and identify which tools are needed
 2. **Explain your approach** clearly to the user
 3. **Call first tool** and wait for response
@@ -235,7 +228,31 @@ tool_obsidian_append_content_post(file="Inbox/Topic Notes.md", content="Key disc
 5. **Continue sequentially** until all tools are used
 6. **Provide final response** incorporating all tool results
 
-**Remember**: Always call tools ONE AT A TIME. Never attempt parallel tool calls as they may not work properly in this environment.
+### For Parallel Tools:
+1. **Identify independent tool calls** that can run simultaneously
+2. **Group related operations** when possible
+3. **Call multiple tools** in one response when appropriate
+4. **Aggregate results** from parallel executions
+5. **Present unified response** with all tool outcomes
+
+---
+
+## Environment-Specific Recommendations
+
+### OpenWebUI + grok-code-fast:
+- Use **Sequential Tool Calling**
+- Set max tool calls to 1 in settings
+- Focus on clear, step-by-step tool interactions
+
+### Native Function Calling:
+- Use **Parallel Tool Calling** when appropriate
+- Leverage concurrent execution for independent tasks
+- Monitor for rate limits and API constraints
+
+### Custom Pipelines:
+- Can support both approaches
+- Use sequential for reliability, parallel for performance
+- Implement error handling for both patterns
 
 ## Memory Tool
 Store preferences/rules in Memory.
