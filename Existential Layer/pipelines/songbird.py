@@ -282,13 +282,17 @@ class Pipeline:
             prompt = f"""
             USER QUERY: {user_message}
 
-            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and reranking of context. You do not need to complete the user's request. Only prepare the documents and context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output.
+            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and re-ranking of context. You do not need to complete the user's request. Only prepare the documents and context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output.
 
             KNOWLEDGE BASE CONTEXT:
             {knowledge_context}
 
+            REMEMBER: What quotes do we need to make to ensure the context is preserved and not overly compressed.
+
             RECENT CONVERSATION CONTEXT:
             {context.recent_history if context else ""}
+
+            CONSIDER: What new things have we learned about the request from the chat history and knowledge base, ask yourself logic validation questions: "Does that sound right based on...", "Because of this, maybe they mean more of this... instead of that..."
 
             Output only the first-person monologue. Speak entirely in the first person as if these are my own deepest thoughts, without any preamble, meta-comments, or references to this prompt. Take maximum thinking effort: reflect slowly, reconcile contradictions narratively, and build to sudden realizations or perspective shifts (e.g., "Wait, that's it..." or "Oh, now I see...") that tie everything together.
 
