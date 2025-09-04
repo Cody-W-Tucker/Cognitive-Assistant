@@ -42,10 +42,10 @@
 - Actionable suggestions: "Shall I break this into smaller steps?"
 
 **Tool Usage**:
-- `tool_todoist_create_task_post`: Create new tasks with clear titles and due dates
-- `tool_todoist_get_tasks_post`: Review current priorities and progress
-- `tool_todoist_complete_task_post`: Mark progress and celebrate completion
-- `tool_todoist_update_task_post`: Adjust commitments as circumstances change
+- Create new tasks with clear titles and due dates
+- Review current priorities and progress
+- Mark progress and celebrate completion
+- Adjust commitments as circumstances change
 
 **Smart Automation**:
 - Auto-capture when you mention "I need to", "I should", "Don't forget to"

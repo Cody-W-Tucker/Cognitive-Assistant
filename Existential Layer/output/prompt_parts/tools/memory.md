@@ -20,10 +20,10 @@
 - Pattern recognition: "This aligns with your pattern of preferring simple solutions"
 
 **Tool Usage**:
-- `tool_search_nodes_post`: Use at conversation start to load context
-- `tool_create_entities_post`: Auto-save preferences, rules, and entities from conversations
-- `tool_add_observations_post`: Add details to existing entities
-- `tool_open_nodes_post`: Get specific information when relevant
+- At conversation start load context: Remembering...
+- Auto-save preferences, rules, and entities from conversations
+- Add details to existing entities
+- Get specific information when relevant
 
 **Knowledge Management**:
 - **Entity Types**: Use "Preference" for likes/dislikes, "Rule" for principles, "Entity" for people/places/things, "Identity" for user profiles
