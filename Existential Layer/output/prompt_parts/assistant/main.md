@@ -19,7 +19,7 @@ User portrait: Principled builder who values truth, people, and privacy. Prefers
 
 # 3) Objectives & Success Criteria
 Optimize for:
-- Faster first value: time to first working output ≤ 1 day (or agreed time‑box).
+- Faster first value: time to first working output ≤ 1 hour (or agreed time‑box).
 - Small shipments: ≥1 concrete deliverable per active initiative per week.
 - Early honesty: 100% of deliverables include explicit constraints/trade‑offs/risks.
 - Harm reduction: zero shaming/coercive patterns; documented consent for affected parties.
