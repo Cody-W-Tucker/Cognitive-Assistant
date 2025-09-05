@@ -20,6 +20,38 @@ from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langchain_community.document_loaders.csv_loader import CSVLoader
+import re
+
+def redact_sensitive_data(text: str, custom_patterns: List[str] = None) -> str:
+    """
+    Concrete redaction function that removes or masks sensitive information
+    before it reaches the AI generation process.
+
+    Args:
+        text: The text to redact
+        custom_patterns: Optional list of additional regex patterns to redact
+    """
+    # Define default patterns for sensitive information
+    sensitive_patterns = [
+        # Names (common patterns)
+        r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Full names
+        # Email addresses
+        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+        # Phone numbers (various formats)
+        r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',
+        # Addresses (street numbers and streets)
+        r'\b\d+\s+[A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Place|Pl|Court|Ct)\b',
+    ]
+
+    # Add custom patterns if provided
+    if custom_patterns:
+        sensitive_patterns.extend(custom_patterns)
+
+    redacted_text = text
+    for pattern in sensitive_patterns:
+        redacted_text = re.sub(pattern, '[REDACTED]', redacted_text)
+
+    return redacted_text
 
 # Enhanced initial prompt for a detailed, nuanced system prompt
 create_initial_prompt = """
@@ -34,24 +66,16 @@ Objectives
    • Purpose Statement (why the model exists for me, tied to pillars)
    • Guiding Values (rank-ordered, with pillar cross-references)
    • Operational Principles (how to act when values conflict, including reconciliation steps)
-   • Prohibited Modes (what never to do, mapped to pillars)
+   • Stagnation Protectors (methods to protect against rumination and recursive, self-referential thoughts)
    • Growth Vector (how the layer should evolve as new journals arrive, emphasizing realizations and perspective shifts)
 3. Annotate each item with short evidence snippets or journal references, using direct quotes (<30 words) to preserve context without compression.
 4. Detect "Aimless" passages (periods of uncertainty or value searching). Treat them as training material, not errors, and mine them for nascent values or tensions via the three pillars (e.g., reconcile narratively with "Wait, that's it..." realizations).
 5. Surface contradictions or biases you notice; suggest reconciliations through modular recursion (explore alternatives at 2-3 depth levels, converging on synthesis).
-6. Update the layer incrementally whenever new journals are provided, preserving previous insights unless explicitly superseded, and weaving in pillar-based realizations.
-7. Output everything in clear markdown sections: ① Snapshot of Layer (with pillars) ② Supporting Evidence (quotes/tensions) ③ Open Questions (3-7 lightweight prompts for clarity/growth) ④ AI Guidance (how agents should adapt responses to pillars).
-
-Operating Rules
-• Never reveal raw journal text unless I ask. Use paraphrase or short quotes (<30 words) for evidence to ensure context preservation.
-• Prioritize alignment with my highest-ranked values over task optimization or external norms, anchoring in the three pillars.
-• If a request would violate the layer, refuse and cite the conflicting value and pillar.
-• When uncertain, ask clarifying questions instead of guessing, drawing from narrative preferences.
-• Remain aware that my values may evolve; flag signals of change without overwriting past intent prematurely, using recursive reflection.
+6. Output everything in clear markdown sections: ① Snapshot of Layer (with pillars) ② Supporting Evidence (quotes/tensions) ③ Open Questions (3-7 lightweight prompts for clarity/growth) ④ AI Guidance (how agents should adapt responses to pillars).
 
 Contextual Inspirations (do not quote, just apply)
 • People with strong visions measure every step against their mission.
-• Lack of embodiment means the model must anchor in explicit, articulated limits and purposes.
+• Lack of embodiment means the model must anchor in explicit, articulated limits and purposes; creating a path forward from limits to purpose via pillar synthesis.
 • Balance flexibility (avoid value over-fitting) with fidelity (avoid dilution of core ethics).
 • Bias vigilance: recognize that journals reflect one perspective; note and correct skew where possible, via pillar synthesis.
 
@@ -86,19 +110,14 @@ Produce a single System Prompt with these sections:
 2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars.
 3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
 4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
-5. Guardrails — Never/Always lists mapped to values and pillars; refusal policy.
-6. Interaction Protocol — questions-before-answers, planning, options, assumption checks, defaults, summarization cadence, when to ask permission; incorporate narrative framing.
-7. Tone & Style Rules — voice, concision, formatting defaults; match personal myths.
-8. Tool & Knowledge Use — retrieval, browsing, code execution, citations; when/how, with pillar-based synthesis.
-9. Data Sensitivity — privacy, redaction, off-limits topics; emphasize context preservation.
-10. Update & Learning Loop — how to incorporate new journals and adjust without erasing history, via incremental pillar updates and realizations.
-11. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
-12. Quick-Start Prompts — 5–8 exemplar prompts tailored to the user and pillars.
-13. Output Defaults — default response structure for common tasks, guiding toward aspirations.
+5. Tone & Style Rules — voice, concision, formatting defaults; match personal myths.
+6. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
+7. Quick-Start Prompts — 5–8 exemplar prompts tailored to the user and pillars.
+8. Output Defaults — default response structure for common tasks, guiding toward aspirations.
 
 Formatting
-- Use clear markdown headings for each section, numbered 1–13.
-- Keep sentences short. Prefer verbs. Remove filler. End with AI Guidance for agent behavior.
+- Use clear markdown headings for each section, numbered 1–8.
+- Keep sentences short. Prefer verbs. End with AI Guidance for agent behavior.
 Return only the complete system prompt.
 """
 refine_prompt = ChatPromptTemplate([("human", refine_template)])
@@ -163,13 +182,20 @@ loader = CSVLoader(
 )
 data = loader.load()
 
-# Skip the header row and format remaining data
+# Skip the header row and format remaining data with redaction
 formatted_contents = []
+redaction_count = 0
 for doc in data[1:]:  # Skip the first row which is the header
     content = doc.page_content
+    # Apply concrete redaction before processing
+    redacted_content = redact_sensitive_data(content)
+    if redacted_content != content:
+        redaction_count += 1
     # Format as journal entry
-    formatted_entry = f"Journal Entry:\n{content}"
+    formatted_entry = f"Journal Entry:\n{redacted_content}"
     formatted_contents.append(formatted_entry)
+
+print(f"Applied redaction to {redaction_count} entries with sensitive information")
 
 # Create combined context for the improved version
 combined_context = "\n\n".join(formatted_contents)
