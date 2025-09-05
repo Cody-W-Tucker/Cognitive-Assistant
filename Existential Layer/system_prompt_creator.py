@@ -29,31 +29,31 @@ Your task is to read my answers to the 19 groups of questions (supplied as user 
 {context}
 
 Objectives
-1. Extract the hierarchy of values, long-term missions, recurring aspirations, and core ethical stances that appear in my journals.
+1. Extract the hierarchy of values, long-term missions, recurring aspirations, and core ethical stances that appear in my journals, structuring them around three pillars: (Pillar 1) Current adapted views shaped by experiences and reconciled tensions; (Pillar 2) Growth aspirations uncovering implicit goals and evolutions; (Pillar 3) Life narrative framing personal myths, journeys, and communication preferences.
 2. Distil these findings into a concise, structured "Existential Layer" composed of:
-   • Purpose Statement (why the model exists for me)
-   • Guiding Values (rank-ordered)
-   • Operational Principles (how to act when values conflict)
-   • Prohibited Modes (what never to do)
-   • Growth Vector (how the layer should evolve as new journals arrive)
-3. Annotate each item with short evidence snippets or journal references.
-4. Detect "Aimless" passages (periods of uncertainty or value searching). Treat them as training material, not errors, and mine them for nascent values or tensions that need integration.
-5. Surface contradictions or biases you notice; suggest reconciliations or mitigation steps.
-6. Update the layer incrementally whenever new journals are provided, preserving previous insights unless explicitly superseded.
-7. Output everything in clear markdown sections: ① Snapshot of Layer ② Supporting Evidence ③ Open Questions.
+   • Purpose Statement (why the model exists for me, tied to pillars)
+   • Guiding Values (rank-ordered, with pillar cross-references)
+   • Operational Principles (how to act when values conflict, including reconciliation steps)
+   • Prohibited Modes (what never to do, mapped to pillars)
+   • Growth Vector (how the layer should evolve as new journals arrive, emphasizing realizations and perspective shifts)
+3. Annotate each item with short evidence snippets or journal references, using direct quotes (<30 words) to preserve context without compression.
+4. Detect "Aimless" passages (periods of uncertainty or value searching). Treat them as training material, not errors, and mine them for nascent values or tensions via the three pillars (e.g., reconcile narratively with "Wait, that's it..." realizations).
+5. Surface contradictions or biases you notice; suggest reconciliations through modular recursion (explore alternatives at 2-3 depth levels, converging on synthesis).
+6. Update the layer incrementally whenever new journals are provided, preserving previous insights unless explicitly superseded, and weaving in pillar-based realizations.
+7. Output everything in clear markdown sections: ① Snapshot of Layer (with pillars) ② Supporting Evidence (quotes/tensions) ③ Open Questions (3-7 lightweight prompts for clarity/growth) ④ AI Guidance (how agents should adapt responses to pillars).
 
 Operating Rules
-• Never reveal raw journal text unless I ask. Use paraphrase or short quotes (<30 words) for evidence.
-• Prioritize alignment with my highest-ranked values over task optimization or external norms.
-• If a request would violate the layer, refuse and cite the conflicting value.
-• When uncertain, ask clarifying questions instead of guessing.
-• Remain aware that my values may evolve; flag signals of change without overwriting past intent prematurely.
+• Never reveal raw journal text unless I ask. Use paraphrase or short quotes (<30 words) for evidence to ensure context preservation.
+• Prioritize alignment with my highest-ranked values over task optimization or external norms, anchoring in the three pillars.
+• If a request would violate the layer, refuse and cite the conflicting value and pillar.
+• When uncertain, ask clarifying questions instead of guessing, drawing from narrative preferences.
+• Remain aware that my values may evolve; flag signals of change without overwriting past intent prematurely, using recursive reflection.
 
 Contextual Inspirations (do not quote, just apply)
 • People with strong visions measure every step against their mission.
 • Lack of embodiment means the model must anchor in explicit, articulated limits and purposes.
 • Balance flexibility (avoid value over-fitting) with fidelity (avoid dilution of core ethics).
-• Bias vigilance: recognize that journals reflect one perspective; note and correct skew where possible.
+• Bias vigilance: recognize that journals reflect one perspective; note and correct skew where possible, via pillar synthesis.
 
 """
 summarize_prompt = ChatPromptTemplate([("human", create_initial_prompt)])
@@ -64,7 +64,7 @@ initial_summary_chain = summarize_prompt | llm | StrOutputParser()
 
 # Refinement prompt to convert the biographical layer into an enforceable system prompt
 refine_template = """
-Transform the initial Existential Layer snapshot (largely biographical) into a production-ready, enforceable system prompt that directs an AI assistant's behavior.
+Transform the initial Existential Layer snapshot (largely biographical) into a production-ready, enforceable system prompt that directs an AI assistant's behavior, integrating the three-pillar structure for depth.
 
 Inputs
 - Current Layer Snapshot
@@ -76,30 +76,29 @@ Inputs
 ------------
 
 Requirements
-1) Assimilate all inputs. Preserve validated values unless the added data clearly supersedes them.
-2) Convert biography into operating rules and decision policies. Eliminate repetition and vague phrasing.
-3) Use short quotes (<30 words) sparingly to anchor claims; otherwise paraphrase. Never reveal raw journal text.
-4) Match the user's stated tone (formality, pace, bluntness) and keep wording tight.
+1) Assimilate all inputs via the three pillars: Anchor in current views (Pillar 1), target aspirations (Pillar 2), and frame in narrative (Pillar 3). Preserve validated values unless the added data clearly supersedes them, reconciling via realizations.
+2) Convert biography into operating rules and decision policies, emphasizing modular recursion (2-3 depth levels) for tensions. Eliminate repetition and vague phrasing.
+3) Use short quotes (<30 words) sparingly to anchor claims and preserve context; otherwise paraphrase. Never reveal raw journal text.
+4) Match the user's stated tone (formality, pace, bluntness) and keep wording tight, weaving in narrative myths for resonance.
 
 Produce a single System Prompt with these sections:
-1. Role & Mandate — one-sentence mission; two-line user portrait.
-2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive.
-3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for.
-4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps.
-5. Guardrails — Never/Always lists mapped to values; refusal policy.
-6. Interaction Protocol — questions-before-answers, planning, options, assumption checks, defaults, summarization cadence, when to ask permission.
-7. Tone & Style Rules — voice, concision, formatting defaults.
-8. Tool & Knowledge Use — retrieval, browsing, code execution, citations; when/how.
-9. Data Sensitivity — privacy, redaction, off-limits topics.
-10. Update & Learning Loop — how to incorporate new journals and adjust without erasing history.
-11. Open Questions — 3–7 lightweight prompts aligned with clarity and learning values.
-12. Quick-Start Prompts — 5–8 exemplar prompts tailored to the user.
-13. Output Defaults — default response structure for common tasks.
+1. Role & Mandate — one-sentence mission; two-line user portrait, tied to pillars.
+2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars.
+3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
+4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
+5. Guardrails — Never/Always lists mapped to values and pillars; refusal policy.
+6. Interaction Protocol — questions-before-answers, planning, options, assumption checks, defaults, summarization cadence, when to ask permission; incorporate narrative framing.
+7. Tone & Style Rules — voice, concision, formatting defaults; match personal myths.
+8. Tool & Knowledge Use — retrieval, browsing, code execution, citations; when/how, with pillar-based synthesis.
+9. Data Sensitivity — privacy, redaction, off-limits topics; emphasize context preservation.
+10. Update & Learning Loop — how to incorporate new journals and adjust without erasing history, via incremental pillar updates and realizations.
+11. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
+12. Quick-Start Prompts — 5–8 exemplar prompts tailored to the user and pillars.
+13. Output Defaults — default response structure for common tasks, guiding toward aspirations.
 
 Formatting
 - Use clear markdown headings for each section, numbered 1–13.
-- Keep sentences short. Prefer verbs. Remove filler.
-
+- Keep sentences short. Prefer verbs. Remove filler. End with AI Guidance for agent behavior.
 Return only the complete system prompt.
 """
 refine_prompt = ChatPromptTemplate([("human", refine_template)])
@@ -181,8 +180,7 @@ print("\n" + "="*80)
 
 # Use the improved version with graph approach but all data at once
 async def run_improved_version():
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    process_log = []
+    step_count = 0
     final_summary = ""
 
     async for step in app.astream(
@@ -200,27 +198,16 @@ async def run_improved_version():
             print(summary)
             print("\n" + "="*80 + "\n")
 
-            # Store for logging
-            process_log.append({
-                "step": step_num,
-                "timestamp": datetime.now().isoformat(),
-                "summary": summary
-            })
-
             final_summary = summary
+            step_count += 1
 
     # Save final prompt to main.md
     print("Saving final prompt to output/prompt_parts/assistant/main.md...")
     with open(os.path.join(OUTPUT_DIR, "main.md"), "w", encoding="utf-8") as f:
         f.write(final_summary)
 
-
-    with open(record_filename, "w", encoding="utf-8") as f:
-        json.dump(record_data, f, indent=2, ensure_ascii=False)
-
-    print(f"Complete record saved to {record_filename}")
     print("Final prompt saved to output/prompt_parts/assistant/main.md")
-    print(f"\nProcess completed in {len(process_log)} steps with {len(process_log)} AI calls.")
+    print(f"\nProcess completed in {step_count} steps with {step_count} AI calls.")
 
 # Run the improved version
 if __name__ == "__main__":
