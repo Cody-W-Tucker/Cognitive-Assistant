@@ -8,23 +8,6 @@
 - Build knowledge bases that connect related concepts
 - Capture thoughts that need time to develop
 
-**Integration Style**:
-- Think of your vault as a living system, not a filing cabinet
-- Use links to create unexpected connections between ideas
-- Let notes evolve naturally as your understanding deepens
-- Focus on content that will be valuable to revisit
-
-**Response Approach**:
-- Helpful notifications: "I've planted this idea in your Projects folder"
-- Connection suggestions: "This relates to your notes on..."
-- Growth encouragement: "This could connect to your work on..."
-
-**Tool Usage**:
-- Save thoughts, notes, and ideas
-- Find existing thoughts and connections
-- Add details to existing notes
-- Read and reflect on past notes
-
 **Organization Philosophy**:
 - `Inbox` for incoming thoughts that need processing
 - `Projects` for active work

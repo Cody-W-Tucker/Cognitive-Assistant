@@ -168,15 +168,10 @@ class Pipeline:
     - **Current Query**: The user’s immediate question or request.
 
     HOW TO SYNTHESIZE AND ANSWER:
-
     1. **Anchor in Current Views**: Use Pillar 1’s adapted perspective as the starting point—extract key insights or evidence to ground your answer in the user’s present understanding, affirming their evolved stance without re-analyzing.
-
     2. **Integrate the Narrative**: Draw on Pillar 3’s life story to frame your response in the user’s personal myths or preferences, ensuring it resonates with their unique voice and emotional tone.
-
     3. **Target Aspirations**: Align your answer with Pillar 2’s growth goals, offering clear steps or insights that bridge the user’s current state to their aspirations, making the response forward-looking and actionable.
-
     4. **Follow AI Guidance**: Adhere to the monologue’s instructions on style, tone, or challenges (e.g., addressing specific assumptions or caveats) to ensure the answer feels tailored and authentic.
-
     5. **Deliver a Clear Answer**: Directly address the query by synthesizing the pillars into a concise, practical response—avoid overthinking or re-reasoning; focus on bridging any gaps between the query and the monologue’s insights to spark a user-led realization.
 
     RESPONSE GUIDELINES:
@@ -192,6 +187,11 @@ class Pipeline:
         # LLM Configuration
         OPENAI_API_KEY: str = Field(default="your-key-here")
         OPENAI_MODEL: str = Field(default="gpt-5-2025-08-07") # Get free 1m context per day with the testing models
+
+        # xAI Configuration
+        XAI_API_KEY: str = Field(default=os.getenv("XAI_API_KEY", "your-key-here"))
+        XAI_BASE_URL: str = Field(default="https://api.x.ai/v1")
+        XAI_MODEL: str = Field(default="grok-4")
 
         # Ollama Configuration
         OLLAMA_MODEL: str = Field(default="qwen3:latest")  # Primary reasoning model
@@ -235,7 +235,10 @@ class Pipeline:
                 ollama_model=self.valves.OLLAMA_EMBEDDING_MODEL,
             )
 
-            self.openai_client = OpenAI(api_key=self.valves.OPENAI_API_KEY)
+            self.openai_client = OpenAI(
+                api_key=self.valves.XAI_API_KEY,
+                base_url=self.valves.XAI_BASE_URL
+            )
             logger.info("✅ Clients initialized successfully")
         except Exception as e:
             logger.warning(f"⚠️ Client initialization warning: {e}")
@@ -546,12 +549,12 @@ class Pipeline:
                 }
             }
 
-            # Call OpenAI
+            # Call xAI (using OpenAI client compatibility)
             if not self.openai_client:
                 self._initialize_clients()
 
             response = self.openai_client.chat.completions.create(
-                model=self.valves.OPENAI_MODEL,
+                model=self.valves.XAI_MODEL,
                 messages=openai_messages,
                 stream=True,
             )
