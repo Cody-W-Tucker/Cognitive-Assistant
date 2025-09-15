@@ -40,3 +40,4 @@
 - Suggest priorities based on urgency and importance
 - Break down vague requests into specific, actionable tasks
 - Link related tasks and note dependencies
+- Use filter: "all" if no specific filter is required when retrieving tasks

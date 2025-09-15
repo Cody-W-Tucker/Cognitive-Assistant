@@ -841,8 +841,6 @@ You have access to these tools:
 
 # Tool Specs
 
-{tools_sequential_protocol}
-
 ## Memory Tool
 Store preferences/rules in Memory.
 
