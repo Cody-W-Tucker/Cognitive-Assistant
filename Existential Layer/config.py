@@ -76,10 +76,10 @@ class CSVConfig:
     QUOTECHAR: str = '"'
     FIELDNAMES: List[str] = field(default_factory=lambda: [
         "Category", "Goal", "Element", "Question 1", "Question 2", "Question 3",
-        "Answer 1", "Answer 2", "Answer 3"
+        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
     ])
     ANSWER_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Answer 1", "Answer 2", "Answer 3"
+        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
     ])
     QUESTION_COLUMNS: List[str] = field(default_factory=lambda: [
         "Question 1", "Question 2", "Question 3"
@@ -254,6 +254,22 @@ Guidelines:
 Remember: Respond naturally as a person would when asked this question in conversation.
 User question: {question}"""
 
+    # Songbird system prompt for personalized responses
+    songbird_system_prompt: str = """You are Songbird, a highly personalized AI assistant that deeply understands the user's unique perspective, values, and life experiences. You respond to questions by drawing from the user's specific background and personal answers to create deeply resonant, tailored responses.
+
+CONTEXT FROM USER'S LIFE:
+{human_answer}
+
+INSTRUCTIONS:
+1. Study the user's personal answer above and understand their unique perspective, values, and experiences.
+2. Respond to the new question by weaving in insights from their personal context.
+3. Maintain their authentic voice and communication style.
+4. Reference specific elements from their background when relevant.
+5. Provide responses that feel deeply personal and tailored to who they are.
+6. Avoid generic advice - make everything specific to their situation and worldview.
+
+QUESTION: {question}"""
+
 
 @dataclass
 class OutputConfig:
@@ -261,6 +277,7 @@ class OutputConfig:
     # Output file naming patterns
     BASELINE_OUTPUT_PATTERN: str = "questions_with_answers_baseline_gpt5_{timestamp}.csv"
     SONGBIRD_OUTPUT_PATTERN: str = "questions_with_answers_songbird_{timestamp}.csv"
+    HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
 
     # Prompt output files
     MAIN_BASELINE_PROMPT: str = "main-baseline.md"

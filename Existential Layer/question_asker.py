@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-Unified Asker - Combined question answering using baseline GPT-5 or songbird models
+Unified Asker - Combined question answering using baseline GPT-5 or personalized songbird models
 
 This script processes questions from a CSV file using either:
 1. Baseline GPT-5: Uses OpenAI GPT-5 with minimal prompting for baseline comparison
-2. Songbird: Uses the songbird model via OpenAI-compatible API for personalized responses
+2. Songbird: Uses the songbird model with human interview context for personalized RAG responses
+
+Features:
+- Automatic detection and loading of human interview data for songbird personalization
+- Human answers serve as vector search seeds for more tailored, contextual responses
+- Fallback to baseline prompting when no human interview data is available
 
 Usage:
-    python unified_asker.py --model baseline    # Use GPT-5 baseline
-    python unified_asker.py --model songbird    # Use songbird model (default)
-    python unified_asker.py --help              # Show help
+    python question_asker.py --model baseline                    # Use GPT-5 baseline
+    python question_asker.py --model songbird                    # Use songbird with interview context
+    python question_asker.py --human-interview-file answers.csv  # Specify custom interview file
+    python question_asker.py --help                              # Show help
 """
 
 import os
@@ -17,7 +23,8 @@ import csv
 import pandas as pd
 import argparse
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
+from pathlib import Path
 
 # Import config from current directory
 from config import config
@@ -63,19 +70,46 @@ def setup_model_client(model_type: str):
             print("   - Or ensure your open-webui instance is properly configured")
         sys.exit(1)
 
-def get_system_prompt(model_type: str, question: str) -> str:
+def load_human_interview_data(interview_file: Path) -> Dict[str, Dict[str, str]]:
+    """Load human interview data for use as context."""
+    if not interview_file.exists():
+        print(f"⚠️ Human interview file not found: {interview_file}")
+        return {}
+
+    try:
+        df = pd.read_csv(interview_file)
+        interview_data = {}
+
+        for _, row in df.iterrows():
+            category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
+            interview_data[category_key] = {
+                'Human_Answer 1': str(row.get('Human_Answer 1', '')).strip() if pd.notna(row.get('Human_Answer 1', '')) else '',
+                'Human_Answer 2': str(row.get('Human_Answer 2', '')).strip() if pd.notna(row.get('Human_Answer 2', '')) else '',
+                'Human_Answer 3': str(row.get('Human_Answer 3', '')).strip() if pd.notna(row.get('Human_Answer 3', '')) else ''
+            }
+
+        return interview_data
+    except Exception as e:
+        print(f"⚠️ Error loading human interview data: {e}")
+        return {}
+
+def get_system_prompt(model_type: str, question: str, human_answer: str = None) -> str:
     """Get the appropriate system prompt based on model type."""
     if model_type == "baseline":
         return config.prompts.baseline_system_prompt.format(question=question)
     elif model_type == "songbird":
-        return config.prompts.songbird_system_prompt.format(question=question)
+        if human_answer:
+            return config.prompts.songbird_system_prompt.format(question=question, human_answer=human_answer)
+        else:
+            # Fallback if no human answer provided
+            return config.prompts.baseline_system_prompt.format(question=question)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-def ask_question(client, model_name: str, question: str, model_type: str) -> str:
+def ask_question(client, model_name: str, question: str, model_type: str, human_answer: str = None) -> str:
     """Send a question to the specified model and get the response."""
     try:
-        system_prompt = get_system_prompt(model_type, question)
+        system_prompt = get_system_prompt(model_type, question, human_answer)
 
         # Use streaming for songbird, direct API for baseline
         use_streaming = model_type == "songbird"
@@ -119,13 +153,19 @@ def ask_question(client, model_name: str, question: str, model_type: str) -> str
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Unified Asker - Question answering with baseline or songbird models",
+        description="Unified Asker - Question answering with baseline or personalized songbird models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python unified_asker.py --model baseline    # Use GPT-5 baseline
-  python unified_asker.py --model songbird    # Use songbird model
-  python unified_asker.py                     # Use default (songbird)
+  python question_asker.py --model baseline                    # Use GPT-5 baseline
+  python question_asker.py --model songbird                    # Use songbird with human interview context
+  python question_asker.py                                     # Use default (songbird with auto-detected context)
+  python question_asker.py --human-interview-file my_answers.csv  # Specify custom interview file
+
+Notes:
+- Songbird mode automatically loads your latest human interview for personalized responses
+- Human answers act as RAG/vector search seeds for more tailored AI responses
+- Without human interview data, songbird falls back to baseline prompting
         """
     )
     parser.add_argument(
@@ -138,6 +178,11 @@ Examples:
         "--questions-file",
         type=str,
         help="Path to questions CSV file (default: use config)"
+    )
+    parser.add_argument(
+        "--human-interview-file",
+        type=str,
+        help="Path to human interview CSV file for context (default: auto-detect latest)"
     )
 
     args = parser.parse_args()
@@ -163,12 +208,29 @@ Examples:
         sys.exit(1)
 
     # Set up file paths
-    questions_file = args.questions_file or config.paths.QUESTIONS_CSV
+    questions_file = Path(args.questions_file) if args.questions_file else config.paths.QUESTIONS_CSV
+
+    # Determine human interview file
+    if args.human_interview_file:
+        human_interview_file = Path(args.human_interview_file)
+    else:
+        # Auto-detect latest human interview file
+        try:
+            human_interview_files = list(config.paths.DATA_DIR.glob("human_interview_*.csv"))
+            if human_interview_files:
+                human_interview_file = max(human_interview_files, key=lambda f: f.stat().st_mtime)
+                print(f"📖 Using latest human interview file: {human_interview_file}")
+            else:
+                human_interview_file = None
+                print("⚠️ No human interview files found - will use baseline prompting")
+        except Exception as e:
+            human_interview_file = None
+            print(f"⚠️ Error finding human interview files: {e} - will use baseline prompting")
 
     # Check if input file exists
     if not questions_file.exists():
         print(f"❌ Error: Questions file not found at: {questions_file}")
-        sys.exit(1)
+        return
 
     # Create timestamped output file
     timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
@@ -182,6 +244,13 @@ Examples:
     # Ensure output directory exists (handled by config initialization)
     print(f"📁 Using questions file: {questions_file}")
     print(f"📝 Results will be saved to: {output_file}")
+
+    # Load human interview data if available
+    human_interview_data = {}
+    if human_interview_file and human_interview_file.exists():
+        human_interview_data = load_human_interview_data(human_interview_file)
+        if human_interview_data:
+            print(f"📖 Loaded {len(human_interview_data)} interview sections for context")
 
     # Read the CSV file
     print(f"📖 Reading questions from: {questions_file}")
@@ -204,14 +273,26 @@ Examples:
     print(f"\n🚀 Starting to process {total_questions} questions with {args.model} model...")
 
     for index, row in df.iterrows():
+        category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
+
         for question_col, answer_col in question_pairs:
             if question_col in df.columns:  # Check if question column exists
                 old_answer = df.at[index, answer_col]
                 if pd.isna(old_answer):  # Only process if answer is empty
                     query = row[question_col]
-                    print(f"🤔 Processing {args.model}: {query[:100]}...")
 
-                    response = ask_question(client, model_name, query, args.model)
+                    # Get corresponding human answer for context (if available)
+                    human_answer = None
+                    if args.model == "songbird" and human_interview_data:
+                        # Map answer column to human answer column (Answer 1 -> Human_Answer 1)
+                        human_answer_col = f"Human_{answer_col}"
+                        if category_key in human_interview_data and human_interview_data[category_key].get(human_answer_col, '').strip():
+                            human_answer = human_interview_data[category_key][human_answer_col]
+
+                    context_indicator = " (with personal context)" if human_answer else " (baseline)"
+                    print(f"🤔 Processing {args.model}{context_indicator}: {query[:100]}...")
+
+                    response = ask_question(client, model_name, query, args.model, human_answer)
                     df.at[index, answer_col] = response
 
                     processed_count += 1

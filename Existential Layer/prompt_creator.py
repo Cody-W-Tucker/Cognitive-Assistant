@@ -12,18 +12,26 @@ BASELINE MODE (--mode baseline):
 LLM-FILTERED MODE (--mode llm-filtered):
 ├── unique_responses.md      # LLM-filtered unique personal content
 ├── llm_filtered_bio.md      # Initial existential layer summary
-└── main-llm-filtered.md     # Final refined system prompt
+└── main.md                  # Final refined system prompt
+
+HUMAN + AI REFINEMENT MODE (--mode human):
+├── human_responses.md       # Raw human interview responses (foundation)
+├── human_interview_bio.md   # Initial existential layer summary from human data
+├── ai_refinement_context.md # AI-generated responses for refinement
+└── main-human.md            # Final refined system prompt (human foundation + AI enhancement)
 
 COMBINE MODE (--mode combine):
 └── prompt.md                # Combined final prompt from prompt parts
 
-All files are saved to the prompts/ directory.
+All files are saved to the output/ and prompts/ directories.
 
 Usage:
-    python unified_creator.py --mode baseline      # Create baseline pipeline
-    python unified_creator.py --mode llm-filtered  # Create filtered pipeline
-    python unified_creator.py --mode combine       # Combine prompt parts
-    python unified_creator.py --help               # Show help
+    python question_asker.py --model songbird     # Generate AI responses with human context
+    python prompt_creator.py --mode human         # Create human+AI refined prompts
+    python prompt_creator.py --mode baseline      # Create baseline pipeline
+    python prompt_creator.py --mode llm-filtered  # Create filtered pipeline
+    python prompt_creator.py --mode combine       # Combine prompt parts
+    python prompt_creator.py --help               # Show help
 """
 
 import os
@@ -35,6 +43,9 @@ from datetime import datetime
 
 # Import config from current directory
 from config import config, get_redaction_function, get_most_recent_file
+
+# Get the redaction function
+redact_sensitive_data = get_redaction_function()
 
 import csv
 from openai import AsyncOpenAI
@@ -306,6 +317,94 @@ def load_comparison_data() -> Tuple[str, str]:
 
     return personalized_content, baseline_content
 
+def load_human_interview_data() -> str:
+    """
+    Load the most recent human interview CSV file for direct prompt creation.
+
+    Returns:
+        Formatted human interview content as string containing questions and human answers
+    """
+    try:
+        human_csv = get_most_recent_file("human_interview_*.csv")
+    except FileNotFoundError:
+        raise FileNotFoundError("No human interview CSV files found")
+
+    print(f"📁 Loading human interview data: {os.path.basename(human_csv)}")
+
+    # Load CSV using standard Python CSV module
+    def load_csv_data(csv_path: Path) -> List[Dict[str, str]]:
+        """Load CSV data using standard Python CSV module."""
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(
+                f,
+                delimiter=config.csv.DELIMITER,
+                quotechar=config.csv.QUOTECHAR,
+                fieldnames=config.csv.FIELDNAMES
+            )
+            # Convert to list and skip header
+            data = list(reader)[1:]
+            # Convert to document-like format for compatibility
+            docs = []
+            for row in data:
+                # Create structured page_content with newlines (consistent with working version)
+                # Format: Category\nGoal\nElement\nQuestion1\nHuman_Answer1\nQuestion2\nHuman_Answer2\nQuestion3\nHuman_Answer3
+                page_content = f"{row.get('Category', '')}\n{row.get('Goal', '')}\n{row.get('Element', '')}\n"
+                page_content += f"{row.get('Question 1', '')}\n{row.get('Human_Answer 1', '')}\n"
+                page_content += f"{row.get('Question 2', '')}\n{row.get('Human_Answer 2', '')}\n"
+                page_content += f"{row.get('Question 3', '')}\n{row.get('Human_Answer 3', '')}"
+                docs.append(type('Document', (), {'page_content': page_content})())
+            return docs
+
+    data = load_csv_data(human_csv)
+
+    # Format data with redaction
+    formatted_contents = []
+    redaction_count = 0
+
+    for doc in data:  # Process all data, no header to skip
+        content = doc.page_content
+        # Apply concrete redaction before processing
+        redacted_content = redact_sensitive_data(content)
+        if redacted_content != content:
+            redaction_count += 1
+
+        # Parse the structured content to extract questions and answers
+        lines = redacted_content.split('\n')
+        if len(lines) >= 9:  # Ensure we have all fields (9 lines total)
+            category = lines[0]
+            goal = lines[1] if len(lines) > 1 else ""
+            element = lines[2] if len(lines) > 2 else ""
+
+            # Extract questions and human answers - correct indices
+            questions = []
+            answers = []
+            for i in range(3):  # 3 question/answer pairs
+                q_idx = 3 + (i * 2)  # Questions at indices 3, 5, 7
+                a_idx = 4 + (i * 2)  # Answers at indices 4, 6, 8
+                if q_idx < len(lines) and a_idx < len(lines):
+                    question = lines[q_idx].strip()
+                    answer = lines[a_idx].strip()
+                    if question and answer:
+                        questions.append(question)
+                        answers.append(answer)
+
+            # Format as Q&A pairs
+            if questions and answers:
+                qa_pairs = []
+                for q, a in zip(questions, answers):
+                    qa_pairs.append(f"Q: {q}\nA: {a}")
+                formatted_entry = f"## {category}\n" + "\n\n".join(qa_pairs)
+                formatted_contents.append(formatted_entry)
+
+    if redaction_count > 0:
+        print(f"🔒 Applied redaction to {redaction_count} entries")
+
+    # Create combined context with questions and answers
+    combined_context = "\n\n".join(formatted_contents)
+    print(f"📊 Loaded {len(formatted_contents)} Q&A sections ({len(combined_context)} characters)")
+
+    return combined_context
+
 def load_baseline_data() -> str:
     """
     Load the most recent baseline CSV file for baseline prompt creation.
@@ -393,6 +492,224 @@ def load_baseline_data() -> str:
     print(f"📊 Loaded {len(formatted_contents)} Q&A sections ({len(combined_context)} characters)")
 
     return combined_context
+
+def create_human_interview_prompts():
+    """Create system prompts using human interview data as foundation, refined with AI responses.
+
+    Process:
+    1. Load human interview responses (authentic foundation)
+    2. Generate initial existential layer summary from human data only
+    3. Load newest AI-generated responses (from question_asker.py --model songbird)
+    4. Refine the human-based summary using AI responses for deeper insights
+    """
+    print("👤 Creating Human Interview + AI Refined System Prompts...")
+    print("   Step 1: Generate initial summary from human responses")
+    print("   Step 2: Refine with AI-generated responses using human context")
+
+    # Load human interview data (foundation)
+    human_context = load_human_interview_data()
+
+    # Load the newest AI-generated responses for refinement
+    try:
+        ai_csv = get_most_recent_file("questions_with_answers_songbird_*.csv")
+        print(f"📁 Loading AI refinement data: {os.path.basename(ai_csv)}")
+    except FileNotFoundError:
+        raise FileNotFoundError("No AI-generated response files found for refinement")
+
+    # Load AI responses using standard CSV method
+    def load_ai_responses(csv_path: Path) -> str:
+        """Load AI responses for refinement."""
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(
+                f,
+                delimiter=config.csv.DELIMITER,
+                quotechar=config.csv.QUOTECHAR,
+                fieldnames=config.csv.FIELDNAMES
+            )
+            # Convert to list and skip header
+            data = list(reader)[1:]
+
+        # Format as readable text for LLM - process CSV data directly
+        formatted_sections = []
+        for row in data:
+            category = row.get('Category', '').strip()
+            if not category:
+                continue
+
+            questions = []
+            answers = []
+
+            # Extract Q&A pairs directly from CSV columns
+            for i in range(1, 4):  # Questions 1-3, Answers 1-3
+                question_key = f'Question {i}'
+                answer_key = f'Human_Answer {i}'
+
+                question = row.get(question_key, '').strip()
+                answer = row.get(answer_key, '').strip()
+
+                if question and answer:
+                    questions.append(question)
+                    answers.append(answer)
+
+            if questions and answers:
+                qa_pairs = []
+                for q, a in zip(questions, answers):
+                    qa_pairs.append(f"Q: {q}\nA: {a}")
+                formatted_entry = f"## {category}\n" + "\n\n".join(qa_pairs)
+                formatted_sections.append(formatted_entry)
+
+        return "\n\n".join(formatted_sections)
+
+    ai_context = load_ai_responses(ai_csv)
+    print(f"📊 Loaded AI refinement data: {len(ai_context)} characters")
+
+    # Store prompt templates for direct use
+    initial_summary_template = config.prompts.create_initial_prompt
+    refine_template = config.prompts.refine_template
+
+    # Define the state of the graph - HUMAN + AI REFINEMENT VERSION
+    class State(TypedDict):
+        human_context: str
+        ai_context: str
+        refinement_step: int
+        summary: str
+
+    # Generate initial existential layer summary from HUMAN interview content
+    async def generate_initial_summary(human_context: str) -> str:
+        print("📝 Step 1: Generating initial existential layer summary from HUMAN responses...")
+
+        # Process context with token-based chunking
+        config_params = {}
+        summary = await process_large_context(
+            context=human_context,
+            prompt_template=initial_summary_template,
+            config_params=config_params,
+            max_tokens=30000
+        )
+
+        return summary
+
+    # Step 2: Refine with AI-generated responses
+    async def refine_with_ai_responses(current_summary: str, ai_context: str) -> str:
+        print("🎯 Step 2: Refining with AI-generated responses using human context...")
+
+        # Add context about what we're doing
+        refinement_context = f"""# Initial Human-Based Summary
+{current_summary}
+
+# AI-Generated Responses for Refinement
+The following responses were generated by AI using the human interview answers as context/seeds for vector search and RAG. Use these to refine and enhance the initial summary with deeper insights while maintaining the authentic human foundation.
+
+{ai_context}
+"""
+
+        # Process context with token-based chunking
+        config_params = {"existing_answer": current_summary}
+        summary = await process_large_context(
+            context=refinement_context,
+            prompt_template=refine_template,
+            config_params=config_params,
+            max_tokens=30000
+        )
+
+        return summary
+
+    # Run the processing with human foundation + AI refinement workflow
+    async def run_human_plus_ai_creation():
+        step_count = 0
+        initial_bio = ""
+        final_summary = ""
+
+        # Initialize file paths (will be set during processing)
+        human_responses_path = None
+        bio_path = None
+        ai_refinement_path = None
+        output_path = None
+
+        # Save human responses immediately (before processing)
+        human_filename = "human_responses.md"
+        human_responses_path = config.paths.OUTPUT_DIR / human_filename
+        print(f"💾 Saving human responses to {human_responses_path}…")
+        try:
+            with open(human_responses_path, "w", encoding="utf-8") as f:
+                f.write(human_context)
+            print(f"✅ Saved human responses ({len(human_context)} characters)")
+        except Exception as e:
+            print(f"❌ Error saving human responses: {e}")
+
+        # Step 1: Generate initial summary from HUMAN data
+        initial_bio = await generate_initial_summary(human_context)
+        print(f"Step 1 Result: {len(initial_bio)} characters generated")
+
+        # Save intermediate bio immediately after generation
+        bio_filename = "human_interview_bio.md"
+        bio_path = config.paths.OUTPUT_DIR / bio_filename
+        print(f"💾 Saving human interview bio to {bio_path}...")
+        try:
+            with open(bio_path, "w", encoding="utf-8") as f:
+                f.write(initial_bio)
+            print(f"✅ Successfully saved human interview bio ({len(initial_bio)} characters)")
+        except Exception as e:
+            print(f"❌ Error saving human interview bio: {e}")
+
+        # Save AI context for reference
+        ai_refinement_filename = "ai_refinement_context.md"
+        ai_refinement_path = config.paths.OUTPUT_DIR / ai_refinement_filename
+        print(f"💾 Saving AI refinement context to {ai_refinement_path}...")
+        try:
+            with open(ai_refinement_path, "w", encoding="utf-8") as f:
+                f.write(ai_context)
+            print(f"✅ Saved AI refinement context ({len(ai_context)} characters)")
+        except Exception as e:
+            print(f"❌ Error saving AI refinement context: {e}")
+
+        # Step 2: Refine with AI responses
+        final_summary = await refine_with_ai_responses(initial_bio, ai_context)
+        print(f"Step 2 Result: {len(final_summary)} characters generated")
+
+        # Save final prompt immediately after refinement
+        output_filename = "main-human.md"
+        output_path = config.paths.OUTPUT_DIR / output_filename
+        print(f"💾 Saving final human+AI refined prompt to {output_path}...")
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(final_summary)
+            print(f"✅ Successfully saved final prompt ({len(final_summary)} characters)")
+            # Verify file was written
+            if output_path.exists():
+                actual_size = output_path.stat().st_size
+                print(f"✅ File verification: {actual_size} bytes written")
+            else:
+                print(f"❌ File verification failed: {output_path} does not exist")
+        except Exception as e:
+            print(f"❌ Error saving final prompt: {e}")
+
+        step_count = 2
+
+        # Ensure all paths are set with fallbacks
+        if human_responses_path is None:
+            human_filename = "human_responses.md"
+            human_responses_path = config.paths.OUTPUT_DIR / human_filename
+        if bio_path is None:
+            bio_filename = "human_interview_bio.md"
+            bio_path = config.paths.OUTPUT_DIR / bio_filename
+        if ai_refinement_path is None:
+            ai_refinement_filename = "ai_refinement_context.md"
+            ai_refinement_path = config.paths.OUTPUT_DIR / ai_refinement_filename
+        if output_path is None:
+            output_filename = "main-human.md"
+            output_path = config.paths.OUTPUT_DIR / output_filename
+
+        print(f"Files created:")
+        print(f"  👤 Human Responses: {human_responses_path}")
+        print(f"  📄 Initial Bio (Human): {bio_path}")
+        print(f"  🤖 AI Refinement Context: {ai_refinement_path}")
+        print(f"  🎯 Final Human+AI Prompt: {output_path}")
+        print(f"\nProcess completed in {step_count} steps with {step_count} AI calls.")
+        print("👤🤖 System prompt built from human foundation + AI refinement!")
+
+    import asyncio
+    asyncio.run(run_human_plus_ai_creation())
 
 def create_baseline_prompts():
     """Create system prompts from baseline (generic AI) responses."""
@@ -874,16 +1191,21 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python unified_creator.py --mode baseline      # Create baseline: unique_responses.md, baseline_bio.md, main-baseline.md
-  python unified_creator.py --mode llm-filtered  # Create filtered: unique_responses.md, llm_filtered_bio.md, main-llm-filtered.md
-  python unified_creator.py --mode combine       # Combine prompt parts into final prompt.md
+  # Human + AI Refinement Workflow:
+  python question_asker.py --model songbird                    # Step 1: Generate AI responses with human context
+  python prompt_creator.py --mode human                        # Step 2: Create refined prompts from human+AI data
 
-All files are saved to the prompts/ directory.
+  # Other modes:
+  python prompt_creator.py --mode baseline                     # Create baseline: unique_responses.md, baseline_bio.md, main-baseline.md
+  python prompt_creator.py --mode llm-filtered                 # Create filtered: unique_responses.md, llm_filtered_bio.md, main.md
+  python prompt_creator.py --mode combine                      # Combine prompt parts into final prompt.md
+
+All files are saved to the output/ and prompts/ directories.
         """
     )
     parser.add_argument(
         "--mode",
-        choices=["baseline", "llm-filtered", "combine"],
+        choices=["baseline", "llm-filtered", "human", "combine"],
         required=True,
         help="Creation mode to use"
     )
@@ -906,6 +1228,8 @@ All files are saved to the prompts/ directory.
         create_baseline_prompts()
     elif args.mode == "llm-filtered":
         create_llm_filtered_prompts()
+    elif args.mode == "human":
+        create_human_interview_prompts()
     elif args.mode == "combine":
         combine_prompts()
 

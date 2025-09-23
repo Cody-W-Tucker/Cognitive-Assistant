@@ -97,6 +97,7 @@ class Context(BaseModel):
     reasoning: Optional[str] = None
     recent_history: str = ""
     system_message: Optional[Dict[str, str]] = None
+    full_docs_context: Optional[str] = None  # Full RAG docs for frontier model
 
     @validator("user_message")
     def validate_user_message(cls, v):
@@ -263,6 +264,61 @@ class Pipeline:
 
         return vector_results
 
+    def _truncate_docs_for_reasoning(self, vector_results: List[Dict[str, Any]], max_chars: int = 4000) -> str:
+        """Create truncated version of docs for Ollama reasoning to avoid overwhelming it."""
+        if not vector_results:
+            return ""
+
+        truncated_context = "=== KNOWLEDGE BASE CONTEXT (TRUNCATED) ===\n"
+
+        # Sort by relevance score (highest first) and take top docs
+        sorted_results = sorted(vector_results, key=lambda x: x.get('score', 0), reverse=True)
+        top_results = sorted_results[:10]  # Limit to top 10 most relevant
+
+        total_chars = 0
+        for item in top_results:
+            content = item.get("content", "").strip()
+            collection = item.get("collection", "unknown")
+            score = item.get("score", 0)
+
+            if not content:
+                continue
+
+            # Truncate individual doc if too long, keeping first part which is usually most important
+            if len(content) > 800:  # Limit each doc to ~800 chars
+                content = content[:800] + "...[truncated]"
+
+            # Check if adding this would exceed total limit
+            doc_text = f"[{collection}] {content}\n\n"
+            if total_chars + len(doc_text) > max_chars:
+                break
+
+            truncated_context += doc_text
+            total_chars += len(doc_text)
+
+        logger.debug(f"📝 Truncated context: {len(top_results)} docs, {total_chars} chars")
+        return truncated_context
+
+    def _format_full_docs_for_frontier(self, vector_results: List[Dict[str, Any]]) -> str:
+        """Format full RAG docs for frontier model consumption."""
+        if not vector_results:
+            return ""
+
+        full_context = "=== FULL KNOWLEDGE BASE CONTEXT ===\n"
+        for item in vector_results:
+            content = item.get("content", "").strip()
+            collection = item.get("collection", "unknown")
+            score = item.get("score", 0)
+            metadata = item.get("metadata", {})
+
+            if content:
+                full_context += f"[{collection}] Score: {score:.3f}\n"
+                if metadata:
+                    full_context += f"Metadata: {metadata}\n"
+                full_context += f"{content}\n\n"
+
+        return full_context
+
     def _stream_personal_reasoning_context(
         self,
         user_message: str,
@@ -271,16 +327,8 @@ class Pipeline:
     ) -> Generator[str, None, None]:
         """Stream personal reasoning context for think tags."""
         try:
-            # Format knowledge context
-            knowledge_context = ""
-            if vector_results:
-                knowledge_context = "=== KNOWLEDGE BASE CONTEXT ===\n"
-                for item in vector_results:
-                    content = item.get("content", "")
-                    collection = item.get("collection", "unknown")
-                    knowledge_context += f"[{collection}] {content}\n\n"
-
-                logger.debug(f"📝 Knowledge context: {len(vector_results)} docs")
+            # Format truncated knowledge context for Ollama reasoning
+            knowledge_context = self._truncate_docs_for_reasoning(vector_results)
 
             prompt = f"""
             USER QUERY: {user_message}
@@ -602,10 +650,14 @@ class Pipeline:
         )
 
         # 3. Add reasoning as user message
+        reasoning_content = MessageFormatter.prepare_for_model(context.reasoning)
+        if context.full_docs_context:
+            reasoning_content += f"\n\n{context.full_docs_context}"
+
         openai_messages.append(
             {
                 "role": "user",
-                "content": MessageFormatter.prepare_for_model(context.reasoning),
+                "content": reasoning_content,
             }
         )
 
@@ -640,12 +692,16 @@ class Pipeline:
                 messages, max_messages=2
             )
 
+            # Format full docs for frontier model
+            full_docs_context = self._format_full_docs_for_frontier(vector_results)
+
             # Create structured context
             return Context(
                 user_message=user_message,
                 vector_results=vector_results,
                 recent_history=recent_history,
                 system_message=system_message,
+                full_docs_context=full_docs_context,
             )
 
         except Exception as e:
