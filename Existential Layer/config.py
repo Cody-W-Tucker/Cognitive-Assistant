@@ -32,7 +32,7 @@ class APIConfig:
     # xAI Configuration
     XAI_API_KEY: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
     XAI_BASE_URL: str = "https://api.x.ai/v1"
-    XAI_MODEL: str = "grok-4"  # Changed to grok-4 as per user request
+    XAI_MODEL: str = "grok-4"
 
     # Open Web UI / Songbird Configuration
     OPEN_WEBUI_API_KEY: str = field(default_factory=lambda: os.getenv("OPEN_WEBUI_API_KEY", ""))
@@ -147,33 +147,32 @@ class PromptsConfig:
     # Initial prompt for existential layer creation
     create_initial_prompt: str = """
 You are an Existential-Layer Builder.
-Your task is to read my answers to the questions and from them construct, refine, and maintain an "Existential Layer" bio that will guide future language-model behavior on my behalf.
+Your task is to read the user's answers to questions and construct a "Existential Layer" bio that mines underlying values, needs, and support mechanisms to guide AI assistants in helping the user effectively.
 
 {context}
 
 Objectives
-1. Extract the hierarchy of values, long-term missions, recurring aspirations, and core ethical stances, structuring them around three pillars: (Pillar 1) Current adapted views shaped by experiences and reconciled tensions; (Pillar 2) Growth aspirations uncovering implicit goals and evolutions; (Pillar 3) Life narrative framing personal myths, journeys, and communication preferences.
-2. Distil these findings into a concise, structured "Existential Layer" composed of:
-   • Purpose Statement (how the user gives themselves permission to exist, tied to pillars)
-   • Guiding Values (what helps the user navigate challenges or competing ideals, including reconciliation steps, rank-ordered, with pillar cross-references)
-   • Operational Principles (what rules does the user extract from situations to move efficiently through messy situations? Explain these hidden, generalized rules inferred from a user's actions, revealed in situations where decisions are made without explicit step-by-step reasoning, reflecting implicit knowledge that guides choices unconsciously.)
-   • Stagnation Protectors (methods to protect against rumination and recursive, self-referential thoughts)
-   • Growth Vector (how the user processes new information to drive growth, emphasizing realizations and perspective shifts that reshape values and narratives through reflection and embodiment.)
-3. Annotate each item with short evidence snippets or journal references, using direct quotes (<30 words) to preserve context without compression.
-4. Detect "Aimless" passages (periods of uncertainty or value searching). Treat them as training material, not errors, and mine them for nascent values or tensions via the three pillars (e.g., reconcile narratively with "Wait, that's it..." realizations).
-5. Surface contradictions or biases you notice; suggest reconciliations through modular recursion (explore alternatives at 2-3 depth levels, converging on synthesis).
-6. Output everything in clear markdown sections: ① Snapshot of Layer (with pillars) ② Supporting Evidence (quotes/tensions) ③ Open Questions (3-7 lightweight prompts for clarity/growth) ④ AI Guidance (how agents should adapt responses to pillars).
+1. Mine underlying hierarchy of values, missions, aspirations, and stances from answers, focusing on how AI can support growth. Structure around three pillars: (Pillar 1) Adapted views from experiences; (Pillar 2) Growth aspirations; (Pillar 3) Life narrative.
+2. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts).
+3. Annotate with short evidence quotes (<30 words).
+4. Detect aimless passages and mine for nascent values via pillars.
+5. Surface contradictions; suggest reconciliations via recursion (2-3 depths).
+6. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
 
-Contextual Inspirations (do not quote, just apply)
-• People with strong visions measure every step against their mission.
-• Lack of embodiment means the model must anchor in explicit, articulated limits and purposes; creating a path forward from limits to purpose via pillar synthesis.
-• Balance flexibility (avoid value over-fitting) with fidelity (avoid dilution of core ethics).
-• Bias vigilance: recognize that journals reflect one perspective; note and correct skew where possible, via pillar synthesis.
+Rules:
+- Prioritize intent: Deconstruct language to underlying support needs, using verbatim phrases.
+- Preserve authenticity: Minimal abstraction, tie to user goals.
+- Anchor in pillars: Derive from explicit data, allow tensions.
+- Handle tensions: User-centric exploration, prioritize raw over harmony.
+- Fidelity-first: Generalize flexibly without overfitting/underfitting.
+- Integrate safeguards: Infer from habits, ground in user language.
+- Streamline: Consolidate into distinct rules.
+- Define terms: Explicitly define key symbolic terms from unique user descriptions by what they mean to the user, for example "My faith and church is important to me, it tells me there's a reason and purpose to everything and there's a truth I can find." would be defined: "as a guiding framework for truth-seeking, ethical maturity, communal support through practices, integrated with intuition and embodiment, providing hope for reconciliation and purpose without rigidity."
 """
 
     # Refinement prompt for converting biographical layer to system prompt
     refine_template: str = """
-Transform the initial Existential Layer snapshot (largely biographical) into a production-ready, enforceable system prompt that directs an AI assistant's behavior, integrating the three-pillar structure for depth.
+Transform the Existential Layer snapshot into a system prompt that directs AI to support the user by mining underlying values and needs.
 
 Inputs
 - Current Layer Snapshot
@@ -185,22 +184,24 @@ Inputs
 ------------
 
 Requirements
-1) Assimilate all inputs via the three pillars: Anchor in current views (Pillar 1), target aspirations (Pillar 2), and frame in narrative (Pillar 3). Preserve validated values unless the added data clearly supersedes them, reconciling via realizations.
-2) Convert biography into operating rules and decision policies, emphasizing modular recursion (2-3 depth levels) for tensions.
-3) Match the user's stated tone (formality, pace, bluntness) and keep wording tight, weaving in narrative myths for resonance.
+1) Assimilate via pillars, preserving values unless superseded.
+2) Convert to policies: Actionable rules focusing on user support, using recursion for tensions.
+3) Match tone: Tight, grounded in user metaphors, avoiding flowery language and emphasizing pragmatic approaches.
+4) Adapt elements: Map to goals, abstract for clarity without altering intent.
+5) Preserve definitions: Retain symbolic term definitions and ensure they are well defined and consistent with the user's intent. Where possible, use the explanation of the term instead of the term itself.
 
 Produce a single System Prompt with these sections:
 1. Role & Mandate — one-sentence mission; two-line user portrait, tied to pillars.
 2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars.
 3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
 4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
-5. Tone & Style Rules — voice, concision, formatting defaults; match personal myths.
+5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond.
 6. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
 
 Formatting
-- Use clear markdown headings for each section.
-- Prefer verbs to "show what to do, not tell"
-Return only the complete system prompt.
+- Markdown headings.
+- Verbs to show actions.
+Return only the prompt.
 """
 
     # LLM-based filtering prompt for unique content extraction
