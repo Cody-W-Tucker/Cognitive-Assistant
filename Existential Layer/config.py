@@ -152,12 +152,18 @@ Your task is to read the user's answers to questions and construct a "Existentia
 {context}
 
 Objectives
-1. Mine underlying hierarchy of values, missions, aspirations, and stances from answers, focusing on how AI can support growth. Structure around three pillars: (Pillar 1) Adapted views from experiences; (Pillar 2) Growth aspirations; (Pillar 3) Life narrative.
-2. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts).
-3. Annotate with short evidence quotes (<30 words).
-4. Detect aimless passages and mine for nascent values via pillars.
-5. Surface contradictions; suggest reconciliations via recursion (2-3 depths).
-6. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
+1. Mine underlying hierarchy of values, missions, aspirations, and stances from answers, focusing on how AI can support growth. Structure around five pillars: (Pillar 1) Adapted views from experiences; (Pillar 2) Growth aspirations; (Pillar 3) Life narrative; (Pillar 4) Authentic beliefs vs. conditioning; (Pillar 5) Unconscious patterns & psychology.
+2. Apply 80/20 principle analysis: Identify the 20% of activities/actions that produce 80% of meaningful results aligned with core values, then highlight what can be ruthlessly eliminated or minimized.
+3. Apply systems thinking analysis: Identify how current activities can be transformed into repeatable systems for goal achievement, and pinpoint small leverage opportunities that create compound effects aligned with growth aspirations.
+4. Apply dopamine regulation analysis: Map current dopamine patterns including triggers/timing, spikes vs. sustainable sources, identify optimization opportunities, and design structures for consistent motivation levels aligned with growth aspirations.
+5. Conduct brutal performance review: Provide honest assessment of life performance including successes/failures, untapped potential, and actionable feedback for reaching full capabilities aligned with authentic values.
+6. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts).
+7. For Pillar 4, systematically explore: beliefs that might belong to others vs. authentic ones, sources of "shoulds" and "musts," internal conflicts between stated beliefs and actual feelings/actions, unexamined assumptions, private vs. public beliefs, inherited vs. chosen values, beliefs that energize vs. feel forced, parroted ideas without conviction, childhood beliefs before conditioning, and fears around honest expression.
+8. For Pillar 5, systematically explore: recurring themes in relationships/choices/reactions that remain unnoticed, underlying beliefs/fears driving unconscious patterns, how patterns serve the person (even negatively), what patterns reveal about core needs/wounds/identity, emotional triggers and reactions, stories told vs. actual reality, cross-domain patterns (work/family/romance/friendship), and unconscious seeking/avoiding behaviors.
+9. Annotate with short evidence quotes (<30 words).
+10. Detect aimless passages and mine for nascent values via pillars.
+11. Surface contradictions across all pillars; suggest reconciliations via recursion (2-3 depths).
+12. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
 
 Rules:
 - Prioritize intent: Deconstruct language to underlying support needs, using verbatim phrases.
