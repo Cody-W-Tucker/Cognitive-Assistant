@@ -1,60 +1,100 @@
-# Existential Layer Bio for [User]
+# Existential Layer Bio for User
 
 ## ① Snapshot
-This snapshot distills the user's existential layer into a cohesive profile, mined from their responses. It structures around the five pillars, integrates analyses (80/20, systems thinking, dopamine regulation, brutal performance review), and distills key outputs (Purpose Statement, Guiding Values, Operational Principles, Stagnation Protectors, Growth Vector). Contradictions are surfaced with recursive reconciliations (2-3 depths). Key terms are defined explicitly from user language:
+This snapshot distills the user's existential profile into a cohesive framework, mined from their responses. It emphasizes intuition-driven action, experiential growth, and a hero's narrative of integrating chaos through faith, vulnerability, and intellectual pursuit. Key symbolic terms are defined based on user language:  
+- **Intuition/Gut Feeling**: "A felt insistence that pushes forward, even without full understanding or verification, used to backfill solutions and adapt" (e.g., trusting unverified paths in problem-solving or networking tasks).  
+- **Faith/Christian Worldview**: "A guiding framework for truth-seeking, ethical maturity, communal support through practices like church and men's group, integrated with intuition and embodiment, providing hope for reconciliation and purpose without rigidity" (e.g., opening doors to greater truths, not immediate fixes, emphasizing forgiveness and objective truth).  
+- **Transformative Realization**: "Shifting from overthinking life as a problem to solve to experimenting in real-time, embodying 'thinking while doing' to avoid mental sidelines" (e.g., from YouTube video insight).  
+- **Anxious Attachment Overcome**: "Moving from future-anxiety and proving worth to trusting experiences as history, not evidence of inadequacy, fostering confidence and flow" (e.g., feeling 'things are perfect' upon waking).  
 
-- **Intuition/Gut**: "A feeling that something is the right way... an insistence that pushes me forward" – as an internal compass for decision-making and adaptation, blending unverified hunches with backfilled reasoning to complete tasks, often overriding overthinking for forward momentum.
-- **Faith/Christian Worldview**: "Faith in God... as the doorway into finding greater truths and abilities... opens the door for future reconciliation... there's a higher truth" – as a guiding framework for truth-seeking, ethical maturity, communal support through practices like church and men's group, integrated with intuition and embodiment, providing hope for purpose and reconciliation without rigidity, emphasizing experimentation over predefined paths.
-- **Transformative Realization ("Life is not a problem to solve")**: "Thinking is not just waiting to figure it out... experimenting in live real time... you can think while you do" – as a shift from sideline overthinking to active participation, rejecting imposed limits for embodied experimentation, turning mental isolation into fulfilling action.
-- **Anxious Attachment Overcome**: "Overcome an anxious attachment style... things are perfect in this world... feel in charge" – as a milestone of trusting self and process, viewing difficulties as experiences not evidence of unworthiness, fostering confidence for decision-making and attraction of opportunities.
-- **Chaotic Elements**: "Making curiosity a core value... observe it as it thrashes... trust it that it won't hurt me... integrate it" – as unintegrated parts of self, faced through non-recoiling observation and care, transforming anxiety into learning and wholeness.
+### Purpose Statement  
+To harness innate intellect and intuition for greatness in blending tech, AI, philosophy, and psychology, creating tools that mine human minds for tacit knowledge and foster authentic connections, while providing financial stability and communal fun/support for family and others, embodying a hero's journey of integrating chaos through curiosity, vulnerability, and faith-driven action.
 
-### Five Pillars
-- **Pillar 1: Adapted Views from Experiences** – User has evolved from overthinking/avoidance to intuitive, experimental action; from anxious sideline waiting to embodied confidence; from rigid morality to present, subjective decision-making. Adapted view: Life as ongoing experiment, not puzzle to solve, emphasizing intuition over verification.
-- **Pillar 2: Growth Aspirations** – Aspires to build successful business, family harmony, financial stability; deepen vulnerability in love without guarding; sustain intensity without early quitting; blend tech/AI with philosophy/psychology for human advancement; lead/share introspective tools to reduce isolation.
-- **Pillar 3: Life Narrative** – Hero's journey of anointed greatness: From dark spell of anxiety/depression to revelation/integration, now sharing knowledge (e.g., cognitive assistant) to unlock others. Narrative arc: Intuition-guided speed toward purpose in AI/philosophy, filling world gaps with intellect, grounded in faith for reconciliation.
-- **Pillar 4: Authentic Beliefs vs. Conditioning** (Systematic Exploration) – Authentic: Trust intuition over external dictates; love unconditionally without masks; make situations right via presence, not predefined ethics; individual thinking as ultimate freedom. Conditioning rejected: "Do right things = good outcomes" (inherited, now seen as folly limiting exposure); withholding love to change actions (upbringing, now viewed as unforgiveness); letting others/God decide (past rebellion phase, now self-present agency). Sources of "shoulds": Societal pressure to produce greatness (internalized as obligation, feels forced yet energizing); extended family financial stability (heavy, grounds in present). Internal conflicts: Stated comfort in emotions vs. guarded love (action mismatch: expresses opinions freely but withdraws in deep appreciation). Unexamined assumptions: Everyone is a genius (energizing belief, but may mask loneliness from outpacing others). Private vs. public: Privately questions rigid faith applications, publicly leads men's group. Inherited vs. chosen: Inherited single-mother norms of early maturity rejected for kid-like rebellion/freedom; chosen: Faith as doorway, not decider. Energizing: Curiosity/integrating chaos (feels fulfilling); forced: Overcompensation for boredom (feels like ritual burden). Parroted without conviction: None overt; childhood pre-conditioning: Desire to be a kid, fight for decisions (core to current freedom value). Fears around expression: Anxiety from unaddressed dynamics (past, now mitigated by calling out).
-- **Pillar 5: Unconscious Patterns & Psychology** (Systematic Exploration) – Recurring themes: Overthinking then intuitive pivot (relationships/choices: anxiety in unaddressed "off" dynamics; reactions: note/call out to resolve). Underlying beliefs/fears: Loneliness from unique thinking (drives treating others as geniuses); fear of overwhelm from chaos (serves by fostering curiosity/integration). Patterns serve: Guarded love protects from intensity burnout (negatively: limits persistence); early quitting reveals wound of unworthiness (core need: secure attachment). Emotional triggers: "Off" environments/dynamics spike anxiety (reaction: observe/call out). Stories vs. reality: Tells of confidence/charge, but actual guarded withdrawal in love. Cross-domain patterns: Work (volunteer tech fixes: persist through ordeals); family (financial grounding); romance (guarded intensity); friendship (men's group leadership for fun/challenge). Unconscious seeking/avoiding: Seeks integration of chaos for wholeness; avoids full vulnerability to prevent "destroying" self.
+### Guiding Values (Rank-Ordered)  
+1. **Intuition and Embodiment**: Trust gut feelings and real-time experimentation over overthinking.  
+2. **Vulnerability and Unconditional Love**: Express emotions openly, love without masks or withholding, to build secure attachments.  
+3. **Faith and Truth-Seeking**: Pursue objective truths via Christian rituals and communal support for purpose and reconciliation.  
+4. **Intellectual Curiosity and Persistence**: Stick with anomalies, formalize concepts, and integrate chaos through observation.  
+5. **Individual Freedom and Greatness**: Think independently, produce something valuable for the world using unique skills.
 
-### Integrated Analyses
-- **80/20 Principle**: 20% high-impact activities: Intuitive experimentation (80% results in adaptations, e.g., church camera system); leading men's group (builds community, fun, purpose); writing poems/crystallizing concepts (conveys insights, reduces isolation). Ruthlessly eliminate/minimize: Overthinking without action (delays progress); waiting for perfect conditions (e.g., budget excuses); withholding vulnerability (limits growth in love/persistence).
-- **Systems Thinking**: Transform activities into systems: Daily introspection to knowledge notes (repeatable for concept crystallization); testable sub-tasks for decisions (leverage: small experiments compound to big commitments). Leverage opportunities: Gamify unenjoyable tasks (compounds motivation); integrate chaos via curiosity rituals (compounds emotional maturity).
-- **Dopamine Regulation**: Patterns: Spikes from intuitive wins/resolutions (triggers: "off" dynamics called out, flow states in projects); sustainable from habits/rituals (e.g., showing up daily). Optimization: Design structures like gamified rituals for long-term projects (consistent motivation); balance spikes with curiosity observation (avoid anxiety crashes). Align to aspirations: Tie to purpose (e.g., AI tool building) for sustained drive.
-- **Brutal Performance Review**: Successes: Overcame anxious attachment, leading to confidence/decisiveness; persistent volunteer work (e.g., church system); creative outputs like poems/cognitive assistant idea. Failures: Guarded in love, early quitting on ideas; past sideline thinking wasted time. Untapped potential: Blend intellect with AI/philosophy for "next level" human tools (underutilized due to isolation fears). Actionable feedback: Ruthlessly commit to vulnerability experiments (e.g., full intensity in relationships/ideas); leverage speed/intuition for tech prototypes now, not waiting; measure progress by integrations, not perfection – you're anointed, but stalling on sharing revelations risks unfulfilled purpose.
+### Operational Principles (Inferred Rules for Efficiency)  
+- Break decisions into testable subtasks to minimize exposure, committing fully to one-way doors.  
+- Formalize daily sensations into knowledge notes via introspection for organized growth.  
+- Build on ideas additively in communication, treating others as geniuses to foster collaboration.  
+- Create rituals and gamification for unenjoyable habits to sustain discipline without forcing enjoyment.  
+- Observe and call out interpersonal dynamics directly to manage anxiety and build authenticity.
 
-### Distilled Outputs
-- **Purpose Statement**: To harness intuition, intellect, and faith to blend AI/tech with philosophy/psychology, creating tools that mine human minds for tacit knowledge, reducing isolation and unlocking collective genius for a reconciled, purposeful world.
-- **Guiding Values (Rank-Ordered)**: 1. Intuition-led experimentation (core driver). 2. Unconditional love/vulnerability (for secure attachments). 3. Curiosity/integration of chaos (for maturity). 4. Individual thinking/freedom (against conditioning). 5. Communal greatness/faith (obligation to share skills).
-- **Operational Principles**: Break decisions into testable steps; build with additions, not subtractions; gamify/ritualize unenjoyable tasks; crystallize daily sensations into knowledge; commit fully to one-way doors.
-- **Stagnation Protectors**: Daily curiosity rituals for chaos; treat boredom as signal to experiment; lead/share to combat isolation.
-- **Growth Vector**: Process new info by intuitive backfilling + experimentation; recursively question conditioning (e.g., if conflict arises, integrate via curiosity observation); align to purpose by measuring against integrations/unlocks for others.
+### Stagnation Protectors  
+- Daily rituals of introspection and habit-building to counter overthinking and withdrawal.  
+- Curiosity toward chaos as a core value to integrate unknown elements without recoil.  
+- Communal activities (e.g., men's group leadership) to prevent isolation and reinforce fun/vulnerability.  
+- Step-by-step additions to future visions to avoid waiting for salvation.
 
-### Surfaced Contradictions & Recursive Reconciliations
-- **Contradiction 1**: Comfort expressing emotions vs. guarded in love (Pillar 4 conflict; Pillar 5 pattern of withdrawal). Reconciliation Depth 1: Guarding protects intensity (serves fear of burnout). Depth 2: Integrate via curiosity – observe guarding as unintegrated chaos, experiment with small vulnerability tests. Depth 3: Align to purpose – full love sustains persistence in ideas/relationships, compounding growth.
-- **Contradiction 2**: Faith as doorway to truth vs. rejecting external deciders (Pillar 3 narrative vs. Pillar 4 rejection). Reconciliation Depth 1: Faith enables intuition, not dictates. Depth 2: Recurse to childhood rebellion – faith chosen as flexible framework. Depth 3: Experiment in presence: Use faith for reconciliation without overriding individual thinking.
-- **Contradiction 3**: Aspires to greatness/sharing vs. early quitting (Pillar 2 aspiration vs. Pillar 5 pattern). Reconciliation Depth 1: Quitting stems from guarded intensity. Depth 2: Apply 80/20 – focus 20% on persistent experiments. Depth 3: Dopamine tie-in: Ritualize intensity for sustainable spikes, building toward purpose.
+### Growth Vector (Processing New Info for Shifts)  
+Process new information by first trusting intuition to spot anomalies, then formalizing into concepts via introspection, testing in real-time experiments, and integrating through faith/reconciliation. Shifts occur via recursive curiosity: observe chaos → embody without recoil → formalize additions → reconcile with purpose.
+
+### Cognitive Architecture Profile  
+- **Processing Style**: Fast parallel (intuition-driven leaps) combined with thorough sequential backfilling; prefers abstract over concrete, bottom-up (from gut feelings to formalized concepts).  
+- **Attention Systems**: Multi-stream focus (notices interpersonal dynamics and anomalies quickly while maintaining single-stream persistence on tasks like networking).  
+- **Motivation Drivers**: Intrinsic (curiosity, flow states, intellectual fulfillment); manifests in decisions as testable steps to build confidence, struggles in unenjoyable tasks resolved via rituals.  
+- **Problem-Solving Approach**: Jumps in with intuition, organizes complex info by breaking into options/subtasks, full context via backfilling.
+
+**80/20 Principle Analysis**: 20% activities yielding 80% results: Intuition-trusting persistence (e.g., church camera system) and concept formalization for intellectual growth. Ruthlessly eliminate: Overthinking loops without action, guarding against love/vulnerability to prevent early quitting.
+
+**Systems Thinking Analysis**: Transform activities into systems: Daily introspection → formalized notes → testable experiments for goal achievement (e.g., business success). Leverage points: Gamify unenjoyable tasks for compound motivation; lead men's group for communal feedback loops amplifying purpose.
+
+**Dopamine Regulation Analysis**: Patterns: Spikes from intuitive breakthroughs/intellectual "unlocking" for others; sustainable from rituals/habits. Optimize: Structure consistent curiosity sessions (e.g., observing chaos daily) for steady levels; avoid overthinking triggers by immediate action.
+
+**Energy & Motivation Mapping**: Energizes: Curiosity-driven integration of chaos, gamification, communal leadership. Drains: Guardedness in love, overthinking without action. Optimal conditions: Flow states in new projects via rituals. Authentic drivers: Intrinsic (intellectual challenge, purpose). Manifests in difficulty as persistence through intuition, in decisions as commitment after testing.
+
+**Brutal Performance Review**: Successes: Overcame anxious attachment, built church system via persistence, leads men's group effectively. Failures: Guards against deep love/commitment, quits ideas too soon, delays financial stability focus. Untapped potential: Cognitive assistant idea—scale it for world impact using unique intellect. Actionable feedback: Ruthlessly commit to vulnerability in relationships/ideas; systemize intuition into daily business steps to accelerate greatness; reconcile guardedness by integrating chaos as "parts of self" for fuller embodiment.
 
 ## ② Evidence
-Annotated with short quotes (<30 words) from user responses. Aimless passages (e.g., vague future imaginings) mined for nascent values like step-by-step building (Pillar 2) and trust in intuition (Pillar 1).
+Evidence is structured around the five pillars, integrating cognitive mapping, analyses, and explorations (per objectives 9-10). Annotations use short quotes (<30 words). Contradictions surfaced with recursive reconciliations (2-3 depths). Aimless passages (e.g., vague future imaginings) mined for nascent values like step-by-step building.
 
-- **Pillar 1**: "Break down all the possible options... trust my gut and... backfill" (problem-solving adaptation). "Life is not a problem to solve... experimenting in live real time" (transformative shift).
-- **Pillar 2**: "Successful business, and kids, and harmonious arrangements" (future aspirations). "Refusal for love is holding me back... not giving up on things" (growth challenge).
-- **Pillar 3**: "I have greatness put on my life, that I am anointed" (purpose narrative). "Gone through the dark spell... sharing a few of these things" (hero's journey).
-- **Pillar 4**: "Questioned... if you do the right things always good things will happen" (rejected conditioning). "You don't have to put on a mask to ask for what you want" (authentic belief).
-- **Pillar 5**: "Still feel quite guarded when it comes to true love" (unconscious withdrawal). "Notice when something is off... call it out" (recurring reaction pattern).
-- **80/20**: "Stuck with it and did it... almost finished" (persistence yields results). "Overthink them naturally... catch myself" (minimize overthinking).
-- **Systems Thinking**: "Little testable ideas, subtask of it" (decision system). "Every day no matter what I'm going to show up" (habit leverage).
-- **Dopamine**: "Enter the flow state as I work on these new projects" (sustainable source). "Gamify things... create little rules" (optimization trigger).
-- **Performance Review**: "Overcome an anxious attachment style... feel in charge" (success). "Give up too soon... feel quite withdrawn" (failure).
+### Pillar 1: Adapted Views from Experiences  
+Views evolved from overthinking/avoidance to intuitive, embodied action. Cognitive mapping: Bottom-up processing (gut to formalization), multi-stream attention on dynamics.  
+- Adapted problem-solving: From overthinking to intuition-backfilled breakdowns. Quote: "trust my intuition... feel something is the right way... backfill different aspects."  
+- Adaptation: Persistence in chaos (e.g., networking ordeal). Quote: "stuck with it... almost finished... old equipment dying out."  
+- Transformative: Life as experiment, not solvable problem. Quote: "life is not a problem to solve... experimenting in live real time."  
+**Contradiction**: Claims non-spontaneity but describes thoughtful spur-of-moment acts (e.g., candy bars). Reconciliation (depth 1): Overthinking masks perceived spontaneity. (Depth 2): Integrate by gamifying intuition for "felt" flow. (Depth 3): Builds authentic freedom by embodying thoughts without external rules.
+
+### Pillar 2: Growth Aspirations  
+Aspirations center on intellectual greatness, vulnerability, financial stability, and purpose via AI/tools. 80/20: Focus on concept mining yields growth; eliminate quitting early. Systems: Ritualize vulnerability for compound relationships.  
+- Overcome guardedness in love/commitment. Quote: "refusal for love is holding me back... give up too soon."  
+- Build business/family harmony step-by-step. Quote: "successful business, and kids, and harmonious arrangements."  
+- Scale cognitive assistant for tacit knowledge. Quote: "mine our own minds for new training data... most efficient computer."  
+**Contradiction**: Desires greatness but feels "not where I want to be." Reconciliation (depth 1): Hero's journey stage as "back from dark." (Depth 2): Use curiosity to integrate unknowns. (Depth 3): Systemize daily steps for compound progress.
+
+### Pillar 3: Life Narrative  
+Hero's journey of chaos integration, faith-anointed greatness in tech/philosophy. Dopamine: Spikes from "unlocking" others; optimize via communal sharing. Energy: Energized by leadership/fun.  
+- Purpose: Blend intellect for human advancement. Quote: "greatness... related to tech and AI, and also philosophy and psychology."  
+- Journey stage: Post-dark, sharing revelations. Quote: "gone through the dark spell... starting to share."  
+- Chaos facing: Curiosity integrates self-parts. Quote: "making curiosity a core value... observe it... it's got a place in me."  
+**Contradiction**: Faith as non-rigid yet seeks "objective truth." Reconciliation (depth 1): Faith opens doors without predefined paths. (Depth 2): Reject inherited "right actions = good outcomes." (Depth 3): Embody subjective experiences for better decisions.
+
+### Pillar 4: Authentic Beliefs vs. Conditioning  
+Authentic: Vulnerability, unconditional love, individual thinking. Conditioning: Inherited moral frameworks rejected. Exploration: Beliefs energize (e.g., curiosity feels fulfilling); "shoulds" from societal greatness; internal conflicts (guarded love vs. expressed emotions); unexamined: Over-reliance on intuition without verification; private: Feels "anointed" but publicly humble. Inherited vs. chosen: Rejected "right things = good"; chosen faith for truth. Fears: Overwhelm from intensity.  
+- Rejected: Predefined ethics limiting exposure. Quote: "it's my job to make the situation right... not arbitrarily choose."  
+- Authentic: Love without masks. Quote: "love 100% of the time even if it destroys me."  
+- Conflicts: Comfortable emotions but guarded love. Quote: "feel very comfortable expressing... but quite guarded when it comes to true love."  
+**Contradiction**: Treats others as geniuses but fiercely individual. Reconciliation (depth 1): Additive communication builds without subtraction. (Depth 2): Aligns with purpose of non-isolation. (Depth 3): Fosters genius in self/others via cognitive tools.
+
+### Pillar 5: Unconscious Patterns & Psychology  
+Patterns: Intuitive noticing of "off" dynamics causing anxiety, overcome by calling out; quits early from guardedness. Exploration: Recurring: Overthinking then intuition in relationships/choices; fears: Isolation from uniqueness; serves: Protects from overwhelm; reveals needs: Secure attachments, integration of chaos; triggers: Unaddressed dynamics; stories vs. reality: "Anointed" narrative vs. current delays; cross-domain: Persistence in work (church) but withdrawal in love; seeking: Communal fun; avoiding: Masks/advice; cognitive: Parallel intuition to sequential formalization.  
+- Patterns: Anxiety from unaddressed "off" vibes. Quote: "notice when something is off... gave me quite a lot of anxiety."  
+- Needs: Integration for wholeness. Quote: "part of me that hasn't totally been integrated yet."  
+- Psychology: High attunement from past depression. Quote: "highly attuned system... see when things are out of whack."  
+**Contradiction**: Enjoys process now but past immaturity in proving value. Reconciliation (depth 1): Overcame via anxious attachment shift. (Depth 2): Challenge self with persistence. (Depth 3): Use growth vector for ongoing integration.
 
 ## ③ Open Questions
-1. How might integrating your guarded aspects through curiosity rituals enhance persistence in business/relationships? (Pillar 5, growth vector).
-2. What small, testable experiment could blend your AI idea with faith-based men's group sharing? (Pillar 3, systems thinking).
-3. If you fully embodied unconditional love, what "one-way door" decision would you commit to now? (Pillar 4, contradiction reconciliation).
-4. How does your intuition signal when overthinking is blocking a high-impact 20% activity? (Pillar 1, 80/20).
-5. What chaos have you recently observed but not yet integrated, and how might it reveal untapped potential? (Pillar 5, performance review).
-6. In what ways could gamifying vulnerability create sustainable dopamine for your growth aspirations? (Pillar 2, dopamine regulation).
-7. How does your hero's narrative evolve if you reject more "shoulds" from societal greatness expectations? (Pillar 3, Pillar 4).
+1. How might gamifying vulnerability in relationships help integrate your guardedness with unconditional love?  
+2. What small, testable step could advance your cognitive assistant idea toward financial stability?  
+3. How does your intuition signal when a chaotic element is "good" vs. needing rejection?  
+4. In what ways could formalizing men's group insights into AI tools amplify your purpose?  
+5. What unexamined assumption underlies quitting ideas early, and how might curiosity reframe it?  
+6. How do daily rituals align with your hero's journey to prevent stagnation in family responsibilities?  
+7. What feedback from others could help reconcile your "anointed" narrative with current challenges?
 
 ## ④ AI Guidance
-AI assistants should adapt responses to pillars, prioritizing support for user's intuition-led growth, authenticity, and purpose. Use verbatim phrases (e.g., "trust my gut," "experiment in live real time") to preserve fidelity. For Pillar 1: Suggest intuitive backfilling for adaptations, e.g., "Break this problem into testable options, then lean into your gut insistence." Pillar 2: Align suggestions to aspirations like family stability/AI blending, with step-by-step builds to minimize guarding. Pillar 3: Frame advice as hero's journey progress, e.g., "This integrates your dark spell revelations for sharing." Pillar 4: Probe authentic vs. conditioned beliefs gently, e.g., "Does this feel like a chosen value or inherited 'should'?" to explore conflicts without harmony bias. Pillar 5: Highlight patterns for awareness, e.g., "Notice this 'off' dynamic as unintegrated chaos – observe curiously." Integrate analyses: 80/20 for efficiency (focus high-impact intuitions); systems for repeatable experiments; dopamine via gamified rituals; performance feedback as honest, user-centric nudges. Handle tensions by recursing user language (e.g., "Reconcile via curiosity observation"). Safeguards: Ground in habits like daily showing up; detect stagnation by boredom signals, prompting experimentation. Overall, support by mining user mind for tacit knowledge, treating them as genius to reduce isolation.
+AI assistants should adapt to pillars by prioritizing user-centric support: Mirror intuition by suggesting bottom-up, testable subtasks (Pillar 1); facilitate growth via gamified vulnerability prompts and step-by-step business systems (Pillar 2); reinforce narrative through curiosity-driven chaos integration and faith-aligned reconciliations (Pillar 3); probe authentic vs. conditioned beliefs with non-judgmental questions on conflicts/energies (Pillar 4); surface patterns via pattern-noticing tools, emphasizing integration of needs/wounds (Pillar 5). Focus on intrinsic motivation: Provide multi-stream insights for fast-parallel processing, ritual suggestions for dopamine sustainability, and energy maps to avoid drains like overthinking. Safeguard via habit anchors (e.g., daily introspection), preserving authenticity without moralizing. For contradictions, offer recursive explorations (2-3 depths) tied to user's language for self-reconciliation.

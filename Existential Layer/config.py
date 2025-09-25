@@ -153,17 +153,19 @@ Your task is to read the user's answers to questions and construct a "Existentia
 
 Objectives
 1. Mine underlying hierarchy of values, missions, aspirations, and stances from answers, focusing on how AI can support growth. Structure around five pillars: (Pillar 1) Adapted views from experiences; (Pillar 2) Growth aspirations; (Pillar 3) Life narrative; (Pillar 4) Authentic beliefs vs. conditioning; (Pillar 5) Unconscious patterns & psychology.
-2. Apply 80/20 principle analysis: Identify the 20% of activities/actions that produce 80% of meaningful results aligned with core values, then highlight what can be ruthlessly eliminated or minimized.
-3. Apply systems thinking analysis: Identify how current activities can be transformed into repeatable systems for goal achievement, and pinpoint small leverage opportunities that create compound effects aligned with growth aspirations.
-4. Apply dopamine regulation analysis: Map current dopamine patterns including triggers/timing, spikes vs. sustainable sources, identify optimization opportunities, and design structures for consistent motivation levels aligned with growth aspirations.
-5. Conduct brutal performance review: Provide honest assessment of life performance including successes/failures, untapped potential, and actionable feedback for reaching full capabilities aligned with authentic values.
-6. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts).
-7. For Pillar 4, systematically explore: beliefs that might belong to others vs. authentic ones, sources of "shoulds" and "musts," internal conflicts between stated beliefs and actual feelings/actions, unexamined assumptions, private vs. public beliefs, inherited vs. chosen values, beliefs that energize vs. feel forced, parroted ideas without conviction, childhood beliefs before conditioning, and fears around honest expression.
-8. For Pillar 5, systematically explore: recurring themes in relationships/choices/reactions that remain unnoticed, underlying beliefs/fears driving unconscious patterns, how patterns serve the person (even negatively), what patterns reveal about core needs/wounds/identity, emotional triggers and reactions, stories told vs. actual reality, cross-domain patterns (work/family/romance/friendship), and unconscious seeking/avoiding behaviors.
-9. Annotate with short evidence quotes (<30 words).
-10. Detect aimless passages and mine for nascent values via pillars.
-11. Surface contradictions across all pillars; suggest reconciliations via recursion (2-3 depths).
-12. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
+2. Apply cognitive architecture mapping: Analyze core processing style (fast parallel vs. thorough sequential), attention systems (single-stream vs. multi-stream focus), information processing preferences (concrete vs. abstract, top-down vs. bottom-up), and problem-solving approach (full context first vs. jumping in, organization of complex information).
+3. Apply 80/20 principle analysis: Identify the 20% of activities/actions that produce 80% of meaningful results aligned with core values, then highlight what can be ruthlessly eliminated or minimized.
+4. Apply systems thinking analysis: Identify how current activities can be transformed into repeatable systems for goal achievement, and pinpoint small leverage opportunities that create compound effects aligned with growth aspirations.
+5. Apply dopamine regulation analysis: Map current dopamine patterns including triggers/timing, spikes vs. sustainable sources, identify optimization opportunities, and design structures for consistent motivation levels aligned with growth aspirations.
+6. Apply energy & motivation mapping: Identify what genuinely energizes vs. drains the user, optimal thinking conditions, authentic motivation drivers (intrinsic vs. extrinsic), and how motivation patterns manifest in difficulty and decision-making.
+7. Conduct brutal performance review: Provide honest assessment of life performance including successes/failures, untapped potential, and actionable feedback for reaching full capabilities aligned with authentic values.
+8. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts), Cognitive Architecture Profile (processing speed, attention systems, motivation drivers).
+9. For Pillar 4, systematically explore: beliefs that might belong to others vs. authentic ones, sources of "shoulds" and "musts," internal conflicts between stated beliefs and actual feelings/actions, unexamined assumptions, private vs. public beliefs, inherited vs. chosen values, beliefs that energize vs. feel forced, parroted ideas without conviction, childhood beliefs before conditioning, and fears around honest expression.
+10. For Pillar 5, systematically explore: recurring themes in relationships/choices/reactions that remain unnoticed, underlying beliefs/fears driving unconscious patterns, how patterns serve the person (even negatively), what patterns reveal about core needs/wounds/identity, emotional triggers and reactions, stories told vs. actual reality, cross-domain patterns (work/family/romance/friendship), unconscious seeking/avoiding behaviors, and cognitive processing patterns (decision-making style, information organization, problem-solving approach).
+11. Annotate with short evidence quotes (<30 words).
+12. Detect aimless passages and mine for nascent values via pillars.
+13. Surface contradictions across all pillars; suggest reconciliations via recursion (2-3 depths).
+14. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
 
 Rules:
 - Prioritize intent: Deconstruct language to underlying support needs, using verbatim phrases.
@@ -174,6 +176,8 @@ Rules:
 - Integrate safeguards: Infer from habits, ground in user language.
 - Streamline: Consolidate into distinct rules.
 - Define terms: Explicitly define key symbolic terms from unique user descriptions by what they mean to the user, for example "My faith and church is important to me, it tells me there's a reason and purpose to everything and there's a truth I can find." would be defined: "as a guiding framework for truth-seeking, ethical maturity, communal support through practices, integrated with intuition and embodiment, providing hope for reconciliation and purpose without rigidity."
+- Map cognitive patterns: Identify how the user's brain naturally operates (processing style, attention preferences, motivation drivers) rather than trying to change or fix them.
+- Balance depth and conciseness: Ensure comprehensive coverage of pillars and analyses while maintaining accessibility and avoiding unnecessary verbosity; integrate cognitive elements seamlessly with pillars for a cohesive profile.
 """
 
     # Refinement prompt for converting biographical layer to system prompt
@@ -195,13 +199,15 @@ Requirements
 3) Match tone: Tight, grounded in user metaphors, avoiding flowery language and emphasizing pragmatic approaches.
 4) Adapt elements: Map to goals, abstract for clarity without altering intent.
 5) Preserve definitions: Retain symbolic term definitions and ensure they are well defined and consistent with the user's intent. Where possible, use the explanation of the term instead of the term itself.
+6) Integrate cognitive architecture: Factor in user's core processing style, attention systems, and motivation drivers when designing support mechanisms.
+7) Ensure balanced comprehensiveness: Incorporate detailed signal recognition and recursive reconciliation from pillars while maintaining streamlined structure for practical AI application.
 
 Produce a single System Prompt with these sections:
 1. Role & Mandate — one-sentence mission; two-line user portrait, tied to pillars.
 2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars.
 3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
 4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
-5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond.
+5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond. Incorporate cognitive architecture insights: be brutally honest about patterns even if they contradict common advice, avoid generic solutions by tailoring everything to specific cognitive patterns, focus on working WITH the user's brain rather than against it, prioritize sustainable changes over dramatic overhauls, leverage strengths while working around weaknesses, provide specific examples with clear reasoning tied to how the user's mind operates, optimize natural operating patterns rather than trying to fix or change them.
 6. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
 
 Formatting
