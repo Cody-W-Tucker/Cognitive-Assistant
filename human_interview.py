@@ -28,18 +28,7 @@ from typing import Optional, Dict, List
 from pathlib import Path
 
 # Import config from current directory
-from config import config
-
-def get_latest_interview_file() -> Optional[Path]:
-    """Find the most recent interview output file."""
-    try:
-        pattern = "human_interview_*.csv"
-        files = list(config.paths.DATA_DIR.glob(pattern))
-        if files:
-            return max(files, key=lambda f: f.stat().st_mtime)
-        return None
-    except Exception:
-        return None
+from config import config, get_most_recent_file
 
 def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
     """Load existing answers from a previous interview session."""
@@ -52,11 +41,11 @@ def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
 
         for _, row in df.iterrows():
             category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
-            answers[category_key] = {
-                'Answer 1': str(row.get('Human_Answer 1', '')).strip() if pd.notna(row.get('Human_Answer 1', '')) else '',
-                'Answer 2': str(row.get('Human_Answer 2', '')).strip() if pd.notna(row.get('Human_Answer 2', '')) else '',
-                'Answer 3': str(row.get('Human_Answer 3', '')).strip() if pd.notna(row.get('Human_Answer 3', '')) else ''
-            }
+            answer_data = {}
+            for i, col in enumerate(config.csv.ANSWER_COLUMNS, 1):
+                answer_key = f'Answer {i}'
+                answer_data[answer_key] = str(row.get(col, '')).strip() if pd.notna(row.get(col, '')) else ''
+            answers[category_key] = answer_data
 
         return answers
     except Exception as e:
@@ -235,11 +224,11 @@ Instructions:
     if args.output:
         output_file = config.paths.DATA_DIR / args.output
     elif args.resume:
-        latest_file = get_latest_interview_file()
-        if latest_file:
+        try:
+            latest_file = get_most_recent_file("human_interview_*.csv")
             output_file = latest_file
             print(f"📂 Resuming from: {output_file}")
-        else:
+        except FileNotFoundError:
             print("❌ No previous interview file found to resume")
             return
     else:

@@ -156,6 +156,37 @@ class APIConfig:
     MAX_TOKENS: int = 50000  # GPT-5 context window (conservative estimate)
     MAX_COMPLETION_TOKENS: int = 3000  # Increased output limit for detailed responses
 
+    def create_songbird_client(self):
+        """Create and return an OpenAI client configured for Songbird/Open Web UI."""
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(
+                api_key=self.OPEN_WEBUI_API_KEY,
+                base_url=self.OPEN_WEBUI_BASE_URL
+            )
+
+            # Test connection and get available models
+            models = client.models.list()
+            available_models = [m.id for m in models.data]
+
+            if "songbird" in available_models:
+                selected_model = "songbird"
+            elif available_models:
+                selected_model = available_models[0]
+                print(f"⚠️ Songbird model not found, using: {selected_model}")
+            else:
+                raise ValueError("No models available")
+
+            return client, selected_model
+
+        except ImportError:
+            raise ImportError("OpenAI package not installed. Install with: pip install openai")
+        except Exception as e:
+            if "401" in str(e):
+                raise ValueError("Authentication failed. Check OPEN_WEBUI_API_KEY in your .env file")
+            raise
+
 
 class PathConfig:
     """File path and directory configuration.

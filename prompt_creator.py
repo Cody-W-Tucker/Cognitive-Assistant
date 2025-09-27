@@ -242,9 +242,8 @@ def load_human_interview_data() -> str:
                 # Create structured page_content with newlines (consistent with working version)
                 # Format: Category\nGoal\nElement\nQuestion1\nHuman_Answer1\nQuestion2\nHuman_Answer2\nQuestion3\nHuman_Answer3
                 page_content = f"{row.get('Category', '')}\n{row.get('Goal', '')}\n{row.get('Element', '')}\n"
-                page_content += f"{row.get('Question 1', '')}\n{row.get('Human_Answer 1', '')}\n"
-                page_content += f"{row.get('Question 2', '')}\n{row.get('Human_Answer 2', '')}\n"
-                page_content += f"{row.get('Question 3', '')}\n{row.get('Human_Answer 3', '')}"
+                for question_col, answer_col in zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS):
+                    page_content += f"{row.get(question_col, '')}\n{row.get(answer_col, '')}\n"
                 docs.append(type('Document', (), {'page_content': page_content})())
             return docs
 
@@ -501,12 +500,9 @@ def load_ai_responses(csv_path: Path) -> str:
             continue
 
         qa_pairs = []
-        for i in range(1, 4):  # Questions 1-3, Answers 1-3
-            question_key = f'Question {i}'
-            answer_key = f'Human_Answer {i}'
-
-            question = row.get(question_key, '').strip()
-            answer = row.get(answer_key, '').strip()
+        for question_col, answer_col in zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS):
+            question = row.get(question_col, '').strip()
+            answer = row.get(answer_col, '').strip()
 
             if question and answer:
                 qa_pairs.append(f"1. {question}\n\n     {answer}")
