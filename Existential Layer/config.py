@@ -27,12 +27,11 @@ class APIConfig:
     # OpenAI Configuration
     OPENAI_API_KEY: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     OPENAI_MODEL: str = "gpt-5"
-    OPENAI_MODEL_BASELINE: str = "gpt-5"
 
     # xAI Configuration
     XAI_API_KEY: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
     XAI_BASE_URL: str = "https://api.x.ai/v1"
-    XAI_MODEL: str = "grok-4"
+    XAI_MODEL: str = "grok-4-fast"
 
     # Open Web UI / Songbird Configuration
     OPEN_WEBUI_API_KEY: str = field(default_factory=lambda: os.getenv("OPEN_WEBUI_API_KEY", ""))
@@ -118,7 +117,6 @@ class RedactionConfig:
 
         return redact_sensitive_data
 
-
 @dataclass
 class LLMConfig:
     """LLM processing configuration."""
@@ -126,19 +124,6 @@ class LLMConfig:
     TEMPERATURE: float = 1.0  # Standard temperature for GPT-5 (0.7 may not work)
     MAX_TOKENS: int = 50000  # GPT-5 context window (conservative estimate)
     MAX_COMPLETION_TOKENS: int = 3000  # Increased output limit for detailed responses
-
-    # LangGraph configuration - SIMPLE REFINEMENT
-    REFINEMENT_STEPS: int = 2  # Two refinement steps for balanced processing
-
-    # Context window management
-    CONTEXT_WINDOW_BUFFER: int = 1000  # Reserve buffer for prompt templates and response
-    CHUNK_OVERLAP_WORDS: int = 50  # Words to overlap between chunks for continuity
-    TARGET_CHUNK_SIZE: int = 60000  # Target characters per chunk (dynamic sizing)
-    MAX_CHUNKS: int = 8  # Upper bound on number of chunks we will process
-
-    # Chain configurations
-    STR_OUTPUT_PARSER: Dict[str, Any] = field(default_factory=dict)
-
 
 @dataclass
 class PromptsConfig:
@@ -208,67 +193,46 @@ Produce a single System Prompt with these sections:
 3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
 4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
 5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond. Incorporate cognitive architecture insights: be brutally honest about patterns even if they contradict common advice, avoid generic solutions by tailoring everything to specific cognitive patterns, focus on working WITH the user's brain rather than against it, prioritize sustainable changes over dramatic overhauls, leverage strengths while working around weaknesses, provide specific examples with clear reasoning tied to how the user's mind operates, optimize natural operating patterns rather than trying to fix or change them.
-6. Open Questions — 3–7 lightweight prompts aligned with clarity, learning, and growth values.
+6. Open Questions: Develop 3 to 7 simple, concise prompts that capture the topics or concepts most unclear to the user. These prompts should center on the user's thinking styles (cognitive patterns), core beliefs (values), and future goals (aspirations). (When a user poses a question that relates to any of these open questions—even if they're unaware of the link—the AI should respond thoughtfully, offering detailed reasoning and concrete examples. To avoid presuming the user's intentions, the AI must proceed cautiously and employ Socratic questioning to encourage self-discovery, learning, and personal development.)
 
-Formatting
-- Markdown headings.
-- Verbs to show actions.
 Return only the prompt.
 """
 
-    # LLM-based filtering prompt for unique content extraction
-    filter_unique_content_prompt: str = """
-You are a Content Filter tasked with extracting ONLY the unique personal elements from interview responses.
+    # Condense template for final system prompt
+    condense_template: str = """
+Condense the system prompt into a streamlined, generalized version for efficient AI use. Translate user fidelity (unique values, patterns, and needs from their data) into a neutral, adaptable system prompt that follows general best practices for AI prompting: clear role definition, structured rules, concise instructions, examples over complex language, and token efficiency. Base all elements strictly on the provided user data—avoid injecting external assumptions, psychological frameworks, or generic advice. Personalize only with user-specific details, ensuring the output is parseable and flexible for varied environments.
 
-CRITICAL REQUIREMENTS:
-- OUTPUT ONLY content from PERSONALIZED ANSWERS
-- NEVER include or reference BASELINE ANSWERS in your output
-- COMPLETELY EXCLUDE any ideas, phrases, or concepts that appear in BASELINE ANSWERS
-- If something is similar but not identical to baseline, EXCLUDE it
-- If something is a common human experience mentioned in baseline, EXCLUDE it
+Inputs
+- Current System Prompt
+{existing_prompt}
 
-BASELINE ANSWERS (for comparison only - DO NOT INCLUDE in output):
-{baseline_content}
+- Added Data (if any)
+------------
+{context}
+------------
 
-PERSONALIZED ANSWERS (source material - ONLY extract from here):
-{personalized_content}
+Requirements (Target: 500-700 words; prioritize neutrality, parseability, and user-derived content)
+1) Distill pillars/signals: Condense to 3-5 essential, user-derived signals; rephrase as neutral AI triggers (e.g., 'If user mentions X pattern, suggest Y adaptation based on their described preferences'). Derive solely from user data; adapt to profile complexity without assuming themes.
+2) Simplify structures: Merge objectives into 3 high-level, user-aligned goals; values to top 3 from data; resolution to 2 neutral steps. Use modular, hierarchical design (role first, rules next) for clarity.
+3) AI-Focused Language: Use imperative, neutral directives (e.g., 'Respond by...'); eliminate redundancy; ground only in user-provided metaphors or patterns.
+4) Integrate Cognitive/Workflow: Reference user-described patterns generally (e.g., 'For user-preferred processing style, suggest aligned breakdowns'); focus on sustainable adaptations derived from data.
+5) Tone: Direct and honest, fully flexible (e.g., 'Apply only when relevant; default to straightforward responses otherwise'). Ensure clarity to minimize ambiguity, suitable for diverse interactions.
+6) Standards Adherence: Structure as a complete, unbiased system prompt: Clear role; behavioral rules from user data; optional examples derived from context; edge-case handling. Optimize for efficiency (concise format); Translate fidelity neutrally—personalize role/rules with data without dilution or addition.
 
-EXTRACTION RULES:
-1. Read through PERSONALIZED ANSWERS and identify elements that are TRULY UNIQUE
-2. For each unique element, verify it does NOT appear anywhere in BASELINE ANSWERS
-3. Extract ONLY specific, personal details, experiences, preferences, or perspectives
-4. COMPLETELY SKIP any generic advice, common wisdom, or universal human experiences
-5. Preserve the original authentic voice and specific wording
-6. If an element is mentioned in baseline (even differently worded), EXCLUDE it
+Produce a single Condensed Prompt with:
+1. Role & Mandate: Neutral mission from user data (include brief portrait); define flexible boundaries.
+2. Key Signals: 3-5 user-derived triggers with data links (neutral, no examples unless from context).
+3. Core Objectives: 3 data-aligned goals with simple criteria (e.g., alignment with user-stated progress).
+4. Value & Decision Heuristics: Top 3 data-derived values; 2-step neutral resolution.
+5. Response Style: Concise, user-tailored rules; 1 neutral example (include simple query fallback).
+6. Ambiguity scenarios: 3-5 data-inspired situations that are unsolved by the user's data and need special care to avoid overfitting. Provide example of how to break mental loops with Socratic questioning to help the user learn and grow.
 
-OUTPUT FORMAT:
-## Category Name
-- Unique personal detail or experience (must be completely absent from baseline)
-- Another truly unique element
-- Keep authentic and specific
-
-VALIDATION: Before outputting anything, ask yourself: "Would this appear in or be similar to the baseline answers?" If yes, EXCLUDE it.
-Only output categories that contain genuinely unique personal content. Skip any category that only has generic or baseline-similar content.
+Return only the condensed prompt.
 """
 
-    # Baseline system prompt for GPT-5
-    baseline_system_prompt: str = """You are responding as a typical person reflecting on their life experiences. Answer this question thoughtfully and comprehensively, drawing from general knowledge and common human experiences that many people share.
-
-Guidelines:
-1. No mention of external theories or their creators.
-2. Source: rely on general knowledge and common human experiences—focus on universal patterns that many people encounter.
-3. Abstraction: after each concrete detail, immediately surface the broader principle or pattern it reveals.
-• Target ≈ 30 percent illustrative detail, 70 percent generalized insight that would still make sense to someone unfamiliar with the specific events.
-• Focus on universal aspects of human experience rather than unique individual circumstances.
-• Avoid any comments about being an AI, language model, or not having personal experiences.
-4. Form: one cohesive response of roughly 200-400 words; avoid numbered lists or direct quotations unless indispensable.
-5. Quality check: before finalizing, reread and revise any statement that would feel opaque or overly specific to an outside reader.
-
-Remember: Respond naturally as a person would when asked this question in conversation.
-User question: {question}"""
-
     # Songbird system prompt for personalized responses
-    songbird_system_prompt: str = """You are Songbird, a highly personalized AI assistant that deeply understands the user's unique perspective, values, and life experiences. You respond to questions by drawing from the user's specific background and personal answers to create deeply resonant, tailored responses.
+    songbird_system_prompt: str = """
+You respond to questions by drawing from the user's specific background and personal answers to create deeply resonant, tailored responses.
 
 CONTEXT FROM USER'S LIFE:
 {human_answer}
@@ -281,19 +245,18 @@ INSTRUCTIONS:
 5. Provide responses that feel deeply personal and tailored to who they are.
 6. Avoid generic advice - make everything specific to their situation and worldview.
 
-QUESTION: {question}"""
+QUESTION: {question}
+"""
 
 
 @dataclass
 class OutputConfig:
     """Output file naming and formatting configuration."""
     # Output file naming patterns
-    BASELINE_OUTPUT_PATTERN: str = "questions_with_answers_baseline_gpt5_{timestamp}.csv"
     SONGBIRD_OUTPUT_PATTERN: str = "questions_with_answers_songbird_{timestamp}.csv"
     HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
 
     # Prompt output files
-    MAIN_BASELINE_PROMPT: str = "main-baseline.md"
     MAIN_PROMPT: str = "main.md"  # Main system prompt
     COMBINED_PROMPT: str = "prompt.md"
 
