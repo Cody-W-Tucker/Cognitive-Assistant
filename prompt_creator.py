@@ -105,7 +105,7 @@ async def call_llm(prompt: str, **kwargs) -> str:
             model=config.api.XAI_MODEL,
             messages=messages,
             temperature=1,
-            max_completion_tokens=kwargs.get('max_tokens', config.llm.MAX_COMPLETION_TOKENS)
+            max_completion_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS)
         )
 
         # Extract content from response
@@ -327,7 +327,7 @@ def create_human_interview_prompts():
     human_context = load_human_interview_data()
     
     # Store prompt templates for direct use
-    initial_summary_template = config.prompts.create_initial_prompt
+    initial_summary_template = config.prompts.initial_template
     refine_template = config.prompts.refine_template
     
     # Define the state of the graph - AI + HUMAN REFINEMENT VERSION

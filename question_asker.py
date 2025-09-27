@@ -126,8 +126,8 @@ def ask_question(client, model_name: str, question: str, model_type: str, human_
                     "content": question
                 }
             ],
-            temperature=config.llm.TEMPERATURE,
-            max_tokens=config.llm.MAX_TOKENS if model_type == "songbird" else config.llm.MAX_COMPLETION_TOKENS,
+            temperature=config.api.TEMPERATURE,
+            max_tokens=config.api.MAX_TOKENS if model_type == "songbird" else config.api.MAX_COMPLETION_TOKENS,
             stream=use_streaming
         )
 
