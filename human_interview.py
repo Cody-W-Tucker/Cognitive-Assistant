@@ -72,7 +72,7 @@ def save_answers_to_csv(questions_df: pd.DataFrame, answers: Dict[str, Dict[str,
                     output_df.at[idx, answer_col] = answers[category_key][answer_key]
 
     # Save to CSV
-    output_df.to_csv(str(output_file), index=False, quoting=csv.QUOTE_NONNUMERIC)
+    output_df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
 
 def ask_question_interactive(question: str, category_context: str, question_number: int) -> str:
     """Ask a single question interactively and get user response."""

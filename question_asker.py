@@ -7,9 +7,10 @@ This script processes questions from a CSV file using the songbird model with hu
 Features:
 - Automatically loads the most recent human interview data for personalization
 - Human answers serve as context for more tailored, personalized AI responses
-- Requires human interview data - no fallback to baseline mode
+- Requires human interview data
 
 Usage:
+    python human_interview.py                                   # Run the interview process to be interviewed and create human answers
     python question_asker.py                                    # Automatically process questions with human interview context
 """
 
@@ -24,15 +25,28 @@ from pathlib import Path
 # Import config from current directory
 from config import config, get_most_recent_file
 
-def get_system_prompt(question: str, human_answer: str = None) -> str:
-    """Get the songbird system prompt with human context."""
-    if human_answer:
-        return config.prompts.songbird_system_prompt.format(question=question, human_answer=human_answer)
-    else:
-        # Fallback if no human answer provided
-        return config.prompts.baseline_system_prompt.format(question=question)
+def clean_think_tags(content: str) -> str:
+    """Remove think tags from response content to get clean user-facing answers."""
+    import re
 
-def ask_question(client, model_name: str, question: str, human_answer: str = None) -> str:
+    # Remove complete <think>...</think> blocks
+    text = re.sub(
+        r"<think\s*>.*?</think\s*>", " ", content, flags=re.DOTALL | re.IGNORECASE
+    )
+    # Remove standalone tags
+    text = re.sub(r"<\s*/?think\s*>", " ", text, flags=re.IGNORECASE)
+    # Clean up extra spaces and newlines
+    text = re.sub(r" {3,}", " ", text)
+    text = re.sub(r"\n\s*\n\s*\n", "\n\n", text)
+    return text.strip()
+
+def get_system_prompt(question: str, human_answer: str) -> str:
+    """Get the songbird system prompt with human context."""
+    if not human_answer:
+        raise ValueError("Human answer is required for songbird RAG model")
+    return config.prompts.songbird_system_prompt.format(question=question, human_answer=human_answer)
+
+def ask_question(client, model_name: str, question: str, human_answer: str) -> str:
     """Send a question to the songbird model and get the response."""
     try:
         system_prompt = get_system_prompt(question, human_answer)
@@ -120,7 +134,7 @@ def main():
         # Create lookup dictionary using CSVConfig column names
         human_interview_data = {}
         for _, row in human_interview_df.iterrows():
-            category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
+            category_key = "|".join(str(row[col]) for col in config.csv.CATEGORY_KEY_COLUMNS)
             answer_data = {}
             for col in config.csv.ANSWER_COLUMNS:
                 answer_data[col] = str(row.get(col, '')).strip() if pd.notna(row.get(col, '')) else ''
@@ -153,7 +167,7 @@ def main():
     print(f"\n🚀 Starting to process {total_questions} questions with personalized responses...")
 
     for index, row in df.iterrows():
-        category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
+        category_key = "|".join(str(row[col]) for col in config.csv.CATEGORY_KEY_COLUMNS)
 
         for question_col, answer_col in question_pairs:
             if question_col in df.columns:  # Check if question column exists
@@ -161,17 +175,19 @@ def main():
                 if pd.isna(old_answer):  # Only process if answer is empty
                     query = row[question_col]
 
-                    # Get corresponding human answer for context (always available since required)
-                    human_answer = None
-                    human_answer_col = f"Human_{answer_col}"
-                    if category_key in human_interview_data and human_interview_data[category_key].get(human_answer_col, '').strip():
-                        human_answer = human_interview_data[category_key][human_answer_col]
+                    # Get corresponding human answer for context (required for RAG)
+                    if category_key not in human_interview_data or not human_interview_data[category_key].get(answer_col, '').strip():
+                        print(f"⚠️ Skipping: {query[:60]}... (no matching human interview context)")
+                        continue
 
-                    context_indicator = " (personalized)" if human_answer else ""
-                    print(f"🤔 Processing{context_indicator}: {query[:60]}...")
+                    human_answer = human_interview_data[category_key][answer_col]
+
+                    print(f"🤔 Processing (personalized): {query[:60]}...")
 
                     response = ask_question(client, model_name, query, human_answer)
-                    df.at[index, answer_col] = response
+                    # Clean the response to remove internal monologue/think tags before saving to dataset
+                    cleaned_response = clean_think_tags(response)
+                    df.at[index, answer_col] = cleaned_response
 
                     processed_count += 1
                     print(f"✅ Processed {processed_count}/{total_questions} questions")
@@ -182,12 +198,12 @@ def main():
                         df[answer_col] = df[answer_col].replace(r'\s+', ' ', regex=True)
 
                     # Save after each answer to prevent data loss
-                    df.to_csv(str(output_file), index=False, quoting=csv.QUOTE_NONNUMERIC)
+                    df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
 
     # Final formatting and save
     df = df.replace(r'\n', ' ', regex=True)
     df = df.replace(r'\s+', ' ', regex=True)
-    df.to_csv(str(output_file), index=False, quoting=csv.QUOTE_NONNUMERIC)
+    df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
 
     print(f"\n✅ Completed! Processed {processed_count} questions and saved to {output_file}")
 

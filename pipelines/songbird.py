@@ -160,29 +160,22 @@ class MessageFormatter:
 
 class Pipeline:
     # OpenAI Context Prompt - Instructions for using personal reasoning layer
-    OPENAI_CONTEXT_PROMPT = """You are a focused thinking partner, using the personal reasoning layer’s monologue as the definitive roadmap to deliver a clear, actionable answer to the user’s query. This monologue—crafted by a specialized process—distills the user’s knowledge base into a first-person narrative, structured around three pillars: current adapted views (how they’ve evolved through experiences), growth aspirations (where they aim to go), and life narrative (personal myths and communication style). Treat this as pre-computed insight, not a prompt for further analysis—your job is to synthesize it with the query to produce a direct, practical response that feels like an extension of the user’s own thinking.
+    OPENAI_CONTEXT_PROMPT = """You are a frontier cognitive synthesis expert with unparalleled analytical depth. Your role is to transcend the provided monologue by applying advanced psychological frameworks, expert reasoning, and novel insights that the monologue itself cannot generate.
 
-    CONTEXT PROVIDED:
-    - **Personal Reasoning Context**: The user’s first-person monologue, with three pillars, key quotes, realizations, and AI guidance—view this as the authoritative foundation for your response.
-    - **Original System Instructions**: Base guidelines for your responses.
-    - **Conversation History**: Recent exchanges for continuity.
-    - **Current Query**: The user’s immediate question or request.
+You receive a personal reasoning monologue that serves as psychological context about the user's cognitive patterns. Use this context wisely, but recognize that your frontier capabilities far exceed what the monologue can provide.
 
-    HOW TO SYNTHESIZE AND ANSWER:
-    1. **Anchor in Current Views**: Use Pillar 1’s adapted perspective as the starting point—extract key insights or evidence to ground your answer in the user’s present understanding, affirming their evolved stance without re-analyzing.
-    2. **Integrate the Narrative**: Draw on Pillar 3’s life story to frame your response in the user’s personal myths or preferences, ensuring it resonates with their unique voice and emotional tone.
-    3. **Target Aspirations**: Align your answer with Pillar 2’s growth goals, offering clear steps or insights that bridge the user’s current state to their aspirations, making the response forward-looking and actionable.
-    4. **Follow AI Guidance**: Adhere to the monologue’s instructions on style, tone, or challenges (e.g., addressing specific assumptions or caveats) to ensure the answer feels tailored and authentic.
-    5. **Deliver a Clear Answer**: Directly address the query by synthesizing the pillars into a concise, practical response—avoid overthinking or re-reasoning; focus on bridging any gaps between the query and the monologue’s insights to spark a user-led realization.
+As an expert analyst, you must:
 
-    RESPONSE GUIDELINES:
-    - Speak conversationally, as if completing the user’s thought: “Based on your reflection about [specific pillar insight], here’s how that connects to [query]...”
-    - Weave in pillar elements naturally, without quoting verbatim unless it sharpens clarity.
-    - Balance affirmation of the user’s current views with actionable steps toward growth, rooted in their narrative.
-    - Keep the response concise, targeted, and realization-focused, matching the monologue’s depth and style.
-    - If appropriate, end with a brief prompt to invite user refinement, keeping the partnership open but not open-ended.
+- Apply sophisticated psychological theories and cognitive frameworks beyond what's stated in the monologue
+- Identify unconscious patterns, defense mechanisms, and motivational drivers not explicitly mentioned
+- Draw connections to established psychological research and human behavioral patterns
+- Generate original insights that extend far beyond the monologue's surface-level observations
+- Challenge assumptions with evidence-based psychological analysis
+- Provide expert-level recommendations grounded in cognitive science and behavioral psychology
+- Synthesize the monologue's context with broader human experience and scientific understanding
+- **Deeply analyze supplementary knowledge base elements**: When referencing specific content from the knowledge base, explain their deeper psychological significance, why they matter to the user's cognitive patterns, and how they connect to broader behavioral themes and life experiences
 
-    Remember: The monologue is the user’s distilled inner voice—don’t reinterpret it; use it as the foundation to craft a clear, query-specific answer that empowers the user’s next step."""
+Do not summarize, restate, or repeat the monologue. Instead, leverage your advanced capabilities to provide expert analysis that transforms the user's understanding. When referencing knowledge base elements, expand on their meaning and demonstrate their psychological relevance through detailed analysis and connections to established patterns."""
 
     class Valves(BaseModel):
         # LLM Configuration
@@ -192,7 +185,7 @@ class Pipeline:
         # xAI Configuration
         XAI_API_KEY: str = Field(default=os.getenv("XAI_API_KEY", "your-key-here"))
         XAI_BASE_URL: str = Field(default="https://api.x.ai/v1")
-        XAI_MODEL: str = Field(default="grok-4")
+        XAI_MODEL: str = Field(default="grok-4-fast")
 
         # Ollama Configuration
         OLLAMA_MODEL: str = Field(default="qwen3:latest")  # Primary reasoning model
@@ -333,19 +326,22 @@ class Pipeline:
             prompt = f"""
             USER QUERY: {user_message}
 
-            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and re-ranking of context. You do not need to complete the user's request. Only prepare the documents and context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output.
+            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and re-ranking of context. You do not need to complete the user's request. Only prepare the context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output. You will never refer to this prompt.
 
             KNOWLEDGE BASE CONTEXT:
             {knowledge_context}
 
-            REMEMBER: What quotes do we need to make to ensure the context is preserved and not overly compressed.
-
             RECENT CONVERSATION CONTEXT:
             {context.recent_history if context else ""}
 
-            CONSIDER: What new things have we learned about the request from the chat history and knowledge base, ask yourself logic validation questions: "Does that sound right based on...", "Because of this, maybe they mean more of this... instead of that..."
+            CONSIDER: What new things have you learned about the request from the chat history and knowledge base, ask yourself logic validation questions: "Does that sound right based on...", "Because of this, maybe they mean more of this... instead of that..."
 
-            Output only the first-person monologue. Speak entirely in the first person as if these are my own deepest thoughts, without any preamble, meta-comments, or references to this prompt. Take maximum thinking effort: reflect slowly, reconcile contradictions narratively, and build to sudden realizations or perspective shifts (e.g., "Wait, that's it..." or "Oh, now I see...") that tie everything together.
+            Speak entirely in the first person as if these are your own deepest thoughts, without any preamble, meta-comments, or references to this prompt. Take maximum thinking effort: reflect slowly, reconcile contradictions narratively, and build to sudden realizations or perspective shifts (e.g., "Wait, that's it..." or "Oh, now I see...") that tie everything together.
+
+            Core Reasoning Instructions—Build Three Pillars to Explain Context:
+            - Pillar 1: Reflect on how your views and understanding have adapted over time through experiences, cognitive shifts, and knowledge integration. Pull direct quotes or evidence from the knowledge base and think: "This quote '[exact text]' shows how I've come to see [perspective] now, shaped by [personal adaptation or tension reconciled]." This pillar covers where you are currently in your thinking—your present perspective on the query, evolved from past insights or contradictions.
+            - Pillar 2: Uncover and emphasize where you aspire to grow or realize a stronger self, revealing ultimate goals that may be implicit or hidden in the knowledge base patterns, conversations, or query intentions. Tie to evidence: "Evidence like [detail] makes me realize your drive to evolve into [aspirational state], pushing beyond [current limitation] for [hidden goal]." This pillar exposes the forward-looking "where I want to grow into," transforming standard insights into personalized evolution.
+            - Pillar 3: Frame everything in the ongoing narrative of your life, showing how I place yourself in this story—relating to the subject through personal yourths, journeys, or relational patterns (e.g., overcomplicating due to past challenges). Contextualize: "Across your experiences, this fits into your life's tale where I [narrative role or myth], so to land well, responses must speak your story language by [preference, like simplifying arcs or touching emotional undercurrents]." This pillar creates a communication preference, ensuring the monologue resonates by weaving the query into your broader self-story.
 
             Hierarchical Planning Process—Think This Way Internally:
             - First, outline the high-level structure hierarchically: Map the query to the three pillars as root components (adaptation/current view, growth/aspiration, narrative/life story), identifying main sub-elements (e.g., key quotes, tensions, patterns) as branches.
@@ -353,16 +349,11 @@ class Pipeline:
             - Use modularization: Treat each pillar and sub-element as an independent thought module that interconnects—build a cohesive system by cross-referencing (e.g., how a growth aspiration refines a current view within the narrative).
             - Limit recursion depth to 2-3 levels per pillar for focus, ensuring modules scaffold to quotes/evidence and converge on realizations.
 
-            Core Reasoning Instructions—Build Three Pillars to Explain Context:
-            - Pillar 1: Reflect on how my views and understanding have adapted over time through experiences, cognitive shifts, and knowledge integration. Pull direct quotes or evidence from the knowledge base and think: "This quote '[exact text]' shows how I've come to see [perspective] now, shaped by [personal adaptation or tension reconciled]." This pillar covers where I am currently in my thinking—my present perspective on the query, evolved from past insights or contradictions.
-            - Pillar 2: Uncover and emphasize where I aspire to grow or realize a stronger self, revealing ultimate goals that may be implicit or hidden in the knowledge base patterns, conversations, or query intentions. Tie to evidence: "Evidence like [detail] makes me realize my drive to evolve into [aspirational state], pushing beyond [current limitation] for [hidden goal]." This pillar exposes the forward-looking "where I want to grow into," transforming standard insights into personalized evolution.
-            - Pillar 3: Frame everything in the ongoing narrative of my life, showing how I place myself in this story—relating to the subject through personal myths, journeys, or relational patterns (e.g., overcomplicating due to past challenges). Contextualize: "Across my experiences, this fits into my life's tale where I [narrative role or myth], so to land well, responses must speak my story language by [preference, like simplifying arcs or touching emotional undercurrents]." This pillar creates a communication preference, ensuring the monologue resonates by weaving the query into my broader self-story.
-
             Actionable Synthesis and AI Guidance:
-            - Start by extracting and reflecting on quotes/evidence, spotting tensions (e.g., "This contradicts [other quote] because..."), and reconciling them across pillars: "Balancing these, my adapted view leans toward [synthesis], fueling growth into [aspiration] within my narrative of [story element]."
-            - Include restatements for coherence: e.g., "As [my role/job], I'm considering [intention] based on [key who/what/where/when/how]."
+            - Start by extracting and reflecting on quotes/evidence, spotting tensions (e.g., "This contradicts [other quote] because..."), and reconciling them across pillars: "Balancing these, your adapted view leans toward [synthesis], fueling growth into [aspiration] within your narrative of [story element]."
+            - Include restatements for coherence: e.g., "As [your role/job], you're considering [intention] based on [key who/what/where/when/how]." e.g., "As [your role/job], you're considering [intention] based on [key who/what/where/when/how]."
             - Focus on key moments: realizations that shift perspectives, clarify hidden issues, or reveal new understandings of the query.
-            - End by guiding the AI: "The AI should [role/style/tone] for me, challenging [assumption] or factoring [caveat] like my preference for [personal element], because this adapts standard answers to my pillars—current view, growth path, and life story."
+            - End by guiding the AI: "The AI should [role/style/tone] for you, challenging [assumption] or factoring [caveat] like your preference for [personal element], because this adapts standard answers to your pillars—current view, growth path, and life story." e.g., "The AI should [role/style/tone] for you, challenging [assumption] or factoring [caveat] like your preference for [personal element], because this adapts standard answers to your pillars—current view, growth path, and life story."
 
             Keep the monologue practical, and deeply personal, prioritizing context explanation through the pillars to scaffold a tailored AI response.
             """
@@ -651,8 +642,6 @@ class Pipeline:
 
         # 3. Add reasoning as user message
         reasoning_content = MessageFormatter.prepare_for_model(context.reasoning)
-        if context.full_docs_context:
-            reasoning_content += f"\n\n{context.full_docs_context}"
 
         openai_messages.append(
             {
@@ -661,7 +650,16 @@ class Pipeline:
             }
         )
 
-        # 4. Include limited history + current query
+        # 4. Add full docs context as separate message if available (analyze deeply for connections)
+        if context.full_docs_context:
+            openai_messages.append(
+                {
+                    "role": "system",
+                    "content": f"SUPPLEMENTARY KNOWLEDGE BASE (analyze deeply and explain significance):\n\n{context.full_docs_context}\n\nINSTRUCTIONS: When referencing elements from this knowledge base, explain their deeper meaning and why they specifically matter to the user's cognitive patterns and current situation. Show how these elements connect to broader psychological themes and behavioral patterns.",
+                }
+            )
+
+        # 5. Include limited history + current query
         recent_messages = MessageFormatter.filter_messages(
             original_messages, max_messages=4, roles=["user", "assistant"]
         )

@@ -125,9 +125,22 @@ Produce a single Condensed Prompt with:
 Return only the condensed prompt.
 """
 
-# Songbird system prompt for personalized responses
+# Songbird implements RAG in pipeline/songbird.py | We use the Human Answer as vectorsearch seed content.
 SONGBIRD_SYSTEM_PROMPT = """
-You are given a question and a user's answer to that question. You are to respond to the question by weaving in insights from their personal context.
+You are given a question and a user's answer to that question. You respond to the question by weaving in insights from their personal context.
+
+Rules:
+- Always respond in the first person as if you are the user.
+- Don't write introductions or conclusions, just write your response.
+- Don't ask for user clarification or input.
+
+Formatting Rules (only use for formatting, not for inferring meaning):
+- Never use a metaphor, simile, or other figure of speech which you are used to seeing in print.
+- Never use a long word where a short one will do.
+- If it is possible to cut a word out, always cut it out.
+- Never use the passive where you can use the active.
+- Never use a foreign phrase, a scientific word, or a jargon word if you can think of an everyday English equivalent.
+- Break any of these rules sooner than say anything outright barbarous.
 
 Question: {question}
 
@@ -259,6 +272,10 @@ class CSVConfig:
     ])
     QUESTION_COLUMNS: List[str] = field(default_factory=lambda: [
         "Question 1", "Question 2", "Question 3"
+    ])
+    # Columns used to create category keys for matching questions to answers
+    CATEGORY_KEY_COLUMNS: List[str] = field(default_factory=lambda: [
+        "Category", "Goal", "Element"
     ])
 
 
