@@ -153,21 +153,56 @@ class APIConfig:
     """API and LLM configuration settings."""
     # OpenAI Configuration
     OPENAI_API_KEY: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    OPENAI_MODEL: str = "gpt-5"
+    OPENAI_MODEL: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5"))
+    OPENAI_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("OPENAI_CONTEXT_WINDOW", "400000")))  # GPT-5: 400k total
+    OPENAI_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("OPENAI_MAX_OUTPUT", "128000")))  # GPT-5: 128k output
 
     # xAI Configuration
     XAI_API_KEY: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
     XAI_BASE_URL: str = "https://api.x.ai/v1"
-    XAI_MODEL: str = "grok-4-fast"
+    XAI_MODEL: str = field(default_factory=lambda: os.getenv("XAI_MODEL", "grok-4-fast"))
+    XAI_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("XAI_CONTEXT_WINDOW", "2000000")))  # Grok-4-fast: 2m total
+    XAI_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("XAI_MAX_OUTPUT", "30000")))  # Grok-4-fast: 30k output
+
+    # Anthropic Configuration
+    ANTHROPIC_API_KEY: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    ANTHROPIC_MODEL: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"))
+    ANTHROPIC_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")))  # Claude-4.5: 200k total
+    ANTHROPIC_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")))  # Claude-4.5: 64k output
 
     # Open Web UI / Songbird Configuration
     OPEN_WEBUI_API_KEY: str = field(default_factory=lambda: os.getenv("OPEN_WEBUI_API_KEY", ""))
     OPEN_WEBUI_BASE_URL: str = "https://ai.homehub.tv/api"
 
-    # LLM Model parameters - OPTIMIZED for GPT-5
-    TEMPERATURE: float = 1.0  # Standard temperature for GPT-5 (0.7 may not work)
-    MAX_TOKENS: int = 50000  # GPT-5 context window (conservative estimate)
-    MAX_COMPLETION_TOKENS: int = 3000  # Increased output limit for detailed responses
+    # LLM Provider selection
+    LLM_PROVIDER: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "xai"))  # Options: openai, xai, anthropic
+
+    # LLM Model parameters
+    TEMPERATURE: float = 1.0
+
+    @property
+    def MAX_COMPLETION_TOKENS(self) -> int:
+        """Get max output tokens for the current LLM provider."""
+        if self.LLM_PROVIDER == "openai":
+            return self.OPENAI_MAX_OUTPUT
+        elif self.LLM_PROVIDER == "xai":
+            return self.XAI_MAX_OUTPUT
+        elif self.LLM_PROVIDER == "anthropic":
+            return self.ANTHROPIC_MAX_OUTPUT
+        else:
+            return 3000  # fallback
+
+    @property
+    def MAX_TOKENS(self) -> int:
+        """Get context window for the current LLM provider."""
+        if self.LLM_PROVIDER == "openai":
+            return self.OPENAI_CONTEXT_WINDOW
+        elif self.LLM_PROVIDER == "xai":
+            return self.XAI_CONTEXT_WINDOW
+        elif self.LLM_PROVIDER == "anthropic":
+            return self.ANTHROPIC_CONTEXT_WINDOW
+        else:
+            return 50000  # fallback
 
     def create_songbird_client(self):
         """Create and return an OpenAI client configured for Songbird/Open Web UI."""
@@ -198,6 +233,21 @@ class APIConfig:
         except Exception as e:
             if "401" in str(e):
                 raise ValueError("Authentication failed. Check OPEN_WEBUI_API_KEY in your .env file")
+            raise
+
+    def create_anthropic_client(self):
+        """Create and return an Anthropic client."""
+        try:
+            from anthropic import Anthropic
+
+            client = Anthropic(api_key=self.ANTHROPIC_API_KEY)
+            return client, self.ANTHROPIC_MODEL
+
+        except ImportError:
+            raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
+        except Exception as e:
+            if "401" in str(e) or "invalid" in str(e).lower():
+                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
             raise
 
 
@@ -355,9 +405,19 @@ class Config:
         """Validate configuration and return list of issues."""
         issues = []
 
-        # Check API keys
-        if not self.api.OPENAI_API_KEY:
-            issues.append("OPENAI_API_KEY not found in environment")
+        # Check API keys based on selected provider
+        if self.api.LLM_PROVIDER == "openai":
+            if not self.api.OPENAI_API_KEY:
+                issues.append("OPENAI_API_KEY not found in environment (required for LLM_PROVIDER=openai)")
+        elif self.api.LLM_PROVIDER == "xai":
+            if not self.api.XAI_API_KEY:
+                issues.append("XAI_API_KEY not found in environment (required for LLM_PROVIDER=xai)")
+        elif self.api.LLM_PROVIDER == "anthropic":
+            if not self.api.ANTHROPIC_API_KEY:
+                issues.append("ANTHROPIC_API_KEY not found in environment (required for LLM_PROVIDER=anthropic)")
+        else:
+            issues.append(f"Invalid LLM_PROVIDER '{self.api.LLM_PROVIDER}'. Must be one of: openai, xai, anthropic")
+
         if not self.api.OPEN_WEBUI_API_KEY:
             issues.append("OPEN_WEBUI_API_KEY not found in environment")
 

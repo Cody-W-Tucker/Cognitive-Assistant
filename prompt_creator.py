@@ -36,22 +36,49 @@ import csv
 from openai import AsyncOpenAI
 import tiktoken
 
-# Use xAI client instead
-openai_client = AsyncOpenAI(
-    api_key=config.api.XAI_API_KEY,
-    base_url=config.api.XAI_BASE_URL
-)
+# Initialize LLM client based on provider
+llm_client = None
+llm_model = None
 
-# Initialize tokenizer for token counting with Grok-4 support
-if "grok" in config.api.XAI_MODEL.lower():
+if config.api.LLM_PROVIDER == "openai":
+    llm_client = AsyncOpenAI(api_key=config.api.OPENAI_API_KEY)
+    llm_model = config.api.OPENAI_MODEL
+elif config.api.LLM_PROVIDER == "xai":
+    llm_client = AsyncOpenAI(
+        api_key=config.api.XAI_API_KEY,
+        base_url=config.api.XAI_BASE_URL
+    )
+    llm_model = config.api.XAI_MODEL
+elif config.api.LLM_PROVIDER == "anthropic":
+    try:
+        from anthropic import AsyncAnthropic
+        llm_client = AsyncAnthropic(api_key=config.api.ANTHROPIC_API_KEY)
+        llm_model = config.api.ANTHROPIC_MODEL
+    except ImportError:
+        raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
+else:
+    raise ValueError(f"Invalid LLM_PROVIDER '{config.api.LLM_PROVIDER}'. Must be one of: openai, xai, anthropic")
+
+# Initialize tokenizer for token counting
+if config.api.LLM_PROVIDER == "anthropic":
+    # Use Anthropic's tokenizer (they use tiktoken with cl100k_base)
+    try:
+        import anthropic
+        # Anthropic uses tiktoken with cl100k_base encoding
+        tokenizer = tiktoken.get_encoding("cl100k_base")
+    except ImportError:
+        # Fallback to tiktoken cl100k_base
+        tokenizer = tiktoken.get_encoding("cl100k_base")
+elif "grok" in llm_model.lower():
     # Assume o200k_base for Grok models
     tokenizer = tiktoken.get_encoding("o200k_base")
 else:
-    # Fallback
+    # Fallback for OpenAI models
     tokenizer = tiktoken.get_encoding("cl100k_base")
 
 def count_tokens(text: str) -> int:
-    """Count tokens in text using tiktoken."""
+    """Count tokens in text using appropriate tokenizer."""
+    # All providers now use tiktoken encoders
     return len(tokenizer.encode(text))
 
 def simple_chunk_by_tokens(text: str, max_tokens: int = 10000) -> List[str]:
@@ -94,32 +121,59 @@ def simple_chunk_by_tokens(text: str, max_tokens: int = 10000) -> List[str]:
 
 async def call_llm(prompt: str, **kwargs) -> str:
     """
-    Direct xAI API call using Grok-4.
+    Direct LLM API call supporting multiple providers.
     """
     try:
-        print(f"🔄 Using Grok-4 with Chat Completions API: {config.api.XAI_MODEL}")
+        print(f"🔄 Using {config.api.LLM_PROVIDER.upper()} with model: {llm_model}")
 
-        messages = [{"role": "user", "content": prompt}]
+        if config.api.LLM_PROVIDER == "anthropic":
+            # Anthropic API call with streaming (required for long requests)
+            content = ""
+            try:
+                async with llm_client.messages.stream(
+                    model=llm_model,
+                    max_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS),
+                    temperature=config.api.TEMPERATURE,
+                    messages=[{"role": "user", "content": prompt}]
+                ) as stream:
+                    async for event in stream:
+                        if event.type == "content_block_delta":
+                            if hasattr(event.delta, 'text'):
+                                content += event.delta.text
+            except Exception as stream_error:
+                print(f"❌ Anthropic streaming failed: {stream_error}")
+                return ""
 
-        response = await openai_client.chat.completions.create(
-            model=config.api.XAI_MODEL,
-            messages=messages,
-            temperature=1,
-            max_completion_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS)
-        )
-
-        # Extract content from response
-        if hasattr(response, 'choices') and response.choices and response.choices[0].message:
-            content = response.choices[0].message.content
             if content:
-                print(f"✅ Grok-4 response successful: {len(content)} chars")
+                print(f"✅ Anthropic response successful: {len(content)} chars")
                 return content.strip()
             else:
-                print("⚠️ Grok-4 returned empty content")
+                print("⚠️ Anthropic returned empty content")
                 return ""
+
         else:
-            print("❌ Unexpected Grok-4 response structure")
-            return ""
+            # OpenAI/xAI API call
+            messages = [{"role": "user", "content": prompt}]
+
+            response = await llm_client.chat.completions.create(
+                model=llm_model,
+                messages=messages,
+                temperature=config.api.TEMPERATURE,
+                max_completion_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS)
+            )
+
+            # Extract content from response
+            if hasattr(response, 'choices') and response.choices and response.choices[0].message:
+                content = response.choices[0].message.content
+                if content:
+                    print(f"✅ {config.api.LLM_PROVIDER.upper()} response successful: {len(content)} chars")
+                    return content.strip()
+                else:
+                    print(f"⚠️ {config.api.LLM_PROVIDER.upper()} returned empty content")
+                    return ""
+            else:
+                print(f"❌ Unexpected {config.api.LLM_PROVIDER.upper()} response structure")
+                return ""
 
     except Exception as e:
         error_msg = str(e)
@@ -127,7 +181,12 @@ async def call_llm(prompt: str, **kwargs) -> str:
         print(f"❌ Error message: {error_msg}")
         if "rate_limit" in error_msg.lower() or "429" in error_msg:
             print(f"🚦 Rate limit hit: {e}")
-            print("💡 Consider upgrading your xAI plan or waiting before retrying")
+            if config.api.LLM_PROVIDER == "xai":
+                print("💡 Consider upgrading your xAI plan or waiting before retrying")
+            elif config.api.LLM_PROVIDER == "anthropic":
+                print("💡 Consider upgrading your Anthropic plan or waiting before retrying")
+            else:
+                print("💡 Consider upgrading your plan or waiting before retrying")
         else:
             print(f"❌ LLM call failed: {e}")
         return ""
@@ -371,11 +430,15 @@ def create_human_interview_prompts():
 
         # Process context with token-based chunking
         config_params = {}
+        # Leave room for prompt template + max output tokens in response
+        # Use 85% of available input tokens to be conservative
+        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
+        context_limit = int(available_input_tokens * 0.85)
         summary = await process_large_context(
             context=human_context,
             prompt_template=initial_summary_template,
             config_params=config_params,
-            max_tokens=100000  # Increased to allow longer initial prompts
+            max_tokens=context_limit
         )
 
         return summary
@@ -387,11 +450,15 @@ def create_human_interview_prompts():
         # Process context with token-based chunking
         # The template expects {existing_answer} as current summary and {context} as added data
         config_params = {"existing_answer": current_summary}
+        # Leave room for prompt template + summary + max output tokens in response
+        # Use 75% of available input tokens to account for summary in context
+        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
+        context_limit = int(available_input_tokens * 0.75)
         summary = await process_large_context(
             context=ai_context,
             prompt_template=refine_template,
             config_params=config_params,
-            max_tokens=30000
+            max_tokens=context_limit
         )
 
         return summary
@@ -401,11 +468,15 @@ def create_human_interview_prompts():
         
         # Use human context for added data
         config_params = {"existing_prompt": current_summary}
+        # Leave room for prompt template + summary + max output tokens in response
+        # Use 75% of available input tokens to account for summary in context
+        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
+        context_limit = int(available_input_tokens * 0.75)
         summary = await process_large_context(
             context=human_context,
             prompt_template=config.prompts.condense_template,
             config_params=config_params,
-            max_tokens=30000
+            max_tokens=context_limit
         )
         
         return summary
