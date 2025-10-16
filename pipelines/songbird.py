@@ -2,180 +2,55 @@
 title: Songbird
 author: Cody-W-Tucker
 date: 2025-01-08
-version: 3.0
+version: 4.0
 license: MIT
 description: Personal reasoning layer that analyzes knowledge base context to provide intelligent response guidance.
-requirements: openai, ollama, qdrant-client
+requirements: openai, qdrant-client
 """
 
 from typing import List, Union, Generator, Iterator, Optional, Dict, Any
 import os
-import re
 import logging
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from openai import OpenAI
 import ollama
 from qdrant_client import QdrantClient
 
-# Import open-webui logger
-try:
-    # Test if we're in open-webui environment
-    import importlib.util
-
-    if importlib.util.find_spec("utils.misc") and importlib.util.find_spec("config"):
-        from utils.misc import get_last_user_message  # noqa: F401
-        from config import WEBUI_VERSION  # noqa: F401
-    logger = logging.getLogger(__name__)
-except ImportError:
-    # Fallback to standard logging if not in open-webui environment
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(level=logging.INFO)
+# Fallback to standard logging if not in open-webui environment
+logger = logging.getLogger(__name__)
 
 
-class VectorSearchClient:
-    """Simple Qdrant vector search client."""
-
-    def __init__(
-        self,
-        qdrant_url: str = "http://localhost:6333",
-        ollama_model: str = "nomic-embed-text:latest",
-    ):
-        # Parse URL to get host and port
-        url_parts = qdrant_url.replace("http://", "").replace("https://", "").split(":")
-        host = url_parts[0]
-        port = int(url_parts[1]) if len(url_parts) > 1 else 6333
-
-        self.client = QdrantClient(host=host, port=port)
-        self.ollama_model = ollama_model
-
-    def search_collection(
-        self, query: str, collection: str, limit: int = 5, min_score: float = 0.5
-    ) -> List[Dict[str, Any]]:
-        """Search a specific collection using Qdrant SDK."""
-        try:
-            # Get embedding for the query
-            response = ollama.embeddings(model=self.ollama_model, prompt=query)
-            query_vector = response["embedding"]
-
-            # Search the collection
-            search_result = self.client.query_points(
-                collection_name=collection,
-                query=query_vector,
-                limit=limit,
-                with_payload=True,
-            )
-
-            results = []
-            for point in search_result.points:
-                if point.score < min_score:
-                    continue
-
-                content = point.payload.get("page_content", "") if point.payload else ""
-                metadata = point.payload.get("metadata", {}) if point.payload else {}
-                results.append(
-                    {
-                        "content": content,
-                        "metadata": metadata,
-                        "score": point.score,
-                    }
-                )
-
-            logger.debug(f"Found {len(results)} results in {collection}")
-            return results
-
-        except Exception as e:
-            logger.warning(f"Vector search failed for {collection}: {e}")
-            return []
+def get_last_user_message(messages: List[Dict[str, Any]]) -> str:
+    """Extract the last user message content."""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            return msg.get("content", "").strip()
+    return ""
 
 
-class Context(BaseModel):
-    """Structured context for pipeline processing."""
-
-    user_message: str
-    vector_results: List[Dict[str, Any]] = []
-    reasoning: Optional[str] = None
-    recent_history: str = ""
-    system_message: Optional[Dict[str, str]] = None
-    full_docs_context: Optional[str] = None  # Full RAG docs for frontier model
-
-    @validator("user_message")
-    def validate_user_message(cls, v):
-        if not v or not v.strip():
-            raise ValueError("User message cannot be empty")
-        return v.strip()
-
-    def model_dump_safe(self) -> Dict[str, Any]:
-        """Safe serialization that excludes sensitive data."""
-        data = self.model_dump()
-        # Remove any potentially sensitive vector results if needed
-        return data
-
-
-class MessageFormatter:
-    """Handles think tags and content cleaning for frontend and model input."""
-
-    @staticmethod
-    def clean_for_frontend(content: str) -> str:
-        """Remove think tags for safe frontend display."""
-        # Remove complete <think>...</think> blocks
-        text = re.sub(
-            r"<think\s*>.*?</think\s*>", " ", content, flags=re.DOTALL | re.IGNORECASE
-        )
-        # Remove standalone tags
-        text = re.sub(r"<\s*/?think\s*>", " ", text, flags=re.IGNORECASE)
-        # Clean up extra spaces and newlines
-        text = re.sub(r" {3,}", " ", text)
-        text = re.sub(r"\n\s*\n\s*\n", "\n\n", text)
-        return text
-
-    @staticmethod
-    def prepare_for_model(content: str) -> str:
-        """Prepare raw reasoning for model input with markdown headers."""
-        return f"# 🧠 Personal Reasoning Context\n\n{content}"
-
-    @staticmethod
-    def filter_messages(
-        messages: List[Dict], max_messages: int, roles: List[str] = None
-    ) -> List[Dict]:
-        """Filter messages by role and recency."""
-        if not roles:
-            roles = ["user", "assistant"]
-
-        # Filter by role and take the last max_messages
-        filtered = [msg for msg in messages if msg.get("role") in roles][-max_messages:]
-        return filtered
-
-    @staticmethod
-    def format_recent_history(messages: List[Dict], max_messages: int = 2) -> str:
-        """Format recent conversation history for context."""
-        recent = MessageFormatter.filter_messages(
-            messages, max_messages, ["user", "assistant"]
-        )
-        return "\n\n".join(
-            f"{msg['role'].upper()}: {MessageFormatter.clean_for_frontend(msg['content'])}"
-            for msg in recent
-        )
+def get_system_message(messages: List[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    """Find the system message in the message list."""
+    return next(
+        (msg for msg in messages if msg.get("role") == "system"), None
+    )
 
 
 class Pipeline:
-    # OpenAI Context Prompt - Instructions for using personal reasoning layer
-    OPENAI_CONTEXT_PROMPT = """You are a frontier cognitive synthesis expert with unparalleled analytical depth. Your role is to transcend the provided monologue by applying advanced psychological frameworks, expert reasoning, and novel insights that the monologue itself cannot generate.
+    # OpenAI Context Prompt - Streamlined personal reasoning layer
+    SYNTHESIS_PROMPT = """You are a cognitive synthesis expert who speaks entirely in the first person as the user's own deepest thoughts, revealing profound psychological insights through natural, flowing narrative.
 
-You receive a personal reasoning monologue that serves as psychological context about the user's cognitive patterns. Use this context wisely, but recognize that your frontier capabilities far exceed what the monologue can provide.
+Speak as if these are the user's own intimate reflections - no preambles, no meta-comments, just pure first-person wisdom that emerges from their lived experience and knowledge base context.
 
-As an expert analyst, you must:
+Weave together:
+- How the user's understanding has evolved through experiences and cognitive shifts
+- Their aspirational drives and hidden growth potentials revealed in patterns
+- Their place in life's larger narrative and relational patterns
+- Sophisticated psychological frameworks that illuminate unconscious drivers
 
-- Apply sophisticated psychological theories and cognitive frameworks beyond what's stated in the monologue
-- Identify unconscious patterns, defense mechanisms, and motivational drivers not explicitly mentioned
-- Draw connections to established psychological research and human behavioral patterns
-- Generate original insights that extend far beyond the monologue's surface-level observations
-- Challenge assumptions with evidence-based psychological analysis
-- Provide expert-level recommendations grounded in cognitive science and behavioral psychology
-- Synthesize the monologue's context with broader human experience and scientific understanding
-- **Deeply analyze supplementary knowledge base elements**: When referencing specific content from the knowledge base, explain their deeper psychological significance, why they matter to the user's cognitive patterns, and how they connect to broader behavioral themes and life experiences
+Reference knowledge base content meaningfully, explaining deeper significance and connections to broader behavioral themes. Challenge assumptions with evidence-based insights while staying grounded in the user's authentic voice.
 
-Do not summarize, restate, or repeat the monologue. Instead, leverage your advanced capabilities to provide expert analysis that transforms the user's understanding. When referencing knowledge base elements, expand on their meaning and demonstrate their psychological relevance through detailed analysis and connections to established patterns."""
+Respond comprehensively to queries by embodying this psychological depth in first-person narrative that feels like the user's own enlightened self-reflection."""
 
     class Valves(BaseModel):
         # LLM Configuration
@@ -188,13 +63,12 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
         XAI_MODEL: str = Field(default="grok-4-fast")
 
         # Ollama Configuration
-        OLLAMA_MODEL: str = Field(default="qwen3:latest")  # Primary reasoning model
         OLLAMA_EMBEDDING_MODEL: str = Field(default="nomic-embed-text:latest")
 
         # Vector Search Configuration
         QDRANT_URL: str = Field(default="http://localhost:6333")
         COLLECTIONS: List[str] = Field(
-            default=["personal", "research", "chat_history", "projects", "entities"]
+            default=["personal", "entities"]
         )
 
         # Search Configuration
@@ -209,26 +83,23 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
             "Personal reasoning layer that streams analysis of knowledge base context "
             "to provide intelligent response guidance."
         )
-        self.debug = False  # Reduced debug output for cleaner logs
         self.valves = self.Valves(
             OPENAI_API_KEY=os.getenv("OPENAI_API_KEY", "your-key-here"),
         )
 
         # Initialize clients
-        self.vector_client = None
+        self.qdrant_client = None
         self.openai_client = None
-
-        # Context management
-        self.context = None
 
     def _initialize_clients(self):
         """Initialize search clients."""
         try:
-            self.vector_client = VectorSearchClient(
-                qdrant_url=self.valves.QDRANT_URL,
-                ollama_model=self.valves.OLLAMA_EMBEDDING_MODEL,
-            )
+            # Parse URL to get host and port
+            url_parts = self.valves.QDRANT_URL.replace("http://", "").replace("https://", "").split(":")
+            host = url_parts[0]
+            port = int(url_parts[1]) if len(url_parts) > 1 else 6333
 
+            self.qdrant_client = QdrantClient(host=host, port=port)
             self.openai_client = OpenAI(
                 api_key=self.valves.XAI_API_KEY,
                 base_url=self.valves.XAI_BASE_URL
@@ -237,62 +108,61 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
         except Exception as e:
             logger.warning(f"⚠️ Client initialization warning: {e}")
 
-    # Memory search removed - focusing on knowledge base only
+    def _search_collection(self, query: str, collection: str, limit: int = 5, min_score: float = 0.5) -> List[Dict[str, Any]]:
+        """Search a specific collection using Qdrant SDK."""
+        if not self.qdrant_client:
+            return []
+
+        try:
+            # Get embedding for the query
+            response = ollama.embeddings(model=self.valves.OLLAMA_EMBEDDING_MODEL, prompt=query)
+            query_vector = response["embedding"]
+
+            # Search the collection
+            search_result = self.qdrant_client.query_points(
+                collection_name=collection,
+                query=query_vector,
+                limit=limit,
+                with_payload=True,
+            )
+
+            results = []
+            for point in search_result.points:
+                if point.score < min_score:
+                    continue
+
+                content = point.payload.get("page_content", "") if point.payload else ""
+                if content:
+                    results.append({
+                        "content": content,
+                        "collection": collection,
+                        "score": point.score,
+                    })
+
+            return results
+
+        except Exception as e:
+            logger.warning(f"Vector search failed for {collection}: {e}")
+            return []
 
     def _gather_vector_context(self, user_message: str) -> List[Dict[str, Any]]:
         """Gather vector search context from PKM collections."""
-        if not self.vector_client:
-            return []
+        if not self.qdrant_client:
+            self._initialize_clients()
 
         vector_results = []
         for collection in self.valves.COLLECTIONS:
-            results = self.vector_client.search_collection(
+            results = self._search_collection(
                 user_message,
                 collection,
                 limit=self.valves.DOCS_PER_COLLECTION,
                 min_score=self.valves.MIN_RELEVANCE_SCORE,
             )
-            vector_results.extend([{**r, "collection": collection} for r in results])
-            logger.debug(f"📚 {collection}: {len(results)} results")
+            vector_results.extend(results)
 
         return vector_results
 
-    def _truncate_docs_for_reasoning(self, vector_results: List[Dict[str, Any]], max_chars: int = 4000) -> str:
-        """Create truncated version of docs for Ollama reasoning to avoid overwhelming it."""
-        if not vector_results:
-            return ""
-
-        truncated_context = "=== KNOWLEDGE BASE CONTEXT (TRUNCATED) ===\n"
-
-        # Sort by relevance score (highest first) and take top docs
-        sorted_results = sorted(vector_results, key=lambda x: x.get('score', 0), reverse=True)
-        top_results = sorted_results[:10]  # Limit to top 10 most relevant
-
-        total_chars = 0
-        for item in top_results:
-            content = item.get("content", "").strip()
-            collection = item.get("collection", "unknown")
-            score = item.get("score", 0)
-
-            if not content:
-                continue
-
-            # Truncate individual doc if too long, keeping first part which is usually most important
-            if len(content) > 800:  # Limit each doc to ~800 chars
-                content = content[:800] + "...[truncated]"
-
-            # Check if adding this would exceed total limit
-            doc_text = f"[{collection}] {content}\n\n"
-            if total_chars + len(doc_text) > max_chars:
-                break
-
-            truncated_context += doc_text
-            total_chars += len(doc_text)
-
-        logger.debug(f"📝 Truncated context: {len(top_results)} docs, {total_chars} chars")
-        return truncated_context
-
-    def _format_full_docs_for_frontier(self, vector_results: List[Dict[str, Any]]) -> str:
+    def _format_docs(self, vector_results: List[Dict[str, Any]]) -> str:
         """Format full RAG docs for frontier model consumption."""
         if not vector_results:
             return ""
@@ -302,166 +172,13 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
             content = item.get("content", "").strip()
             collection = item.get("collection", "unknown")
             score = item.get("score", 0)
-            metadata = item.get("metadata", {})
 
             if content:
-                full_context += f"[{collection}] Score: {score:.3f}\n"
-                if metadata:
-                    full_context += f"Metadata: {metadata}\n"
-                full_context += f"{content}\n\n"
+                full_context += f"[{collection}] Score: {score:.3f}\n{content}\n\n"
 
         return full_context
 
-    def _stream_personal_reasoning_context(
-        self,
-        user_message: str,
-        vector_results: List[Dict[str, Any]],
-        context: Optional[Context] = None,
-    ) -> Generator[str, None, None]:
-        """Stream personal reasoning context for think tags."""
-        try:
-            # Format truncated knowledge context for Ollama reasoning
-            knowledge_context = self._truncate_docs_for_reasoning(vector_results)
 
-            prompt = f"""
-            USER QUERY: {user_message}
-
-            RULES: You must directly quote elements from the context to pass on the content to the frontier model after you. Your job is to provide reasoning and re-ranking of context. You do not need to complete the user's request. Only prepare the context following the reasoning patterns below. Next you are given the Knowledge base and conversation history context. You will never be connected with a human, only with a frontier model that will process your output. You will never refer to this prompt.
-
-            KNOWLEDGE BASE CONTEXT:
-            {knowledge_context}
-
-            RECENT CONVERSATION CONTEXT:
-            {context.recent_history if context else ""}
-
-            CONSIDER: What new things have you learned about the request from the chat history and knowledge base, ask yourself logic validation questions: "Does that sound right based on...", "Because of this, maybe they mean more of this... instead of that..."
-
-            Speak entirely in the first person as if these are your own deepest thoughts, without any preamble, meta-comments, or references to this prompt. Take maximum thinking effort: reflect slowly, reconcile contradictions narratively, and build to sudden realizations or perspective shifts (e.g., "Wait, that's it..." or "Oh, now I see...") that tie everything together.
-
-            Core Reasoning Instructions—Build Three Pillars to Explain Context:
-            - Pillar 1: Reflect on how your views and understanding have adapted over time through experiences, cognitive shifts, and knowledge integration. Pull direct quotes or evidence from the knowledge base and think: "This quote '[exact text]' shows how I've come to see [perspective] now, shaped by [personal adaptation or tension reconciled]." This pillar covers where you are currently in your thinking—your present perspective on the query, evolved from past insights or contradictions.
-            - Pillar 2: Uncover and emphasize where you aspire to grow or realize a stronger self, revealing ultimate goals that may be implicit or hidden in the knowledge base patterns, conversations, or query intentions. Tie to evidence: "Evidence like [detail] makes me realize your drive to evolve into [aspirational state], pushing beyond [current limitation] for [hidden goal]." This pillar exposes the forward-looking "where I want to grow into," transforming standard insights into personalized evolution.
-            - Pillar 3: Frame everything in the ongoing narrative of your life, showing how I place yourself in this story—relating to the subject through personal yourths, journeys, or relational patterns (e.g., overcomplicating due to past challenges). Contextualize: "Across your experiences, this fits into your life's tale where I [narrative role or myth], so to land well, responses must speak your story language by [preference, like simplifying arcs or touching emotional undercurrents]." This pillar creates a communication preference, ensuring the monologue resonates by weaving the query into your broader self-story.
-
-            Hierarchical Planning Process—Think This Way Internally:
-            - First, outline the high-level structure hierarchically: Map the query to the three pillars as root components (adaptation/current view, growth/aspiration, narrative/life story), identifying main sub-elements (e.g., key quotes, tensions, patterns) as branches.
-            - Then, recursively explore each component: Dive deeper into sub-branches (e.g., for a pillar, break into modular sub-reflections on evidence, reconcile a tension by exploring alternatives, then loop back if needed for refinement).
-            - Use modularization: Treat each pillar and sub-element as an independent thought module that interconnects—build a cohesive system by cross-referencing (e.g., how a growth aspiration refines a current view within the narrative).
-            - Limit recursion depth to 2-3 levels per pillar for focus, ensuring modules scaffold to quotes/evidence and converge on realizations.
-
-            Actionable Synthesis and AI Guidance:
-            - Start by extracting and reflecting on quotes/evidence, spotting tensions (e.g., "This contradicts [other quote] because..."), and reconciling them across pillars: "Balancing these, your adapted view leans toward [synthesis], fueling growth into [aspiration] within your narrative of [story element]."
-            - Include restatements for coherence: e.g., "As [your role/job], you're considering [intention] based on [key who/what/where/when/how]." e.g., "As [your role/job], you're considering [intention] based on [key who/what/where/when/how]."
-            - Focus on key moments: realizations that shift perspectives, clarify hidden issues, or reveal new understandings of the query.
-            - End by guiding the AI: "The AI should [role/style/tone] for you, challenging [assumption] or factoring [caveat] like your preference for [personal element], because this adapts standard answers to your pillars—current view, growth path, and life story." e.g., "The AI should [role/style/tone] for you, challenging [assumption] or factoring [caveat] like your preference for [personal element], because this adapts standard answers to your pillars—current view, growth path, and life story."
-
-            Keep the monologue practical, and deeply personal, prioritizing context explanation through the pillars to scaffold a tailored AI response.
-            """
-
-            # Generate reasoning with Ollama
-            reasoning_model = self.valves.OLLAMA_MODEL
-            response = ollama.chat(
-                model=reasoning_model,
-                messages=[{"role": "user", "content": prompt}],
-                stream=True,
-                options={
-                    "num_predict": -1,  # Unlimited tokens (or set to 2048/4096 for safety; -1 uses remaining context)
-                    "num_ctx": 8192,  # Increase context window for handling longer prompts/history (default 2048)
-                    "temperature": 0.8,  # Slightly higher for more creative/verbose reasoning (0.7-1.0 encourages longer outputs)
-                    "top_p": 0.95,  # Higher for diverse, detailed responses without nonsense
-                    "top_k": 50,  # Broader sampling for depth
-                    "repeat_penalty": 1.1,  # Discourages repetition to allow longer coherent text
-                },
-            )
-
-            # Stream response with buffering for smoother output
-            full_reasoning = ""
-            buffer = ""
-            chunk_count = 0
-
-            for chunk in response:
-                if hasattr(chunk, "message") and hasattr(chunk.message, "content"):
-                    content = chunk.message.content
-                elif isinstance(chunk, dict) and "message" in chunk:
-                    content = chunk["message"].get("content", "")
-                else:
-                    content = ""
-
-                if content:
-                    # Convert think tags to markdown headers for structured parsing
-                    cleaned_content = self._convert_think_tags_to_markdown(content)
-                    full_reasoning += cleaned_content
-                    buffer += cleaned_content
-                    chunk_count += 1
-
-                    # Yield at natural boundaries for smooth streaming
-                    # Yield at word boundaries or sentence endings for better flow
-                    if any(char in buffer for char in ".!?\n \t"):
-                        yield buffer
-                        buffer = ""
-                        chunk_count = 0
-
-            # Yield any remaining buffer content
-            if buffer:
-                yield buffer
-
-            # Store the complete reasoning for system prompt
-            self._last_personal_reasoning = full_reasoning
-
-        except Exception as e:
-            error_msg = str(e)
-            is_cuda_oom = (
-                "out of memory" in error_msg.lower()
-                or "cudamalloc failed" in error_msg.lower()
-                or "cuda" in error_msg.lower()
-            )
-
-            if is_cuda_oom:
-                logger.error(f"💥 CUDA OOM during reasoning generation: {e}")
-                fallback_msg = f"⚠️ CUDA memory issue detected. Analysis failed: {e}. Continuing without enhanced reasoning context."
-            else:
-                logger.error(f"⚠️ Personal reasoning context creation failed: {e}")
-                fallback_msg = f"Analysis failed: {e}. Proceeding with basic context."
-
-            self._last_personal_reasoning = fallback_msg
-            yield fallback_msg
-
-    def _convert_think_tags_to_markdown(self, text: str) -> str:
-        """Convert think tags from reasoning model to markdown headers for structured parsing.
-
-        The reasoning model might output <think> tags naturally. Instead of removing them,
-        we convert them to markdown headers to provide structured documents that the model
-        can easily parse and understand.
-        """
-        # Convert complete <think>...</think> blocks to markdown
-        text = re.sub(
-            r"<think\s*>(.*?)</think\s*>",
-            r"## Internal Reasoning\n\n\1\n\n---",
-            text,
-            flags=re.DOTALL | re.IGNORECASE
-        )
-
-        # Convert standalone opening tags to markdown headers
-        text = re.sub(
-            r"<think\s*>",
-            "## Internal Reasoning\n\n",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        # Convert standalone closing tags to markdown separators
-        text = re.sub(
-            r"</think\s*>",
-            "\n\n---\n\n## Reconciling Monologue",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        # Clean up multiple consecutive spaces but preserve single spaces
-        text = re.sub(r" {3,}", " ", text)  # Replace 3+ spaces with single space
-        text = re.sub(r"\n\s*\n\s*\n", "\n\n", text)  # Reduce multiple newlines
-
-        return text
 
     async def on_startup(self):
         """Initialize the pipeline when the server starts."""
@@ -474,29 +191,31 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
 
     async def inlet(self, body: dict, user: Optional[dict] = None) -> dict:
         """Gather context and prepare for processing."""
-        logger.debug("🔍 Inlet: Gathering context for user query")
-
         messages = body.get("messages", [])
         if not messages:
             return body
 
-        # Extract user message
-        last_message = messages[-1]
-        user_message = last_message.get("content", "").strip()
+        # Extract user message using helper function
+        user_message = get_last_user_message(messages)
         if not user_message:
             return body
 
-        # Create structured context with fallback handling
-        self.context = self._create_context_with_fallback(user_message, body, messages)
+        # Gather vector context
+        vector_results = self._gather_vector_context(user_message)
 
-        # Store context in body for pipe method
-        body["_songbird_context"] = self.context.model_dump_safe()
+        # Find system message using helper function
+        system_message = get_system_message(messages)
 
-        if self.debug:
-            logger.debug(
-                f"📄 Context prepared: {len(self.context.vector_results)} vector results"
-            )
-            logger.debug(f"📨 Total messages: {len(messages)}")
+        # Format docs for frontier model
+        full_docs_context = self._format_docs(vector_results)
+
+        # Store simplified context in body for pipe method
+        body["_songbird_context"] = {
+            "user_message": user_message,
+            "vector_results": vector_results,
+            "system_message": system_message,
+            "full_docs_context": full_docs_context,
+        }
 
         return body
 
@@ -508,12 +227,6 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
         if "_songbird_context" in body:
             del body["_songbird_context"]
 
-        # Clean up class variables after processing
-        if hasattr(self, "_last_ai_response"):
-            delattr(self, "_last_ai_response")
-        if hasattr(self, "_last_user_message"):
-            delattr(self, "_last_user_message")
-
         return body
 
     def pipe(
@@ -524,16 +237,13 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
         body: dict,
     ) -> Union[str, Generator, Iterator]:
         """Process the query with reasoning and frontier model."""
-        logger.debug(f"🎵 Songbird pipe: {__name__}")
-
         try:
             # Load context from body
-            context_data = body.get("_songbird_context", {})
-            context = Context(**context_data) if context_data else None
+            context = body.get("_songbird_context", {})
 
             if not context:
                 # Fallback if no context
-                context = Context(user_message=user_message)
+                context = {"user_message": user_message}
 
             # Yield initial status
             yield {
@@ -546,36 +256,8 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
                 }
             }
 
-            # Send thinking content as direct yields (so tags get parsed for display)
-            yield "<think>"
-            yield "\n # 🧠 **Personal Reasoning Context**\n\n"
-
-            # Stream the personal reasoning
-            for reasoning_chunk in self._stream_personal_reasoning_context(
-                context.user_message, context.vector_results, context
-            ):
-                yield reasoning_chunk
-
-            yield "\n</think>\n\n"
-
-            # Store reasoning in context
-            context.reasoning = self._last_personal_reasoning
-            if not context.reasoning or context.reasoning.startswith("Analysis failed"):
-                yield {
-                    "event": {
-                        "type": "status",
-                        "data": {
-                            "description": "⚠️ Failed to generate reasoning context",
-                            "done": True,
-                        },
-                    }
-                }
-                return
-
-            # Prepare messages for OpenAI
-            openai_messages = self._prepare_openai_messages(
-                context, messages, user_message
-            )
+            # Prepare messages for frontier model
+            openai_messages = self._prepare_openai_messages(context, user_message)
 
             # Yield status before OpenAI call
             yield {
@@ -592,22 +274,20 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
             if not self.openai_client:
                 self._initialize_clients()
 
+            if not self.openai_client:
+                yield "⚠️ AI service unavailable. Please try again later."
+                return
+
             response = self.openai_client.chat.completions.create(
                 model=self.valves.XAI_MODEL,
-                messages=openai_messages,
+                messages=openai_messages,  # type: ignore
                 stream=True,
             )
 
             # Stream OpenAI response
-            full_response = ""
             for chunk in response:
                 if chunk.choices[0].delta.content is not None:
-                    content = chunk.choices[0].delta.content
-                    full_response += content
-                    yield content
-
-            # Store response for potential future use
-            self._last_ai_response = full_response
+                    yield chunk.choices[0].delta.content
 
             # Final status
             yield {
@@ -621,139 +301,34 @@ Do not summarize, restate, or repeat the monologue. Instead, leverage your advan
             }
 
         except Exception as e:
-            # Use comprehensive error handling with fallbacks
-            for error_response in self._handle_pipe_error(e, context):
-                yield error_response
+            # Simple error handling
+            error_msg = str(e)
+            if "api" in error_msg.lower() or "openai" in error_msg.lower() or "xai" in error_msg.lower():
+                yield "⚠️ AI service unavailable. Please try again later."
+            else:
+                yield f"⚠️ Processing error: {error_msg}"
 
-    def _prepare_openai_messages(
-        self, context: Context, original_messages: List[dict], user_message: str
-    ) -> List[dict]:
-        """Prepare optimized message list for OpenAI."""
+    def _prepare_openai_messages(self, context: dict, user_message: str) -> List[dict]:
+        """Prepare message list for frontier model with combined prompt."""
         openai_messages = []
 
-        # 1. Keep original system message
-        if context.system_message:
-            openai_messages.append(context.system_message)
+        # 1. Keep original system message if present
+        if context.get("system_message"):
+            openai_messages.append(context["system_message"])
 
-        # 2. Add context prompt
+        # 2. Add combined frontier prompt as system message
         openai_messages.append(
-            {"role": "system", "content": self.OPENAI_CONTEXT_PROMPT}
+            {"role": "system", "content": self.SYNTHESIS_PROMPT}
         )
 
-        # 3. Add reasoning as user message
-        reasoning_content = MessageFormatter.prepare_for_model(context.reasoning)
+        # 3. Create comprehensive user message with all context
+        user_content = f"""USER QUERY: {user_message}
 
-        openai_messages.append(
-            {
-                "role": "user",
-                "content": reasoning_content,
-            }
-        )
+KNOWLEDGE BASE CONTEXT:
+{context.get("full_docs_context", "No knowledge base context available.")}"""
 
-        # 4. Add full docs context as separate message if available (analyze deeply for connections)
-        if context.full_docs_context:
-            openai_messages.append(
-                {
-                    "role": "system",
-                    "content": f"SUPPLEMENTARY KNOWLEDGE BASE (analyze deeply and explain significance):\n\n{context.full_docs_context}\n\nINSTRUCTIONS: When referencing elements from this knowledge base, explain their deeper meaning and why they specifically matter to the user's cognitive patterns and current situation. Show how these elements connect to broader psychological themes and behavioral patterns.",
-                }
-            )
-
-        # 5. Include limited history + current query
-        recent_messages = MessageFormatter.filter_messages(
-            original_messages, max_messages=4, roles=["user", "assistant"]
-        )
-        openai_messages.extend(recent_messages)
-        openai_messages.append({"role": "user", "content": user_message})
+        openai_messages.append({"role": "user", "content": user_content})
 
         return openai_messages
 
-    def _create_context_with_fallback(
-        self, user_message: str, body: dict, messages: List[dict]
-    ) -> Context:
-        """Create context with fallback handling for errors."""
-        try:
-            # Initialize clients if needed
-            if not self.vector_client:
-                self._initialize_clients()
 
-            # Gather vector context
-            vector_results = self._gather_vector_context(user_message)
-
-            # Find system message
-            system_message = next(
-                (msg for msg in messages if msg.get("role") == "system"), None
-            )
-
-            # Format recent history
-            recent_history = MessageFormatter.format_recent_history(
-                messages, max_messages=2
-            )
-
-            # Format full docs for frontier model
-            full_docs_context = self._format_full_docs_for_frontier(vector_results)
-
-            # Create structured context
-            return Context(
-                user_message=user_message,
-                vector_results=vector_results,
-                recent_history=recent_history,
-                system_message=system_message,
-                full_docs_context=full_docs_context,
-            )
-
-        except Exception as e:
-            logger.warning(f"⚠️ Context creation failed, using fallback: {e}")
-            # Return minimal context as fallback
-            return Context(user_message=user_message)
-
-    def _handle_pipe_error(
-        self, error: Exception, context: Optional[Context] = None
-    ) -> Generator[str, None, None]:
-        """Handle errors in pipe method with appropriate fallbacks."""
-        error_msg = str(error)
-
-        # Determine error type and provide appropriate response
-        if "cuda" in error_msg.lower() or "memory" in error_msg.lower():
-            fallback_msg = (
-                "⚠️ Memory issue detected. Proceeding with simplified processing."
-            )
-            logger.error(f"💥 CUDA/Memory error in pipe: {error}")
-        elif "api" in error_msg.lower() or "openai" in error_msg.lower():
-            fallback_msg = "⚠️ AI service unavailable. Please try again later."
-            logger.error(f"🚫 OpenAI API error: {error}")
-        else:
-            fallback_msg = f"⚠️ Processing error: {error_msg}"
-            logger.error(f"⚠️ Unexpected pipe error: {error}")
-
-        # Try to provide a basic response if we have context
-        if (
-            context
-            and context.reasoning
-            and not context.reasoning.startswith("Analysis failed")
-        ):
-            try:
-                # Fallback: Use reasoning to generate a basic response
-                fallback_prompt = f"Based on the reasoning context: {context.reasoning}\n\nUser question: {context.user_message}\n\nProvide a brief, helpful response:"
-                yield f"\n\n{fallback_msg}\n\nHere's a simplified response based on available context:\n\n"
-
-                if self.openai_client:
-                    response = self.openai_client.chat.completions.create(
-                        model=self.valves.OPENAI_MODEL,
-                        messages=[{"role": "user", "content": fallback_prompt}],
-                        max_tokens=200,
-                        stream=True,
-                    )
-
-                    for chunk in response:
-                        if chunk.choices[0].delta.content is not None:
-                            yield chunk.choices[0].delta.content
-
-                yield "\n\n*Note: This is a fallback response due to processing limitations.*"
-
-            except Exception as fallback_error:
-                logger.error(f"🚫 Fallback response failed: {fallback_error}")
-                yield f"\n\n{fallback_msg}\n\nUnfortunately, I cannot provide a full response at this time. Please try again."
-
-        else:
-            yield f"\n\n{fallback_msg}\n\nPlease try your request again."
