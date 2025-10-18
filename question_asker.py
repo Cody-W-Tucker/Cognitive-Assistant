@@ -14,34 +14,18 @@ Usage:
     python question_asker.py                                    # Automatically process questions with human interview context
 """
 
-import os
 import sys
 import csv
 import pandas as pd
+import re
+import time
 from datetime import datetime
-from typing import Optional, Dict
-from pathlib import Path
 
 # Import config from current directory
-from config import config, get_most_recent_file
-
-def clean_think_tags(content: str) -> str:
-    """Remove think tags from response content to get clean user-facing answers."""
-    import re
-
-    # Remove complete <think>...</think> blocks
-    text = re.sub(
-        r"<think\s*>.*?</think\s*>", " ", content, flags=re.DOTALL | re.IGNORECASE
-    )
-    # Remove standalone tags
-    text = re.sub(r"<\s*/?think\s*>", " ", text, flags=re.IGNORECASE)
-    # Clean up extra spaces and newlines
-    text = re.sub(r" {3,}", " ", text)
-    text = re.sub(r"\n\s*\n\s*\n", "\n\n", text)
-    return text.strip()
+from config import config, get_most_recent_file, get_clean_markdown_function, accumulate_streaming_response, clean_markdown
 
 def get_system_prompt(question: str, human_answer: str) -> str:
-    """Get the songbird system prompt with human context."""
+    """Get the system prompt with human context."""
     if not human_answer:
         raise ValueError("Human answer is required for songbird RAG model")
     return config.prompts.songbird_system_prompt.format(question=question, human_answer=human_answer)
@@ -68,24 +52,47 @@ def ask_question(client, model_name: str, question: str, human_answer: str) -> s
             stream=True
         )
 
-        # Accumulate streaming response
-        full_content = ""
-        for chunk in response:
-            if hasattr(chunk, 'choices') and chunk.choices:
-                if hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta:
-                    if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                        full_content += chunk.choices[0].delta.content
+        # Use the shared streaming utility
+        full_content = accumulate_streaming_response(response)
         return full_content.strip()
 
     except Exception as e:
         print(f"⚠️ Error calling songbird API: {e}")
         return f"Error: {str(e)}"
 
-def main():
-    # Always use songbird model (required for RAG with human interview context)
-    model_type = "songbird"
-    assert model_type == "songbird", "Only songbird model is supported for human interview RAG"
 
+def ask_incorporation(client, model_name: str, all_qa_data: str) -> str:
+    """Send incorporation analysis to the human model and get the response."""
+    try:
+        system_prompt = config.prompts.incorporation_prompt.format(all_qa_data=all_qa_data)
+
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": "Generate incorporation instructions based on the above analysis."
+                }
+            ],
+            temperature=config.api.TEMPERATURE,
+            max_tokens=config.api.MAX_TOKENS,
+            stream=True
+        )
+
+        # Use the shared streaming utility
+        full_content = accumulate_streaming_response(response)
+        return full_content.strip()
+
+    except Exception as e:
+        print(f"⚠️ Error calling human incorporation API: {e}")
+        return f"Error: {str(e)}"
+
+
+def main():
     # Validate configuration
     issues = config.validate()
     if issues:
@@ -108,7 +115,7 @@ def main():
     # Auto-detect latest human interview file
     try:
         human_interview_file = get_most_recent_file("human_interview_*.csv")
-        print(f"📖 Using latest human interview file: {human_interview_file}")
+        print(f"Loaded {human_interview_file}")
     except FileNotFoundError:
         print("❌ No human interview files found in data directory")
         print("💡 Please run the human interview script first")
@@ -123,7 +130,6 @@ def main():
     timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
     output_filename = config.output.SONGBIRD_OUTPUT_PATTERN.format(timestamp=timestamp)
     output_file = config.paths.DATA_DIR / output_filename
-
     # Load human interview data (always required for RAG)
     try:
         human_interview_df = pd.read_csv(human_interview_file)
@@ -136,7 +142,7 @@ def main():
         for _, row in human_interview_df.iterrows():
             category_key = "|".join(str(row[col]) for col in config.csv.CATEGORY_KEY_COLUMNS)
             answer_data = {}
-            for col in config.csv.ANSWER_COLUMNS:
+            for col in config.csv.HUMAN_ANSWER_COLUMNS:
                 answer_data[col] = str(row.get(col, '')).strip() if pd.notna(row.get(col, '')) else ''
             human_interview_data[category_key] = answer_data
 
@@ -152,6 +158,11 @@ def main():
 
     # Add answer columns if they don't exist using centralized configuration
     for col in config.csv.ANSWER_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    # Add human answer columns
+    for col in config.csv.HUMAN_ANSWER_COLUMNS:
         if col not in df.columns:
             df[col] = pd.NA
 
@@ -176,33 +187,116 @@ def main():
                     query = row[question_col]
 
                     # Get corresponding human answer for context (required for RAG)
-                    if category_key not in human_interview_data or not human_interview_data[category_key].get(answer_col, '').strip():
+                    human_col = config.csv.HUMAN_ANSWER_COLUMNS[config.csv.QUESTION_COLUMNS.index(question_col)]
+                    if category_key not in human_interview_data or not human_interview_data[category_key].get(human_col, '').strip():
                         print(f"⚠️ Skipping: {query[:60]}... (no matching human interview context)")
                         continue
 
-                    human_answer = human_interview_data[category_key][answer_col]
+                    human_answer = human_interview_data[category_key][human_col]
 
                     print(f"🤔 Processing (personalized): {query[:60]}...")
 
-                    response = ask_question(client, model_name, query, human_answer)
-                    # Clean the response to remove internal monologue/think tags before saving to dataset
-                    cleaned_response = clean_think_tags(response)
+                    # Retry logic for failed API calls
+                    max_retries = 3
+                    base_delay = 1
+                    response = ""
+                    for attempt in range(max_retries):
+                        response = ask_question(client, model_name, query, human_answer)
+                        if not response.startswith("Error:"):
+                            break
+                        if attempt < max_retries - 1:
+                            delay = base_delay * (2 ** attempt)
+                            print(f"⚠️ API call failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})")
+                            time.sleep(delay)
+
+                    # If still error after retries, mark as failed
+                    if response.startswith("Error:"):
+                        response = f"Failed after {max_retries} retries: {response}"
+
+                    # Clean the response (only if not an error)
+                    if not response.startswith("Failed after"):
+                        cleaned_response = re.sub(r'\s+', ' ', response.replace('\n', ' '))
+                    else:
+                        cleaned_response = response
+
                     df.at[index, answer_col] = cleaned_response
+                    df.at[index, human_col] = human_answer
 
                     processed_count += 1
                     print(f"✅ Processed {processed_count}/{total_questions} questions")
 
-                    # Clean the answer
-                    if not pd.isna(df.at[index, answer_col]):
-                        df[answer_col] = df[answer_col].replace(r'\n', ' ', regex=True)
-                        df[answer_col] = df[answer_col].replace(r'\s+', ' ', regex=True)
-
                     # Save after each answer to prevent data loss
                     df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
 
-    # Final formatting and save
-    df = df.replace(r'\n', ' ', regex=True)
-    df = df.replace(r'\s+', ' ', regex=True)
+    # Check if all AI answers are complete for incorporation processing
+    def all_ai_answers_complete(row):
+        for answer_col in config.csv.ANSWER_COLUMNS:
+            if pd.isna(row[answer_col]):
+                return False
+        return True
+
+    # Process incorporation for rows with complete AI answers
+    incorporation_processed_count = 0
+    print(f"\n🤖 Starting incorporation analysis with human model...")
+
+    for idx, (index, row) in enumerate(df.iterrows()):
+        if all_ai_answers_complete(row):
+            category = str(row.get('Category', '')).strip()
+            goal = str(row.get('Goal', '')).strip()
+            element = str(row.get('Element', '')).strip()
+
+            # Format all Q&A data as report
+            qa_sections = []
+            for i, (q_col, h_col, a_col) in enumerate(zip(config.csv.QUESTION_COLUMNS, config.csv.HUMAN_ANSWER_COLUMNS, config.csv.ANSWER_COLUMNS)):
+                question = str(row.get(q_col, '')).strip()
+                human_answer = str(row.get(h_col, '')).strip()
+                ai_answer = str(row.get(a_col, '')).strip()
+
+                if question and human_answer and ai_answer:
+                    qa_sections.append(f"{i+1}. {question}\n\n   Human Answer: {human_answer}\n\n   AI Answer: {ai_answer}")
+
+            if qa_sections:
+                # Create formatted report
+                all_qa_data = f"# Understanding: **{category}**\n\n"
+                all_qa_data += f"## Goal: **{goal}**\n\n"
+                all_qa_data += f"**Elements:** {element}\n\n"
+                all_qa_data += "### Questions:\n\n" + "\n\n".join(qa_sections)
+
+                print(f"🧠 Processing incorporation for row {idx+1}...")
+
+                # Retry logic for incorporation
+                max_retries = 3
+                base_delay = 1
+                incorporation_response = ""
+                for attempt in range(max_retries):
+                    incorporation_response = ask_incorporation(client, "human", all_qa_data)
+                    if not incorporation_response.startswith("Error:"):
+                        break
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        print(f"⚠️ Incorporation failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})")
+                        time.sleep(delay)
+
+                # If still error after retries, mark as failed
+                if incorporation_response.startswith("Error:"):
+                    incorporation_response = f"Failed after {max_retries} retries: {incorporation_response}"
+                else:
+                    # Clean markdown from successful responses
+                    incorporation_response = clean_markdown(incorporation_response)
+
+                df.at[index, "Incorporation_Instruction"] = incorporation_response
+
+                incorporation_processed_count += 1
+                print(f"✅ Processed incorporation {incorporation_processed_count}")
+
+                # Save after each incorporation
+                df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
+        else:
+            print(f"⚠️ Skipping incorporation for row {idx+1}: Incomplete AI answers")
+
+    print(f"\n✅ Completed incorporation analysis for {incorporation_processed_count} rows")
+
+    # Final save
     df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
 
     print(f"\n✅ Completed! Processed {processed_count} questions and saved to {output_file}")

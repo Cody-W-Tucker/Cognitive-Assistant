@@ -13,7 +13,7 @@ Usage:
 
 import os
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
@@ -147,6 +147,15 @@ Question: {question}
 Human Answer: {human_answer}
 """
 
+# the human model is a finetuned (llama3.1) on human responses in AI turn conversations.
+INCORPORATION_SYSTEM_PROMPT = """
+You are reading how perspectives evolve through introspection.
+
+{all_qa_data}
+
+Generate concise, actionable incorporation instructions based on this analysis.
+"""
+
 
 @dataclass
 class APIConfig:
@@ -204,6 +213,17 @@ class APIConfig:
         else:
             return 50000  # fallback
 
+    def get_model_name(self) -> str:
+        """Get the model name for the current LLM provider."""
+        if self.LLM_PROVIDER == "openai":
+            return self.OPENAI_MODEL
+        elif self.LLM_PROVIDER == "xai":
+            return self.XAI_MODEL
+        elif self.LLM_PROVIDER == "anthropic":
+            return self.ANTHROPIC_MODEL
+        else:
+            return "unknown-model"
+
     def create_songbird_client(self):
         """Create and return an OpenAI client configured for Songbird/Open Web UI."""
         try:
@@ -241,6 +261,54 @@ class APIConfig:
             from anthropic import Anthropic
 
             client = Anthropic(api_key=self.ANTHROPIC_API_KEY)
+            return client, self.ANTHROPIC_MODEL
+
+        except ImportError:
+            raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
+        except Exception as e:
+            if "401" in str(e) or "invalid" in str(e).lower():
+                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
+            raise
+
+    def create_openai_client_async(self):
+        """Create and return async OpenAI client."""
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(api_key=self.OPENAI_API_KEY)
+            return client, self.OPENAI_MODEL
+
+        except ImportError:
+            raise ImportError("OpenAI package not installed. Install with: pip install openai")
+        except Exception as e:
+            if "401" in str(e) or "invalid" in str(e).lower():
+                raise ValueError("Authentication failed. Check OPENAI_API_KEY in your .env file")
+            raise
+
+    def create_xai_client_async(self):
+        """Create and return async xAI client."""
+        try:
+            from openai import AsyncOpenAI
+
+            client = AsyncOpenAI(
+                api_key=self.XAI_API_KEY,
+                base_url=self.XAI_BASE_URL
+            )
+            return client, self.XAI_MODEL
+
+        except ImportError:
+            raise ImportError("OpenAI package not installed. Install with: pip install openai")
+        except Exception as e:
+            if "401" in str(e) or "invalid" in str(e).lower():
+                raise ValueError("Authentication failed. Check XAI_API_KEY in your .env file")
+            raise
+
+    def create_anthropic_client_async(self):
+        """Create and return async Anthropic client."""
+        try:
+            from anthropic import AsyncAnthropic
+
+            client = AsyncAnthropic(api_key=self.ANTHROPIC_API_KEY)
             return client, self.ANTHROPIC_MODEL
 
         except ImportError:
@@ -294,7 +362,17 @@ class PathConfig:
 
         # Build all paths automatically
         for attr_name, path_str in paths.items():
-            setattr(self, attr_name, self.BASE_DIR / path_str)
+            path = self.BASE_DIR / path_str
+            setattr(self, attr_name, path)
+
+        # Set the annotated attributes
+        self.DATA_DIR = self.DATA_DIR
+        self.OUTPUT_DIR = self.OUTPUT_DIR
+        self.PROMPTS_DIR = self.PROMPTS_DIR
+        self.PROMPT_PARTS_DIR = self.PROMPT_PARTS_DIR
+        self.ASSISTANT_PROMPTS_DIR = self.ASSISTANT_PROMPTS_DIR
+        self.TOOLS_PROMPTS_DIR = self.TOOLS_PROMPTS_DIR
+        self.QUESTIONS_CSV = self.QUESTIONS_CSV
 
     def ensure_directories_exist(self):
         """Ensure all necessary directories exist."""
@@ -315,13 +393,20 @@ class CSVConfig:
     QUOTECHAR: str = '"'
     FIELDNAMES: List[str] = field(default_factory=lambda: [
         "Category", "Goal", "Element", "Question 1", "Question 2", "Question 3",
-        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
+        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3",
+        "AI_Answer 1", "AI_Answer 2", "AI_Answer 3", "Incorporation_Instruction"
     ])
     ANSWER_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
+        "AI_Answer 1", "AI_Answer 2", "AI_Answer 3"
     ])
     QUESTION_COLUMNS: List[str] = field(default_factory=lambda: [
         "Question 1", "Question 2", "Question 3"
+    ])
+    HUMAN_ANSWER_COLUMNS: List[str] = field(default_factory=lambda: [
+        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
+    ])
+    INCORPORATION_COLUMNS: List[str] = field(default_factory=lambda: [
+        "Incorporation_Instruction"
     ])
     # Columns used to create category keys for matching questions to answers
     CATEGORY_KEY_COLUMNS: List[str] = field(default_factory=lambda: [
@@ -341,7 +426,7 @@ class RedactionConfig:
         """Return a redaction function configured with the patterns."""
         import re
 
-        def redact_sensitive_data(text: str, custom_patterns: List[str] = None) -> str:
+        def redact_sensitive_data(text: str, custom_patterns: Optional[List[str]] = None) -> str:
             """
             Redact sensitive information from text using configured patterns.
 
@@ -370,7 +455,7 @@ class PromptsConfig:
     refine_template: str = REFINE_TEMPLATE
     condense_template: str = CONDENSE_TEMPLATE
     songbird_system_prompt: str = SONGBIRD_SYSTEM_PROMPT
-
+    incorporation_prompt: str = INCORPORATION_SYSTEM_PROMPT
 
 @dataclass
 class OutputConfig:
@@ -449,10 +534,49 @@ def get_most_recent_file(pattern: str) -> Path:
         raise FileNotFoundError(f"No files found matching pattern: {pattern}")
     return max(files, key=lambda f: f.stat().st_mtime)
 
+def clean_markdown(text: str) -> str:
+    """Clean markdown formatting from text, converting to plain text."""
+    import re
+
+    # Remove header markers (# ## ###)
+    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+
+    # Remove bold/italic (**text**, *text*)
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+
+    # Remove list markers (-, *, +, numbered)
+    text = re.sub(r'^[-*+]\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\d+\.\s*', '', text, flags=re.MULTILINE)
+
+    # Replace newlines with spaces
+    text = text.replace('\n', ' ')
+
+    # Collapse multiple spaces/tabs
+    text = re.sub(r'\s+', ' ', text)
+
+    return text.strip()
+
+
+def accumulate_streaming_response(response) -> str:
+    """Accumulate streaming response from OpenAI client."""
+    full_content = ""
+    for chunk in response:
+        if hasattr(chunk, 'choices') and chunk.choices:
+            if hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta:
+                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                    full_content += chunk.choices[0].delta.content
+    return full_content.strip()
+
+def get_clean_markdown_function():
+    """Get the markdown cleaning function."""
+    return clean_markdown
+
 # Export key functions and classes for easy importing
 __all__ = [
     'config',
     'get_redaction_function',
+    'get_clean_markdown_function',
     'get_data_files',
     'get_most_recent_file',
     'Config',

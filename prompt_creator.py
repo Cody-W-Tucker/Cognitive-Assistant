@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Unified Creator - Human + Combine Prompt System
+Prompt Creator - Dataset Processing System
 
-This script runs a full pipeline: creates prompts from human interview data, then combines prompt parts into a final prompt.
+This script processes the dataset created by question_asker.py to generate system prompts.
+Uses a 3-call approach with human model feedback for refinement.
 
 Pipeline:
-1. Human Creation:
-   ├── ai_interview_bio.md       # Initial AI summary from songbird responses
-   ├── human_interview_bio.md    # Refined with human data
-   └── main.md (in assistant/)   # Condensed final system prompt
+1. Dataset Processing:
+   ├── Load questions_with_answers_songbird_*.csv
+   ├── Call 1: Generate initial comprehensive summary
+   ├── Call 2: Human model incorporation feedback
+   └── Call 3: Refine based on human feedback
 
 2. Combine:
-   └── prompt.md                # Combined final prompt from parts including the new main.md
+   └── prompt.md                # Combined final prompt from parts
 
 Usage:
     python prompt_creator.py  # Runs full pipeline automatically
@@ -21,113 +23,118 @@ All files are saved to output/ and prompts/ directories.
 
 import os
 import sys
-import argparse
+import csv
 from pathlib import Path
-from typing import List, Literal, TypedDict, Tuple, Dict, Any
+from typing import List, Dict, Any
 from datetime import datetime
+import asyncio
 
 # Import config from current directory
-from config import config, get_redaction_function, get_most_recent_file
+from config import config, get_redaction_function, get_most_recent_file, accumulate_streaming_response
 
 # Get the redaction function
 redact_sensitive_data = get_redaction_function()
 
-import csv
-from openai import AsyncOpenAI
-import tiktoken
 
-# Initialize LLM client based on provider
+def load_dataset_context() -> str:
+    """
+    Load the most recent question_asker dataset and format all context.
+
+    Returns:
+        Formatted context containing human answers, AI answers, and incorporation instructions
+    """
+    try:
+        dataset_csv = get_most_recent_file("questions_with_answers_songbird_*.csv")
+    except FileNotFoundError:
+        raise FileNotFoundError("No question_asker dataset files found")
+
+    print(f"📁 Loading dataset: {os.path.basename(dataset_csv)}")
+
+    # Load CSV data
+    with open(dataset_csv, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(
+            f,
+            delimiter=config.csv.DELIMITER,
+            quotechar=config.csv.QUOTECHAR,
+            fieldnames=config.csv.FIELDNAMES
+        )
+        data = list(reader)[1:]  # Skip header
+
+    # Format complete context with all data types
+    formatted_sections = []
+    redaction_count = 0
+
+    for row in data:
+        category = row.get('Category', '').strip()
+        goal = row.get('Goal', '').strip()
+        element = row.get('Element', '').strip()
+        incorporation = row.get('Incorporation_Instruction', '').strip()
+
+        if not category:
+            continue
+
+        # Build Q&A sections with human answers, AI answers, and incorporation
+        qa_sections = []
+
+        for i, (q_col, h_col, a_col) in enumerate(zip(
+            config.csv.QUESTION_COLUMNS,
+            config.csv.HUMAN_ANSWER_COLUMNS,
+            config.csv.ANSWER_COLUMNS
+        )):
+            question = row.get(q_col, '').strip()
+            human_answer = row.get(h_col, '').strip()
+            ai_answer = row.get(a_col, '').strip()
+
+            if question and (human_answer or ai_answer):
+                # Apply redaction to sensitive content
+                redacted_human = redact_sensitive_data(human_answer)
+                redacted_ai = redact_sensitive_data(ai_answer)
+                if redacted_human != human_answer or redacted_ai != ai_answer:
+                    redaction_count += 1
+
+                qa_sections.append(f"{i+1}. {question}\n\n   Human Answer: {redacted_human}\n\n   AI Answer: {redacted_ai}")
+
+        if qa_sections:
+            formatted_entry = f"# Understanding: **{category}**\n\n"
+            formatted_entry += f"## Goal: **{goal}**\n\n"
+            formatted_entry += f"**Elements:** {element}\n\n"
+            formatted_entry += "### Questions:\n\n" + "\n\n".join(qa_sections)
+
+            # Add incorporation instructions if available
+            if incorporation:
+                formatted_entry += f"\n\n### Incorporation Instructions:\n\n{incorporation}"
+
+            formatted_sections.append(formatted_entry)
+
+    if redaction_count > 0:
+        print(f"🔒 Applied redaction to {redaction_count} entries")
+
+    combined_context = "\n\n---\n\n".join(formatted_sections)
+    print(f"📊 Loaded {len(formatted_sections)} sections ({len(combined_context)} characters)")
+
+    return combined_context
+
+
+# Initialize LLM client using config methods
 llm_client = None
 llm_model = None
 
 if config.api.LLM_PROVIDER == "openai":
-    llm_client = AsyncOpenAI(api_key=config.api.OPENAI_API_KEY)
-    llm_model = config.api.OPENAI_MODEL
+    llm_client, llm_model = config.api.create_openai_client_async()
 elif config.api.LLM_PROVIDER == "xai":
-    llm_client = AsyncOpenAI(
-        api_key=config.api.XAI_API_KEY,
-        base_url=config.api.XAI_BASE_URL
-    )
-    llm_model = config.api.XAI_MODEL
+    llm_client, llm_model = config.api.create_xai_client_async()
 elif config.api.LLM_PROVIDER == "anthropic":
-    try:
-        from anthropic import AsyncAnthropic
-        llm_client = AsyncAnthropic(api_key=config.api.ANTHROPIC_API_KEY)
-        llm_model = config.api.ANTHROPIC_MODEL
-    except ImportError:
-        raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
-else:
-    raise ValueError(f"Invalid LLM_PROVIDER '{config.api.LLM_PROVIDER}'. Must be one of: openai, xai, anthropic")
-
-# Initialize tokenizer for token counting
-if config.api.LLM_PROVIDER == "anthropic":
-    # Use Anthropic's tokenizer (they use tiktoken with cl100k_base)
-    try:
-        import anthropic
-        # Anthropic uses tiktoken with cl100k_base encoding
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-    except ImportError:
-        # Fallback to tiktoken cl100k_base
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-elif "grok" in llm_model.lower():
-    # Assume o200k_base for Grok models
-    tokenizer = tiktoken.get_encoding("o200k_base")
-else:
-    # Fallback for OpenAI models
-    tokenizer = tiktoken.get_encoding("cl100k_base")
-
-def count_tokens(text: str) -> int:
-    """Count tokens in text using appropriate tokenizer."""
-    # All providers now use tiktoken encoders
-    return len(tokenizer.encode(text))
-
-def simple_chunk_by_tokens(text: str, max_tokens: int = 10000) -> List[str]:
-    """
-    Simple token-based chunking.
-
-    Args:
-        text: Text to chunk
-        max_tokens: Maximum tokens per chunk
-
-    Returns:
-        List of text chunks
-    """
-    if count_tokens(text) <= max_tokens:
-        return [text]
-
-    chunks = []
-    words = text.split()
-    current_chunk = []
-    current_tokens = 0
-
-    for word in words:
-        word_tokens = count_tokens(word + " ")
-        if current_tokens + word_tokens > max_tokens and current_chunk:
-            # Save current chunk
-            chunk_text = " ".join(current_chunk)
-            chunks.append(chunk_text)
-            current_chunk = [word]
-            current_tokens = word_tokens
-        else:
-            current_chunk.append(word)
-            current_tokens += word_tokens
-
-    # Add final chunk
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    print(f"📊 Split {count_tokens(text)} tokens into {len(chunks)} chunks")
-    return chunks
+    llm_client, llm_model = config.api.create_anthropic_client_async()
 
 async def call_llm(prompt: str, **kwargs) -> str:
     """
     Direct LLM API call supporting multiple providers.
     """
     try:
-        print(f"🔄 Using {config.api.LLM_PROVIDER.upper()} with model: {llm_model}")
+        print(f"🔄 Calling {config.api.LLM_PROVIDER.upper()} with model: {llm_model}")
 
         if config.api.LLM_PROVIDER == "anthropic":
-            # Anthropic API call with streaming (required for long requests)
+            # Anthropic API call with streaming
             content = ""
             try:
                 async with llm_client.messages.stream(
@@ -153,7 +160,8 @@ async def call_llm(prompt: str, **kwargs) -> str:
 
         else:
             # OpenAI/xAI API call
-            messages = [{"role": "user", "content": prompt}]
+            from typing import Any
+            messages: Any = [{"role": "user", "content": prompt}]
 
             response = await llm_client.chat.completions.create(
                 model=llm_model,
@@ -180,432 +188,112 @@ async def call_llm(prompt: str, **kwargs) -> str:
         print(f"❌ LLM call failed with exception type: {type(e).__name__}")
         print(f"❌ Error message: {error_msg}")
         if "rate_limit" in error_msg.lower() or "429" in error_msg:
-            print(f"🚦 Rate limit hit: {e}")
-            if config.api.LLM_PROVIDER == "xai":
-                print("💡 Consider upgrading your xAI plan or waiting before retrying")
-            elif config.api.LLM_PROVIDER == "anthropic":
-                print("💡 Consider upgrading your Anthropic plan or waiting before retrying")
-            else:
-                print("💡 Consider upgrading your plan or waiting before retrying")
-        else:
-            print(f"❌ LLM call failed: {e}")
+            print("🚦 Rate limit hit - consider upgrading your plan or waiting before retrying")
         return ""
 
 
-async def process_large_context(context: str, prompt_template: str, config_params: dict, max_tokens: int = 30000) -> str:
+async def call_human_model(prompt: str) -> str:
     """
-    Process large context with simple token-based chunking.
-
-    Args:
-        context: The full context to process
-        prompt_template: Template string to format
-        config_params: Parameters for template formatting
-        max_tokens: Maximum tokens per chunk
-
-    Returns:
-        Result from LLM processing
+    Call human model for feedback using config client.
     """
-    print(f"🔧 process_large_context called with {len(context)} chars")
+    try:
+        client, model_name = config.api.create_songbird_client()
+        print(f"🤖 Calling human model: {model_name}")
 
-    # Check if we need to chunk
-    context_tokens = count_tokens(context)
-    print(f"📊 Context tokens: {context_tokens}, max_tokens: {max_tokens}")
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=config.api.TEMPERATURE,
+            max_tokens=config.api.MAX_COMPLETION_TOKENS,
+            stream=True
+        )
 
-    # For GPT-5 optimization, use larger chunks when possible
-    if max_tokens == 30000:  # Default value, optimize for GPT-5
-        max_tokens = 100000  # Use GPT-5 optimized chunk size
-        print(f"📈 Optimizing for Grok-4: using {max_tokens} token chunks")
+        # Use the extracted streaming utility
+        content = accumulate_streaming_response(response)
+        print(f"✅ Human model response successful: {len(content)} chars")
+        return content.strip()
 
-    if context_tokens <= max_tokens:
-        try:
-            # Format the prompt template
-            all_params = {**config_params, "context": context}
-            formatted_prompt = prompt_template.format(**all_params)
-            print(f"📤 Formatted prompt: {count_tokens(formatted_prompt)} tokens")
-
-            result = await call_llm(formatted_prompt)
-            if result and result.strip():
-                print(f"✅ LLM call successful: {len(result)} chars")
-                return result.strip()
-            else:
-                print("❌ LLM call returned empty result")
-                return ""
-        except Exception as e:
-            print(f"❌ Error in process_large_context: {e}")
-            return ""
-
-    # Chunk the context
-    chunks = simple_chunk_by_tokens(context, max_tokens)
-    print(f"📦 Chunking into {len(chunks)} pieces")
-
-    # Process chunks sequentially
-    chunk_results = []
-    for i, chunk in enumerate(chunks):
-        print(f"🔄 Processing chunk {i+1}/{len(chunks)}")
-        try:
-            all_params = {**config_params, "context": chunk}
-            formatted_prompt = prompt_template.format(**all_params)
-            chunk_result = await call_llm(formatted_prompt)
-            if chunk_result and chunk_result.strip():
-                chunk_results.append(chunk_result.strip())
-                print(f"✅ Chunk {i+1} processed")
-            else:
-                print(f"❌ Chunk {i+1} returned empty result")
-                chunk_results.append("")
-        except Exception as e:
-            print(f"❌ Error processing chunk {i+1}: {e}")
-            chunk_results.append("")
-
-    if not chunk_results:
-        print("❌ No valid chunk results")
+    except Exception as e:
+        print(f"❌ Human model call failed: {e}")
         return ""
 
-    if len(chunk_results) == 1:
-        return chunk_results[0]
 
-    # Simple combination - just join results
-    combined = "\n\n".join([r for r in chunk_results if r])
-    print(f"🔗 Combined {len([r for r in chunk_results if r])} results")
-    return combined
-
-
-def load_human_interview_data() -> str:
+async def process_dataset():
     """
-    Load the most recent human interview CSV file for direct prompt creation.
-
-    Returns:
-        Formatted human interview content as string containing questions and human answers
+    Process question_asker dataset with 3-call approach:
+    1. Generate comprehensive initial summary from all data
+    2. Get human model incorporation feedback
+    3. Refine summary based on human feedback
     """
-    try:
-        human_csv = get_most_recent_file("human_interview_*.csv")
-    except FileNotFoundError:
-        raise FileNotFoundError("No human interview CSV files found")
+    print("🧠 Processing Dataset with Human Model Refinement...")
+    print("   Call 1: Generate initial comprehensive summary")
+    print("   Call 2: Human model incorporation feedback")
+    print("   Call 3: Refine based on human feedback")
 
-    print(f"📁 Loading human interview data: {os.path.basename(human_csv)}")
+    # Load complete dataset context
+    context = load_dataset_context()
 
-    # Load CSV using standard Python CSV module
-    def load_csv_data(csv_path: Path) -> List[Dict[str, str]]:
-        """Load CSV data using standard Python CSV module."""
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(
-                f,
-                delimiter=config.csv.DELIMITER,
-                quotechar=config.csv.QUOTECHAR,
-                fieldnames=config.csv.FIELDNAMES
-            )
-            # Convert to list and skip header
-            data = list(reader)[1:]
-            # Convert to document-like format for compatibility
-            docs = []
-            for row in data:
-                # Create structured page_content with newlines (consistent with working version)
-                # Format: Category\nGoal\nElement\nQuestion1\nHuman_Answer1\nQuestion2\nHuman_Answer2\nQuestion3\nHuman_Answer3
-                page_content = f"{row.get('Category', '')}\n{row.get('Goal', '')}\n{row.get('Element', '')}\n"
-                for question_col, answer_col in zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS):
-                    page_content += f"{row.get(question_col, '')}\n{row.get(answer_col, '')}\n"
-                docs.append(type('Document', (), {'page_content': page_content})())
-            return docs
+    # Call 1: Generate initial comprehensive summary
+    print("📝 Call 1: Generating initial comprehensive summary...")
+    initial_summary = await call_llm(
+        config.prompts.initial_template.format(context=context)
+    )
 
-    data = load_csv_data(human_csv)
+    if not initial_summary:
+        print("❌ Failed to generate initial summary")
+        return
 
-    # Format data with redaction
-    formatted_contents = []
-    redaction_count = 0
-    skipped_count = 0
+    # Save as human_interview_bio.md
+    bio_path = config.paths.OUTPUT_DIR / "human_interview_bio.md"
+    print(f"💾 Saving initial summary to {bio_path}...")
+    with open(bio_path, "w", encoding="utf-8") as f:
+        f.write(initial_summary)
+    print(f"✅ Saved initial summary ({len(initial_summary)} characters)")
 
-    for i, doc in enumerate(data):  # Process all data, no header to skip
-        content = doc.page_content
-        # Apply concrete redaction before processing
-        redacted_content = redact_sensitive_data(content)
-        if redacted_content != content:
-            redaction_count += 1
+    # Call 2: Human model incorporation feedback
+    print("🤖 Call 2: Getting human model incorporation feedback...")
+    incorporation_prompt = config.prompts.incorporation_prompt.format(all_qa_data=initial_summary)
+    human_feedback = await call_human_model(incorporation_prompt)
 
-        # Parse the structured content to extract questions and answers
-        lines = redacted_content.split('\n')
+    if not human_feedback:
+        print("⚠️ Human model feedback failed, proceeding without it")
+        human_feedback = "No specific incorporation feedback available."
 
-        # Check if this entry has enough lines
-        if len(lines) < 7:  # Minimum: Category + Goal + Element + at least 1 Q&A pair (2 lines)
-            skipped_count += 1
-            continue
+    print(f"✅ Human feedback received ({len(human_feedback)} characters)")
 
-        # Try to parse the fields more flexibly
-        # Expected format: Category\nGoal\nElement\nQ1\nA1\nQ2\nA2\nQ3\nA3
+    # Call 3: Refine based on human feedback
+    print("🎯 Call 3: Refining summary based on human feedback...")
+    refine_prompt = config.prompts.condense_template.format(
+        existing_prompt=initial_summary,
+        context=human_feedback
+    )
+    final_summary = await call_llm(refine_prompt)
 
-        # Handle case where category/goal/element might be combined
-        category = lines[0].strip()
-        goal = ""
-        element = ""
-        question_start_idx = 1
+    if not final_summary:
+        print("❌ Failed to generate final refined summary")
+        return
 
-        # Check if we have separate goal/element lines
-        if len(lines) > 1 and not lines[1].strip().startswith("What") and not lines[1].strip().startswith("How") and not lines[1].strip().startswith("Can"):
-            goal = lines[1].strip()
-            question_start_idx = 2
+    # Save refined version as ai_interview_bio.md
+    refined_path = config.paths.OUTPUT_DIR / "ai_interview_bio.md"
+    print(f"💾 Saving refined summary to {refined_path}...")
+    with open(refined_path, "w", encoding="utf-8") as f:
+        f.write(final_summary)
+    print(f"✅ Saved refined summary ({len(final_summary)} characters)")
 
-        if len(lines) > 2 and question_start_idx == 2 and not lines[2].strip().startswith("What") and not lines[2].strip().startswith("How") and not lines[2].strip().startswith("Can"):
-            element = lines[2].strip()
-            question_start_idx = 3
+    # Save final condensed prompt to assistant directory
+    main_path = config.paths.ASSISTANT_PROMPTS_DIR / "main.md"
+    main_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Extract questions and answers from remaining lines
-        questions = []
-        answers = []
-        j = question_start_idx
-        while j + 1 < len(lines):  # Need at least question + answer
-            question = lines[j].strip()
-            answer = lines[j + 1].strip()
+    print(f"💾 Saving final prompt to {main_path}...")
+    with open(main_path, "w", encoding="utf-8") as f:
+        f.write(final_summary)
+    print(f"✅ Saved final prompt ({len(final_summary)} characters)")
 
-            # Skip empty pairs
-            if question and answer:
-                questions.append(question)
-                answers.append(answer)
-
-            j += 2
-
-        # Check if we have both questions and answers
-        if not questions or not answers:
-            skipped_count += 1
-            continue
-
-        # Format as Q&A pairs with numbered questions
-        qa_pairs = []
-        for idx, (q, a) in enumerate(zip(questions, answers), 1):
-            qa_pairs.append(f"{idx}. {q}\n\n     {a}")
-        formatted_entry = f"# Understanding: **{category}**\n\n"
-        formatted_entry += f"## Goal: **{goal}**\n\n"
-        formatted_entry += f"**Elements:** {element}\n\n"
-        formatted_entry += "### Questions:\n\n" + "\n\n".join(qa_pairs)
-        formatted_contents.append(formatted_entry)
-
-    if redaction_count > 0:
-        print(f"🔒 Applied redaction to {redaction_count} entries")
-
-    if skipped_count > 0:
-        print(f"⚠️ Skipped {skipped_count} entries due to incomplete data")
-
-    # Create combined context with questions and answers
-    combined_context = "\n\n---\n\n".join(formatted_contents)
-    print(f"📊 Loaded {len(formatted_contents)} Q&A sections ({len(combined_context)} characters)")
-
-    return combined_context
-
-def create_human_interview_prompts():
-    """Create system prompts using human interview responses as foundation, refined with AI-generated responses.
-
-    Process:
-    1. Load human interview responses (initial foundation)
-    2. Generate initial existential layer summary from human data only
-    3. Load AI-generated responses
-    4. Refine the human-based summary using AI responses for enhanced insights
-    """
-    print("👤🤖 Creating Human + AI Refined System Prompts...")
-    print("   Step 1: Generate initial summary from human responses")
-    print("   Step 2: Refine with AI-generated responses")
-
-    # Load human interview data (foundation)
-    human_context = load_human_interview_data()
-
-    # Load AI-generated responses for refinement
-    try:
-        ai_csv = get_most_recent_file("questions_with_answers_songbird_*.csv")
-        print(f"📁 Loading AI refinement data: {os.path.basename(ai_csv)}")
-    except FileNotFoundError:
-        raise FileNotFoundError("No AI-generated response files found for refinement")
-
-    ai_context = load_ai_responses(ai_csv)
-    
-    # Store prompt templates for direct use
-    initial_summary_template = config.prompts.initial_template
-    refine_template = config.prompts.refine_template
-    
-    # Define the state of the graph - HUMAN + AI REFINEMENT VERSION
-    class State(TypedDict):
-        human_context: str
-        ai_context: str
-        refinement_step: int
-        summary: str
-
-    # Generate initial existential layer summary from human responses
-    async def generate_initial_summary(human_context: str) -> str:
-        print("📝 Step 1: Generating initial existential layer summary from human responses...")
-
-        # Process context with token-based chunking
-        config_params = {}
-        # Leave room for prompt template + max output tokens in response
-        # Use 85% of available input tokens to be conservative
-        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
-        context_limit = int(available_input_tokens * 0.85)
-        summary = await process_large_context(
-            context=human_context,
-            prompt_template=initial_summary_template,
-            config_params=config_params,
-            max_tokens=context_limit
-        )
-
-        return summary
-
-    # Step 2: Refine with AI-generated responses
-    async def refine_with_ai_responses(current_summary: str, ai_context: str) -> str:
-        print("🎯 Step 2: Refining with AI-generated responses...")
-
-        # Process context with token-based chunking
-        # The template expects {existing_answer} as current summary and {context} as added data
-        config_params = {"existing_answer": current_summary}
-        # Leave room for prompt template + summary + max output tokens in response
-        # Use 75% of available input tokens to account for summary in context
-        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
-        context_limit = int(available_input_tokens * 0.75)
-        summary = await process_large_context(
-            context=ai_context,
-            prompt_template=refine_template,
-            config_params=config_params,
-            max_tokens=context_limit
-        )
-
-        return summary
-    
-    async def condense_summary(current_summary: str, human_context: str) -> str:
-        print("📦 Step 3: Condensing to actionable system prompt...")
-        
-        # Use human context for added data
-        config_params = {"existing_prompt": current_summary}
-        # Leave room for prompt template + summary + max output tokens in response
-        # Use 75% of available input tokens to account for summary in context
-        available_input_tokens = config.api.MAX_TOKENS - config.api.MAX_COMPLETION_TOKENS
-        context_limit = int(available_input_tokens * 0.75)
-        summary = await process_large_context(
-            context=human_context,
-            prompt_template=config.prompts.condense_template,
-            config_params=config_params,
-            max_tokens=context_limit
-        )
-        
-        return summary
-
-    # Run the processing with human foundation + AI refinement workflow
-    async def run_human_plus_ai_creation():
-        step_count = 0
-        initial_bio = ""
-        final_summary = ""
-
-        # Initialize file paths (will be set during processing)
-        bio_path = None
-        output_path = None
-
-        # Step 1: Generate initial summary from human data
-        initial_bio = await generate_initial_summary(human_context)
-        print(f"Step 1 Result: {len(initial_bio)} characters generated")
-
-        # Save intermediate bio immediately after generation (rename to reflect human base)
-        bio_filename = "human_interview_bio.md"  # Changed filename to reflect human initial
-        bio_path = config.paths.OUTPUT_DIR / bio_filename
-        print(f"💾 Saving human initial bio to {bio_path}...")
-        try:
-            with open(bio_path, "w", encoding="utf-8") as f:
-                f.write(initial_bio)
-            print(f"✅ Successfully saved human initial bio ({len(initial_bio)} characters)")
-        except Exception as e:
-            print(f"❌ Error saving human initial bio: {e}")
-
-        # Step 2: Refine with AI responses
-        refined_summary = await refine_with_ai_responses(initial_bio, ai_context)
-        print(f"Step 2 Result: {len(refined_summary)} characters generated")
-
-        # Save refined summary as ai_interview_bio.md
-        refined_filename = "ai_interview_bio.md"
-        refined_path = config.paths.OUTPUT_DIR / refined_filename
-        print(f"💾 Saving refined bio to {refined_path}...")
-        try:
-            with open(refined_path, "w", encoding="utf-8") as f:
-                f.write(refined_summary)
-            print(f"✅ Successfully saved refined bio ({len(refined_summary)} characters)")
-        except Exception as e:
-            print(f"❌ Error saving refined bio: {e}")
-        
-        # Step 3: Condense to final system prompt
-        final_summary = await condense_summary(refined_summary, human_context)
-        print(f"Step 3 Result: {len(final_summary)} characters generated")
-        
-        # Save final condensed prompt to assistant directory
-        output_filename = "main.md"
-        output_path = config.paths.ASSISTANT_PROMPTS_DIR / output_filename
-        
-        # Ensure assistant directory exists
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        print(f"💾 Saving final condensed prompt to {output_path}...")
-        try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(final_summary)
-            print(f"✅ Successfully saved final prompt ({len(final_summary)} characters)")
-            # Verify file was written
-            if output_path.exists():
-                actual_size = output_path.stat().st_size
-                print(f"✅ File verification: {actual_size} bytes written")
-            else:
-                print(f"❌ File verification failed: {output_path} does not exist")
-        except Exception as e:
-            print(f"❌ Error saving final prompt: {e}")
-        
-        step_count = 3
-        
-        # Ensure all paths are set with fallbacks
-        if bio_path is None:
-            bio_filename = "human_interview_bio.md"
-            bio_path = config.paths.OUTPUT_DIR / bio_filename
-        if output_path is None:
-            output_filename = "main.md"
-            output_path = config.paths.ASSISTANT_PROMPTS_DIR / output_filename
-        if refined_path is None:
-            refined_filename = "ai_interview_bio.md"
-            refined_path = config.paths.OUTPUT_DIR / refined_filename
-
-        print(f"Files created:")
-        print(f"  📄 Initial Bio (Human): {bio_path}")
-        print(f"  📄 Refined Bio (AI): {refined_path}")
-        print(f"  🎯 Final Condensed Prompt: {output_path}")
-        print(f"\nProcess completed in {step_count} steps with {step_count} AI calls.")
-        print("👤🤖 System prompt built from human foundation + AI refinement + condensation!")
-    
-    import asyncio
-    asyncio.run(run_human_plus_ai_creation())
-
-def load_ai_responses(csv_path: Path) -> str:
-    """Load AI responses for refinement."""
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(
-            f,
-            delimiter=config.csv.DELIMITER,
-            quotechar=config.csv.QUOTECHAR,
-            fieldnames=config.csv.FIELDNAMES
-        )
-        # Convert to list and skip header
-        data = list(reader)[1:]
-
-    # Format as readable text for LLM with full structure
-    formatted_sections = []
-    for row in data:
-        category = row.get('Category', '').strip()
-        goal = row.get('Goal', '').strip()
-        element = row.get('Element', '').strip()
-        if not category:
-            continue
-
-        qa_pairs = []
-        for question_col, answer_col in zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS):
-            question = row.get(question_col, '').strip()
-            answer = row.get(answer_col, '').strip()
-
-            if question and answer:
-                qa_pairs.append(f"1. {question}\n\n     {answer}")
-
-        if qa_pairs:
-            formatted_entry = f"# Understanding: **{category}**\n\n"
-            formatted_entry += f"## Goal: **{goal}**\n\n"
-            formatted_entry += f"**Elements:** {element}\n\n"
-            formatted_entry += "### Questions:\n\n" + "\n\n".join(qa_pairs)
-            formatted_sections.append(formatted_entry)
-
-    return "\n\n---\n\n".join(formatted_sections)
+    print("Files created:")
+    print(f"  📄 Initial Summary: {bio_path}")
+    print(f"  📄 Refined Summary: {refined_path}")
+    print(f"  🎯 Final Prompt: {main_path}")
+    print("\n🧠 Dataset processing completed with human model refinement!")
 
 def combine_prompts():
     """Combine existing prompt parts into final prompts."""
@@ -686,7 +374,7 @@ For actionable tasks, save to Todoist with a clear title, owner, and due date (P
     print(f"📁 All prompt files are saved in: {config.paths.PROMPTS_DIR}")
 
 def main():
-    print("🎯 Unified Creator - Full Pipeline (Human + Combine)")
+    print("🎯 Prompt Creator - Dataset Processing Pipeline")
     print("=" * 50)
 
     # Validate configuration
@@ -697,11 +385,11 @@ def main():
             print(f"   - {issue}")
         sys.exit(1)
 
-    # Run human creation followed by combine
-    create_human_interview_prompts()
+    # Run dataset processing followed by combine
+    asyncio.run(process_dataset())
     combine_prompts()
 
-    print("\n✅ Full pipeline completed: Human prompts created and combined into final prompt.md!")
+    print("\n✅ Full pipeline completed: Dataset processed and combined into final prompt.md!")
 
 if __name__ == "__main__":
     main()
