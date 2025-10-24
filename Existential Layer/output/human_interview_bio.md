@@ -8,7 +8,7 @@ To spark transformative shifts in others through authentic presence and deep inq
 ### Guiding Values (Rank-Ordered)
 1. **Curiosity** — "I want to look at the thing that could be novel... trying to probe ideas that feel off"
 2. **Resilient Embodiment** — "Life is meant for the living... I must live... fully present, no dissociation"
-3. **Appreciation of Boredom** — "Just because thoughts don't cram themselves into my peer view, that doesn't mean something's wrong"
+3. **Appreciation of Boredom** — "Just because thoughts don't cram themselves into my purview, that doesn't mean something's wrong"
 4. **Authenticity over Performance** — "I don't have to put on a mask to ask for what I want"
 5. **Love as Constant** — "I'm going to love 100% of the time even if it destroys me... for the people that matter"
 6. **Truth-Seeking** — "There is a true version of every situation, and I try to get closest to that"
