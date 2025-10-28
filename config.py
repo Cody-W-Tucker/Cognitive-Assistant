@@ -183,6 +183,12 @@ class APIConfig:
     OPEN_WEBUI_API_KEY: str = field(default_factory=lambda: os.getenv("OPEN_WEBUI_API_KEY", ""))
     OPEN_WEBUI_BASE_URL: str = "https://ai.homehub.tv/api"
 
+    # Qdrant Configuration
+    QDRANT_URL: str = field(default_factory=lambda: os.getenv("QDRANT_URL", "http://localhost:6333"))
+
+    # Ollama Configuration
+    OLLAMA_EMBEDDING_MODEL: str = field(default_factory=lambda: os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest"))
+
     # LLM Provider selection
     LLM_PROVIDER: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "xai"))  # Options: openai, xai, anthropic
 
@@ -282,8 +288,25 @@ class APIConfig:
             raise ImportError("OpenAI package not installed. Install with: pip install openai")
         except Exception as e:
             if "401" in str(e) or "invalid" in str(e).lower():
-                raise ValueError("Authentication failed. Check OPENAI_API_KEY in your .env file")
+                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
             raise
+
+    def create_qdrant_client(self):
+        """Create and return a Qdrant client."""
+        try:
+            from qdrant_client import QdrantClient
+
+            url_parts = self.QDRANT_URL.replace("http://", "").replace("https://", "").split(":")
+            host = url_parts[0]
+            port = int(url_parts[1]) if len(url_parts) > 1 else 6333
+
+            client = QdrantClient(host=host, port=port)
+            return client
+
+        except ImportError:
+            raise ImportError("qdrant-client package not installed. Install with: pip install qdrant-client")
+        except Exception as e:
+            raise ValueError(f"Failed to connect to Qdrant at {self.QDRANT_URL}: {e}")
 
     def create_xai_client_async(self):
         """Create and return async xAI client."""
