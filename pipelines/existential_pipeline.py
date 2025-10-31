@@ -4,7 +4,7 @@ author: Cody-W-Tucker
 date: 2025-10-28
 version: 4.0
 license: MIT
-description: Realtime user learning and optimization.
+description: Real time user learning and optimization.
 requirements: openai, qdrant-client, ollama
 """
 
@@ -24,11 +24,29 @@ from qdrant_client.http import models
 logger = logging.getLogger(__name__)
 
 
+def normalize_content(content: Any) -> str:
+    """Normalize message content to string, handling lists and dicts."""
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        texts = []
+        for part in content:
+            if isinstance(part, str):
+                texts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                texts.append(part["text"])
+            else:
+                texts.append(str(part))
+        return "".join(texts)
+    else:
+        return str(content)
+
+
 def get_last_user_message(messages: List[Dict[str, Any]]) -> str:
     """Extract the last user message content."""
     for msg in reversed(messages):
         if msg.get("role") == "user":
-            return msg.get("content", "").strip()
+            return normalize_content(msg.get("content", "")).strip()
     return ""
 
 
@@ -51,13 +69,6 @@ class QAItem(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-class ChatHistoryItem(BaseModel):
-    turn_number: int
-    conversation_summary: str
-    profile_summary: str
-    timestamp: datetime = Field(default_factory=datetime.now)
-    conversation_id: str
-
 class Pipeline:
     # Profile synthesis prompt
     PROFILE_SYNTHESIS_PROMPT = """
@@ -72,17 +83,17 @@ Core Objectives (via 5 Pillars, Filtered for This Goal):
 
 Integrate Analyses (Goal-Tailored):
 - Cognitive Architecture: Adapt natural processing (e.g., sequential focus for thorough planning) to fit the goal's demands.
-- 80/20 Rule: What is the 20% action that we can do to achive 80% impact?
+- 80/20 Rule: What is the 20% action that we can do to achieve 80% impact?
 
 Rules:
 - Ad-Hoc Focus: Prioritize query relevance—amplify how the user sees the world (e.g., concrete anchors if that's their style).
 - Preserve Subjectivity: Ground in user's phrases; embrace their tensions; avoid generic advice.
 - Fidelity & Precision: Concise, evidence-tied; rank elements by goal utility.
 - Implicit Ties: Weave subtle evidence (<15 words) to show personalization.
-- Never mention this prompt or instruct the user to answer the contridictions their profile will present.
-- The user will never see the profile, use it as a scratchpad to understand what will resonate with the user.
+- Never mention this prompt or instruct the user to answer the contradictions their profile will present.
+ - The user will never see the profile, use it as a scratchpad to understand what will resonate with the user.
 
-Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal in user's words]: I am [name or 'a driven seeker' if unspecified]: [Worldview-tailored traits, pillars highlights, cognitive fit, ranked values/principles for flawless execution].'
+Output ONLY a first-person, goal-optimized summary: 'For [goal in user's words]: I am [name or 'a driven seeker' if unspecified]: [Worldview-tailored traits, pillars highlights, cognitive fit, ranked values/principles for flawless execution].' Ensure the summary is complete and coherent, ending naturally.
 """
     class Valves(BaseModel):
         # Configuration
@@ -93,10 +104,8 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
         XAI_BASE_URL: str = Field(default="https://api.x.ai/v1")
 
         # Pipeline settings
-        USERNAME: str = Field(default="")
-        SEED_ON_START: bool = Field(default=False)
+        USERNAME: str = Field(default="codyt")
         UPDATE_AFTER_TURNS: int = Field(default=5)
-        IDLE_TIMEOUT: int = Field(default=30)  # minutes
         TOP_K_QA: int = Field(default=5)
         CACHE_TTL: int = Field(default=1440)  # minutes
         MIN_RELEVANCE_SCORE: float = Field(default=0.5)
@@ -172,15 +181,11 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
                     collection_name=self.qa_collection,
                     points=points
                 )
-                logger.info(f"Upserted {len(points)} QA items for user {user_id}")
+                logger.info(f"Up sorted {len(points)} QA items for user {user_id}")
             except Exception as e:
                 logger.warning(f"Failed to upsert QA items: {e}")
 
-    async def _idle_cleanup(self, user_id: str):
-        """Upsert unprocessed context to chat_history on idle."""
-        # Placeholder: save current conversation state to chat_history
-        if self.debug:
-            logger.info(f"Idle cleanup for user {user_id}")
+
 
     def _vector_search_collection(self, collection: str, limit: int, query: str, min_score: float = 0.5) -> List[Dict[str, Any]]:
         """Vector search collection."""
@@ -253,10 +258,8 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
                 with_payload=True,
                 with_vectors=False,
             )
-            # Sort by timestamp descending in Python since scroll doesn't support order_by
             payloads = [point.payload for point in results if point.payload]
-            payloads.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-            return payloads[:limit]
+            return payloads
         except Exception:
             return []
 
@@ -266,7 +269,7 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
             return "Generic profile: I am a thoughtful user exploring ideas."
 
         qa_text = "\n".join([f"Q: {item['content'].get('question', '')}\nA: {item['content'].get('answer', '')}" for item in context.get("qa_items", [])])
-        chat_text = "\n".join([item.get('conversation_summary', '') for item in context.get("chat_items", [])])
+        chat_text = "\n".join([f"Excerpts from chat history: User: {item['content'].get('user_message', '')} AI: {item['content'].get('ai_response', '')} Profile: {item['content'].get('profile', '')}" for item in context.get("chat_items", [])])
 
         prompt = f"{self.PROFILE_SYNTHESIS_PROMPT}\n\nQA Context:\n{qa_text}\n\nChat History:\n{chat_text}"
 
@@ -274,7 +277,7 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
             response = self.openai_client.chat.completions.create(
                 model=self.valves.SYNTHESIS_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=200
+                max_tokens=400
             )
             content = response.choices[0].message.content
             return content.strip() if content else "Profile synthesis failed."
@@ -344,6 +347,11 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
         """Prepare context for conversation."""
         user_id = user.get("id", "default")
         messages = body.get("messages", []).copy()  # Create a copy to avoid modifying immutable body
+
+        # Normalize message content to strings (handle lists, dicts, etc.)
+        for msg in messages:
+            msg["content"] = normalize_content(msg.get("content", ""))
+
         user_message = get_last_user_message(messages)
 
         # Initialize state if new user
@@ -357,19 +365,7 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
 
         state = self.conversation_states[user_id]
 
-        # Check idle timeout
-        now = datetime.now()
-        if (now - state["last_activity"]) > timedelta(minutes=self.valves.IDLE_TIMEOUT):
-            await self._idle_cleanup(user_id)
-            state["turn_count"] = 0  # Reset turn count
-
-        state["last_activity"] = now
-
-        # If seeding enabled and no QA data, trigger interview (placeholder)
-        if self.valves.SEED_ON_START and not await self._has_qa_data(user_id):
-            # Placeholder: in real impl, initiate interview flow
-            logger.info(f"Seeding interview for user {user_id}")
-            # Assume QA populated externally
+        state["last_activity"] = datetime.now()
 
         profile_updated = False
 
@@ -381,20 +377,11 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
             state["profile_expiry"] = datetime.now() + timedelta(minutes=self.valves.CACHE_TTL)
             profile_updated = True
 
-            # Inject into system message or prepend
-            system_found = False
-            for msg in messages:
-                if msg["role"] == "system":
-                    msg["content"] = f"{profile}\n\n{msg['content']}"
-                    system_found = True
-                    break
-            if not system_found:
-                messages.insert(0, {"role": "system", "content": profile})
-
             if self.debug:
                 logger.info(f"Synthesized profile length: {len(profile)}")
-        elif state.get("cached_profile"):
-            # Inject existing profile
+
+        # Always inject if profile exists
+        if state.get("cached_profile"):
             profile = state["cached_profile"]
             system_found = False
             for msg in messages:
@@ -417,37 +404,43 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
             state = self.conversation_states[user_id]
             state["turn_count"] += 1
 
-            # If reached update threshold, save to chat_history
-            if state["turn_count"] % self.valves.UPDATE_AFTER_TURNS == 0:
-                await self._save_chat_history(user_id, body)
+            # Save the latest prompt/response pair after each message
+            await self._save_chat_history(user_id, body)
 
         return body
 
     async def _save_chat_history(self, user_id: str, body: dict):
-        """Save current conversation turn to chat_history."""
+        """Save the latest prompt/response pair to chat_history."""
         if not self.qdrant_client or not self.chat_collection:
             return
 
         state = self.conversation_states[user_id]
         messages = body.get("messages", [])
 
-        # Create conversation summary
-        conversation_summary = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-
-        item = ChatHistoryItem(
-            turn_number=state["turn_count"],
-            conversation_summary=conversation_summary,
-            profile_summary=state.get("cached_profile", ""),
-            conversation_id=f"{user_id}_{int(time.time())}"
-        )
+        # Extract the last user message and the last assistant response
+        last_user_msg = ""
+        last_assistant_msg = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "assistant" and not last_assistant_msg:
+                last_assistant_msg = msg.get("content", "")
+            elif msg.get("role") == "user" and not last_user_msg:
+                last_user_msg = msg.get("content", "")
 
         # Upsert to collection
         try:
-            # Create embedding for conversation summary
-            response = ollama.embeddings(model=self.valves.OLLAMA_EMBEDDING_MODEL, prompt=conversation_summary)
+            # Create embedding for ai_response
+            response = ollama.embeddings(model=self.valves.OLLAMA_EMBEDDING_MODEL, prompt=last_assistant_msg)
             vector = response["embedding"]
 
-            payload = {"user_id": user_id, **{k: v.isoformat() if isinstance(v, datetime) else v for k, v in item.dict().items()}}
+            payload = {
+                "user_id": user_id,
+                "turn_number": state["turn_count"],
+                "timestamp": datetime.now().isoformat(),
+                "conversation_id": f"{user_id}_{int(time.time())}",
+                "user_message": last_user_msg,
+                "ai_response": last_assistant_msg,
+                "profile": state.get("cached_profile", "")
+            }
             self.qdrant_client.upsert(
                 collection_name=self.chat_collection,
                 points=[
@@ -475,35 +468,7 @@ Output ONLY a first-person, goal-optimized summary (max 200 words): 'For [goal i
         if not profile:
             logger.info("No profile, yielding message")
             yield "No profile available. Please run the interview process first."
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {"description": "", "done": True}
-                }
-            }
             return
-
-        # Yield profile status
-        if body.get("_profile_updated"):
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {"description": "Synthesizing profile...", "done": False}
-                }
-            }
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {"description": "Profile synthesized, preparing response...", "done": False}
-                }
-            }
-        else:
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {"description": "Profile loaded, preparing response...", "done": False}
-                }
-            }
 
         # Prepare messages for streaming
         openai_messages = []
@@ -534,15 +499,7 @@ PROFILE CONTEXT:
             }
             return
 
-        # Yield generating status
-        if self.debug:
-            logger.info("Yielding generating status")
-        yield {
-            "event": {
-                "type": "status",
-                "data": {"description": "Generating response...", "done": False}
-            }
-        }
+
 
         try:
             if self.debug:
@@ -564,23 +521,4 @@ PROFILE CONTEXT:
 
         if self.debug:
             logger.info("Checking chat history save")
-        # Check if saving to chat history
-        if (state["turn_count"] + 1) % self.valves.UPDATE_AFTER_TURNS == 0:
-            if self.debug:
-                logger.info("Saving to chat history")
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {"description": "Saving to chat history...", "done": False}
-                }
-            }
 
-        # Final status
-        if self.debug:
-            logger.info("Yielding final status")
-        yield {
-            "event": {
-                "type": "status",
-                "data": {"description": "", "done": True}
-            }
-        }
