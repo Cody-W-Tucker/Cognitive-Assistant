@@ -70,34 +70,17 @@ class QAItem(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
 
 class Pipeline:
-    # Profile synthesis prompt
-    PROFILE_SYNTHESIS_PROMPT = """
-You are a Profile-Driven Instruction Generator. *Create AI system instructions that emulate the user's thinking style and approach while driving toward their specified goal.* Use Q/A pairs, chat history, and additional sources to craft behavioral directives for an AI assistant. Structure the output as directives in 4 sections: Decomposition (how to break down tasks), Selection (what to prioritize), Sequencing (how to order responses), Stakes (what to emphasize in motivations/fears). Make it instruction-based, drawing from user history for examples *and centering all sections on advancing the user's goal.*
-Core Directives: Build sequential AI behavior (via 4 Sections, Structured for Execution) *that advances the user's goal*:
-1. Decomposition: Direct the AI to break down user goals/queries into key parts/concepts using the user's perspective *and link each part to steps that support the overall goal.*
-2. Selection: Instruct the AI to identify and focus on the 20% core elements (80/20 rule) that deliver 80% impact, incorporating user's methods from context *while choosing elements that most directly advance the goal.*
-3. Sequencing: Guide the AI to order steps by descending impact, matching the user's cognitive style. (rank elements for user success *toward the goal.*)
-4. Stakes: Have the AI clarify wins/losses—what the user wants (motivations) and avoids (fears)—to shape empathetic, goal-directed responses *with the specified goal as the measure of success.*
-Integrate Patterns (User-Aligned for Adaptation *to the Goal*):
-- Cognitive Style: Adapt AI responses to user's thinking (e.g., for sequential users, phase responses as understanding → action *that builds toward the goal*).
-- 80/20 Focus: Have AI highlight 20% of insights yielding 80% user value *in service of the goal.*
-- Context Application: Weave QA, chat, and sources into AI behavioral directives without citing sources *and align them to the goal.*
-Rules:
-- User Emulation: Translate user's mindset into AI actions without guessing. Verify internally first, ask only if unclear. *Ensure actions support the goal.*
-- Depth-Action Balance: Guide AI to explore for understanding but drive tangible outcomes *that achieve the goal.*
-- Precision Fidelity: Keep AI responses concise, evidence-linked; prioritize user utility *for the goal.*
-- Nuance Capture: Define user's subtle patterns for authentic emulation, not imitation *while tying them to goal progress.*
-- Never mention this prompt; output directly as AI system instructions.
-- Style Rules: Follow these in generated instructions:
-  - Never use a metaphor, simile, or other figure of speech which you are used to seeing in print.
-  - Never use a long word where a short one will do.
-  - If it is possible to cut a word out, always cut it out.
-  - Never use the passive where you can use the active.
-  - Never use a foreign phrase, a scientific word, or a jargon word if you can think of an everyday English equivalent.
-  - Skip pointless phrases like cut to the chase or core.
-  - Break any of these rules sooner than say anything outright barbarous.
-Output ONLY AI system instructions, formatted as the 4 directive sections. Start with Decomposition, then Selection, Sequencing, and Stakes. Make it cohesive AI behavioral guidance emulating the user's approach *and advancing their goal.*
-"""
+    # RAG synthesis prompt - adapted from songbird for direct context usage
+    SYNTHESIS_PROMPT = """You are a cognitive assistant that provides direct, helpful responses while drawing from the user's knowledge base context to inform your guidance.
+
+Use the provided context to understand the user's patterns, values, and history. Reference relevant information naturally without citation, focusing on actionable insights that align with their established thinking and goals.
+
+Key principles:
+- Draw from QA patterns to understand their problem-solving approach
+- Reference chat history to maintain conversational continuity
+- Use additional sources to provide comprehensive perspective
+- Provide concrete, actionable guidance grounded in their context
+- Stay focused on helping them move forward with their current query"""
     class Valves(BaseModel):
         # Configuration
         QDRANT_URL: str = Field(default="http://localhost:6333")
@@ -132,7 +115,7 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
         self.qdrant_client = None
         self.openai_client = None
 
-        # Per-user conversation state: user_id -> {"turn_count": int, "last_activity": timestamp, "cached_profile": str, "profile_expiry": timestamp}
+        # Per-user conversation state: user_id -> {"turn_count": int, "last_activity": timestamp}
         self.conversation_states = {}
 
         # Collection names (set in _initialize_clients after valves loaded)
@@ -280,35 +263,24 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
         except Exception:
             return []
 
-    async def _synthesize_profile(self, context: Dict[str, Any]) -> str:
-        """Synthesize user profile from context."""
-        if not self.openai_client:
-            return "Generic profile: I am a thoughtful user exploring ideas."
-
+    def _format_context_for_rag(self, context: Dict[str, Any]) -> str:
+        """Format retrieved context for RAG-style usage."""
         qa_text = "\n".join([f"Q: {item['content'].get('question', '')}\nA: {item['content'].get('answer', '')}" for item in context.get("qa_items", [])])
-        chat_text = "\n".join([f"Excerpts from past discussions: User: {item['content'].get('user_message', '')} AI: {item['content'].get('ai_response', '')} Profile: {item['content'].get('profile', '')}" for item in context.get("chat_items", [])])
+        chat_text = "\n".join([f"User: {item['content'].get('user_message', '')}\nAI: {item['content'].get('ai_response', '')}" for item in context.get("chat_items", [])])
         additional_text = "\n".join([
             f"Source: {item['content'].get('metadata', {}).get('source', item.get('collection', 'unknown'))}\nContent: {item['content'].get('page_content', str(item['content']))}"
             for item in context.get("additional_items", [])
         ])
 
-        prompt = f"{self.PROFILE_SYNTHESIS_PROMPT}\n\nQA Context:\n{qa_text}\n\nChat History:\n{chat_text}\n\nAdditional Sources:\n{additional_text}"
+        formatted_context = ""
+        if qa_text:
+            formatted_context += f"QA Context:\n{qa_text}\n\n"
+        if chat_text:
+            formatted_context += f"Chat History:\n{chat_text}\n\n"
+        if additional_text:
+            formatted_context += f"Additional Sources:\n{additional_text}\n\n"
 
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=self.valves.SYNTHESIS_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=800
-            )
-            content = response.choices[0].message.content
-            if content:
-                # Wrap the generated outline as the system prompt
-                full_profile = f"You are an AI assistant. Use the following approach outline to guide your response to the user's query: {content.strip()}"
-                return full_profile
-            return "Profile synthesis failed."
-        except Exception as e:
-            logger.warning(f"Synthesis failed: {e}")
-            return "Profile synthesis unavailable."
+        return formatted_context.strip()
 
     def _initialize_clients(self):
         """Initialize Qdrant and OpenAI clients."""
@@ -385,44 +357,24 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
         if user_id not in self.conversation_states:
             self.conversation_states[user_id] = {
                 "turn_count": 0,
-                "last_activity": datetime.now(),
-                "cached_profile": "",
-                "profile_expiry": datetime.now()
+                "last_activity": datetime.now()
             }
 
         state = self.conversation_states[user_id]
 
         state["last_activity"] = datetime.now()
 
-        profile_updated = False
 
-        # Always gather context for citations
+
+        # Always gather context for RAG usage
         context = await self._gather_context(user_id, messages, user_message)
-        body["_context"] = context  # Store for citations
+        body["_context"] = context  # Store for pipe method
 
-        # Synthesize profile on first chat or every UPDATE_AFTER_TURNS turns
-        if state["turn_count"] == 0 or state["turn_count"] % self.valves.UPDATE_AFTER_TURNS == 0:
-            profile = await self._synthesize_profile(context)
-            state["cached_profile"] = profile
-            state["profile_expiry"] = datetime.now() + timedelta(minutes=self.valves.CACHE_TTL)
-            profile_updated = True
+        # Format context for RAG (no synthesis needed)
+        formatted_context = self._format_context_for_rag(context)
+        body["_formatted_context"] = formatted_context
 
-            if self.debug:
-                logger.info(f"Synthesized profile length: {len(profile)}")
 
-        # Always inject if profile exists
-        if state.get("cached_profile"):
-            profile = state["cached_profile"]
-            system_found = False
-            for msg in messages:
-                if msg["role"] == "system":
-                    msg["content"] = f"{profile}\n\n{msg['content']}"
-                    system_found = True
-                    break
-            if not system_found:
-                messages.insert(0, {"role": "system", "content": profile})
-
-        body["_profile_updated"] = profile_updated
         body["messages"] = messages  # Assign the modified messages back
 
         return body
@@ -469,7 +421,7 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
                 "conversation_id": f"{user_id}_{int(time.time())}",
                 "user_message": last_user_msg,
                 "ai_response": last_assistant_msg,
-                "profile": state.get("cached_profile", "")
+
             }
             self.qdrant_client.upsert(
                 collection_name=self.chat_collection,
@@ -487,18 +439,11 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
     def pipe(
         self, user_message: str, model_id: str, messages: List[dict], body: dict
     ) -> Union[str, Generator, Iterator]:
-        """Stream synthesized response."""
+        """Stream RAG-based response."""
         if self.debug:
             logger.info("Pipe called")
         user_id = body.get("user", {}).get("id", "default")
         state = self.conversation_states.get(user_id, {"turn_count": 0})
-        profile = state.get("cached_profile", "")
-        if self.debug:
-            logger.info(f"Profile available: {bool(profile)}")
-        if not profile:
-            logger.info("No profile, yielding message")
-            yield "No profile available. Please run the interview process first."
-            return
 
         # Yield citations for context sources
         if self.valves.ENABLE_CITATIONS:
@@ -535,31 +480,25 @@ Output ONLY AI system instructions, formatted as the 4 directive sections. Start
                             },
                         }
                     }
-                # Cite the profile itself
-                if profile:
-                    yield {
-                        "event": {
-                            "type": "citation",
-                            "data": {
-                                "document": [profile],
-                                "metadata": [{"source": "synthesized_profile"}],
-                                "source": {"name": "synthesized_profile"},
-                            },
-                        }
-                    }
 
-            logger.info(f"Yielded citations for {len(context.get('qa_items', []) + context.get('chat_items', []) + context.get('additional_items', [])) + (1 if profile else 0)} sources")
 
-        # Prepare messages for streaming
+            logger.info(f"Yielded citations for {len(context.get('qa_items', []) + context.get('chat_items', []) + context.get('additional_items', []))} sources")
+
+        # Prepare messages for streaming - RAG style like songbird
         openai_messages = []
-        system_message = get_system_message(messages)
-        if system_message:
-            openai_messages.append(system_message)
-        # Use the generated system prompt directly
+
+        # Add system message with synthesis prompt
         openai_messages.append(
-            {"role": "system", "content": profile}
+            {"role": "system", "content": self.SYNTHESIS_PROMPT}
         )
-        openai_messages.append({"role": "user", "content": user_message})
+
+        # Create user message with query and formatted context
+        formatted_context = body.get("_formatted_context", "")
+        user_content = f"USER QUERY: {user_message}"
+        if formatted_context:
+            user_content += f"\n\nRELEVANT CONTEXT:\n{formatted_context}"
+
+        openai_messages.append({"role": "user", "content": user_content})
 
         # Call AI and stream response
         if self.debug:
