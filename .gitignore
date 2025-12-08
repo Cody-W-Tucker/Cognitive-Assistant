@@ -2,6 +2,9 @@
 .venv
 .env
 
+# Swarms
+agent_workspace/
+
 data
 
 __pycache__
