@@ -15,20 +15,19 @@
         default = pkgs.mkShell {
           venvDir = ".venv";
           packages = with pkgs; [ python312 ] ++
-             (with pkgs.python312Packages; [
-               pip
-               venvShellHook
-               python-dotenv
-               langchain-openai
-               langchain-core
-               langchain-community
-               langgraph
-               notebook
-               jupyter
-               pandas
-               scikit-learn
-               streamlit
-             ]);
+            (with pkgs.python312Packages; [
+              pip
+              venvShellHook
+              python-dotenv
+              langchain-openai
+              langchain-core
+              langchain-community
+              langgraph
+              notebook
+              jupyter
+              pandas
+              scikit-learn
+            ]);
           shellHook = ''
             if [ ! -d ".venv" ]; then
               python -m venv .venv
