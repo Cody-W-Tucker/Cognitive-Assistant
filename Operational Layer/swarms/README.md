@@ -27,7 +27,7 @@ python runner.py "Help me evaluate my quarterly priorities" --arch moa --layers 
 ## Architectures
 
 - **hierarchical**: INTP cognitive function stack (Ne/Te/Fi/Ni) with Tesla directing.
-- **moa**: Mixture of Agents with 8 MBTI personality agents for collaborative assistance.
+- **moa**: Mixture of Agents with MBTI personality agents for collaborative assistance.
 
 ## Configuration & Extension
 
