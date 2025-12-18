@@ -23,7 +23,7 @@ import time
 from datetime import datetime
 
 # Import config from current directory
-from config import config, accumulate_streaming_response, clean_markdown
+from config import config, accumulate_streaming_response
 
 
 def get_baseline_system_prompt() -> str:

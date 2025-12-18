@@ -24,11 +24,12 @@ import csv
 import pandas as pd
 import argparse
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Dict
 from pathlib import Path
 
 # Import config from current directory
 from config import config, get_most_recent_file
+
 
 def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
     """Load existing answers from a previous interview session."""
@@ -43,8 +44,10 @@ def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
             category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
             answer_data = {}
             for i, col in enumerate(config.csv.ANSWER_COLUMNS, 1):
-                answer_key = f'Answer {i}'
-                answer_data[answer_key] = str(row.get(col, '')).strip() if pd.notna(row.get(col, '')) else ''
+                answer_key = f"Answer {i}"
+                answer_data[answer_key] = (
+                    str(row.get(col, "")).strip() if pd.notna(row.get(col, "")) else ""
+                )
             answers[category_key] = answer_data
 
         return answers
@@ -52,7 +55,10 @@ def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
         print(f"⚠️ Warning: Could not load existing answers: {e}")
         return {}
 
-def save_answers_to_csv(questions_df: pd.DataFrame, answers: Dict[str, Dict[str, str]], output_file: Path):
+
+def save_answers_to_csv(
+    questions_df: pd.DataFrame, answers: Dict[str, Dict[str, str]], output_file: Path
+):
     """Save the complete interview data to CSV."""
     # Create a copy of the questions dataframe
     output_df = questions_df.copy()
@@ -60,28 +66,42 @@ def save_answers_to_csv(questions_df: pd.DataFrame, answers: Dict[str, Dict[str,
     # Add answer columns
     for col in config.csv.ANSWER_COLUMNS:
         if col not in output_df.columns:
-            output_df[col] = ''
+            output_df[col] = ""
 
     # Fill in the answers
     for idx, row in output_df.iterrows():
         category_key = f"{row['Category']}|{row['Goal']}|{row['Element']}"
         if category_key in answers:
             for i, answer_col in enumerate(config.csv.ANSWER_COLUMNS, 1):
-                answer_key = f'Answer {i}'
-                if answer_key in answers[category_key] and answers[category_key][answer_key]:
+                answer_key = f"Answer {i}"
+                if (
+                    answer_key in answers[category_key]
+                    and answers[category_key][answer_key]
+                ):
                     output_df.at[idx, answer_col] = answers[category_key][answer_key]
 
     # Save to CSV
-    output_df.to_csv(str(output_file), index=False, sep=config.csv.DELIMITER, quotechar=config.csv.QUOTECHAR, quoting=csv.QUOTE_MINIMAL)
+    output_df.to_csv(
+        str(output_file),
+        index=False,
+        sep=config.csv.DELIMITER,
+        quotechar=config.csv.QUOTECHAR,
+        quoting=csv.QUOTE_MINIMAL,
+    )
 
-def ask_question_interactive(question: str, category_context: str, question_number: int) -> str:
+
+def ask_question_interactive(
+    question: str, category_context: str, question_number: int
+) -> str:
     """Ask a single question interactively and get user response."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print(f"📂 Category: {category_context}")
     print(f"❓ Question {question_number}: {question}")
-    print("="*80)
+    print("=" * 80)
 
-    print("\n💭 Take your time to think about your answer. When ready, type or dictate your response.")
+    print(
+        "\n💭 Take your time to think about your answer. When ready, type or dictate your response."
+    )
     print("💡 Press Enter twice (blank line) to finish your answer.")
     print("📝 Your response:")
 
@@ -110,15 +130,22 @@ def ask_question_interactive(question: str, category_context: str, question_numb
 
     return answer
 
-def conduct_interview(questions_df: pd.DataFrame, existing_answers: Dict[str, Dict[str, str]] = None) -> Dict[str, Dict[str, str]]:
+
+def conduct_interview(
+    questions_df: pd.DataFrame, existing_answers: Dict[str, Dict[str, str]] = None
+) -> Dict[str, Dict[str, str]]:
     """Conduct the full interview process."""
     if existing_answers is None:
         existing_answers = {}
 
     answers = existing_answers.copy()
     total_questions = len(questions_df) * 3
-    answered_count = sum(1 for category_answers in answers.values()
-                        for answer in category_answers.values() if answer.strip())
+    answered_count = sum(
+        1
+        for category_answers in answers.values()
+        for answer in category_answers.values()
+        if answer.strip()
+    )
 
     print("🎯 Human Interview Process")
     print(f"📊 Total questions: {total_questions}")
@@ -132,23 +159,23 @@ def conduct_interview(questions_df: pd.DataFrame, existing_answers: Dict[str, Di
     print("\n🚀 Starting interview...\n")
 
     for idx, row in questions_df.iterrows():
-        category = row['Category']
-        goal = row['Goal']
-        element = row['Element']
+        category = row["Category"]
+        goal = row["Goal"]
+        element = row["Element"]
 
         category_context = f"{category} → {goal}"
         category_key = f"{category}|{goal}|{element}"
 
         # Initialize answers for this category if not exists
         if category_key not in answers:
-            answers[category_key] = {'Answer 1': '', 'Answer 2': '', 'Answer 3': ''}
+            answers[category_key] = {"Answer 1": "", "Answer 2": "", "Answer 3": ""}
 
         print(f"\n🎯 Section {idx + 1}/{len(questions_df)}: {category}")
 
         # Ask each question in this category
         for q_num in range(1, 4):
-            question_col = f'Question {q_num}'
-            answer_col = f'Answer {q_num}'
+            question_col = f"Question {q_num}"
+            answer_col = f"Answer {q_num}"
 
             # Skip if already answered
             if answers[category_key][answer_col].strip():
@@ -161,11 +188,14 @@ def conduct_interview(questions_df: pd.DataFrame, existing_answers: Dict[str, Di
             if answer.strip():  # Only save non-empty answers
                 answers[category_key][answer_col] = answer
                 answered_count += 1
-                print(f"✅ Answer recorded! Progress: {answered_count}/{total_questions}")
+                print(
+                    f"✅ Answer recorded! Progress: {answered_count}/{total_questions}"
+                )
             else:
                 print("⏭️  Question skipped (no answer provided)")
 
     return answers
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -181,22 +211,18 @@ Instructions:
 - Answer questions thoughtfully and honestly
 - Press Enter twice (blank line) to finish each answer
 - Press Ctrl+C to pause and resume later with --resume
-        """
+        """,
     )
     parser.add_argument(
-        "--resume",
-        action="store_true",
-        help="Resume the most recent interview session"
+        "--resume", action="store_true", help="Resume the most recent interview session"
     )
     parser.add_argument(
-        "--output",
-        type=str,
-        help="Custom output filename (without path)"
+        "--output", type=str, help="Custom output filename (without path)"
     )
     parser.add_argument(
         "--questions-file",
         type=str,
-        help="Path to questions CSV file (default: use config)"
+        help="Path to questions CSV file (default: use config)",
     )
 
     args = parser.parse_args()
@@ -213,7 +239,9 @@ Instructions:
         return
 
     # Set up file paths
-    questions_file = Path(args.questions_file) if args.questions_file else config.paths.QUESTIONS_CSV
+    questions_file = (
+        Path(args.questions_file) if args.questions_file else config.paths.QUESTIONS_CSV
+    )
 
     # Check if input file exists
     if not questions_file.exists():
@@ -234,7 +262,9 @@ Instructions:
     else:
         # Create new timestamped output file
         timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
-        output_filename = config.output.HUMAN_INTERVIEW_PATTERN.format(timestamp=timestamp)
+        output_filename = config.output.HUMAN_INTERVIEW_PATTERN.format(
+            timestamp=timestamp
+        )
         output_file = config.paths.DATA_DIR / output_filename
 
     # Load existing answers if resuming
@@ -257,10 +287,14 @@ Instructions:
         save_answers_to_csv(questions_df, answers, output_file)
 
         # Count final statistics
-        total_answers = sum(1 for category_answers in answers.values()
-                           for answer in category_answers.values() if answer.strip())
+        total_answers = sum(
+            1
+            for category_answers in answers.values()
+            for answer in category_answers.values()
+            if answer.strip()
+        )
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("🎉 Interview Complete!")
         print(f"📁 Results saved to: {output_file}")
         print(f"📊 Total answers recorded: {total_answers}")
@@ -280,6 +314,7 @@ Instructions:
             print(f"💾 Emergency save completed: {output_file}")
         except Exception as save_error:
             print(f"❌ Could not save progress: {save_error}")
+
 
 if __name__ == "__main__":
     main()

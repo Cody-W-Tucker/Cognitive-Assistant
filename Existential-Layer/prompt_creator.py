@@ -25,12 +25,16 @@ import os
 import sys
 import csv
 from pathlib import Path
-from typing import List, Dict, Any
-from datetime import datetime
+from typing import Any
 import asyncio
 
 # Import config from current directory
-from config import config, get_redaction_function, get_most_recent_file, accumulate_streaming_response
+from config import (
+    config,
+    get_redaction_function,
+    get_most_recent_file,
+    accumulate_streaming_response,
+)
 
 # Get the redaction function
 redact_sensitive_data = get_redaction_function()
@@ -51,12 +55,12 @@ def load_dataset_context() -> str:
     print(f"📁 Loading dataset: {os.path.basename(dataset_csv)}")
 
     # Load CSV data
-    with open(dataset_csv, 'r', encoding='utf-8') as f:
+    with open(dataset_csv, "r", encoding="utf-8") as f:
         reader = csv.DictReader(
             f,
             delimiter=config.csv.DELIMITER,
             quotechar=config.csv.QUOTECHAR,
-            fieldnames=config.csv.FIELDNAMES
+            fieldnames=config.csv.FIELDNAMES,
         )
         data = list(reader)[1:]  # Skip header
 
@@ -65,10 +69,10 @@ def load_dataset_context() -> str:
     redaction_count = 0
 
     for row in data:
-        category = row.get('Category', '').strip()
-        goal = row.get('Goal', '').strip()
-        element = row.get('Element', '').strip()
-        incorporation = row.get('Incorporation_Instruction', '').strip()
+        category = row.get("Category", "").strip()
+        goal = row.get("Goal", "").strip()
+        element = row.get("Element", "").strip()
+        incorporation = row.get("Incorporation_Instruction", "").strip()
 
         if not category:
             continue
@@ -76,14 +80,16 @@ def load_dataset_context() -> str:
         # Build Q&A sections with human answers, AI answers, and incorporation
         qa_sections = []
 
-        for i, (q_col, h_col, a_col) in enumerate(zip(
-            config.csv.QUESTION_COLUMNS,
-            config.csv.HUMAN_ANSWER_COLUMNS,
-            config.csv.ANSWER_COLUMNS
-        )):
-            question = row.get(q_col, '').strip()
-            human_answer = row.get(h_col, '').strip()
-            ai_answer = row.get(a_col, '').strip()
+        for i, (q_col, h_col, a_col) in enumerate(
+            zip(
+                config.csv.QUESTION_COLUMNS,
+                config.csv.HUMAN_ANSWER_COLUMNS,
+                config.csv.ANSWER_COLUMNS,
+            )
+        ):
+            question = row.get(q_col, "").strip()
+            human_answer = row.get(h_col, "").strip()
+            ai_answer = row.get(a_col, "").strip()
 
             if question and (human_answer or ai_answer):
                 # Apply redaction to sensitive content
@@ -92,7 +98,9 @@ def load_dataset_context() -> str:
                 if redacted_human != human_answer or redacted_ai != ai_answer:
                     redaction_count += 1
 
-                qa_sections.append(f"{i+1}. {question}\n\n   Human Answer: {redacted_human}\n\n   AI Answer: {redacted_ai}")
+                qa_sections.append(
+                    f"{i+1}. {question}\n\n   Human Answer: {redacted_human}\n\n   AI Answer: {redacted_ai}"
+                )
 
         if qa_sections:
             formatted_entry = f"# Understanding: **{category}**\n\n"
@@ -102,7 +110,9 @@ def load_dataset_context() -> str:
 
             # Add incorporation instructions if available
             if incorporation:
-                formatted_entry += f"\n\n### Incorporation Instructions:\n\n{incorporation}"
+                formatted_entry += (
+                    f"\n\n### Incorporation Instructions:\n\n{incorporation}"
+                )
 
             formatted_sections.append(formatted_entry)
 
@@ -110,7 +120,9 @@ def load_dataset_context() -> str:
         print(f"🔒 Applied redaction to {redaction_count} entries")
 
     combined_context = "\n\n---\n\n".join(formatted_sections)
-    print(f"📊 Loaded {len(formatted_sections)} sections ({len(combined_context)} characters)")
+    print(
+        f"📊 Loaded {len(formatted_sections)} sections ({len(combined_context)} characters)"
+    )
 
     return combined_context
 
@@ -119,6 +131,7 @@ def load_dataset_context() -> str:
 llm_client: Any
 llm_model: str
 llm_client, llm_model = config.api.create_client(async_mode=True)
+
 
 async def call_llm(prompt: str, **kwargs) -> str:
     """
@@ -133,13 +146,15 @@ async def call_llm(prompt: str, **kwargs) -> str:
             try:
                 async with llm_client.messages.stream(
                     model=llm_model,
-                    max_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS),
+                    max_tokens=kwargs.get(
+                        "max_tokens", config.api.MAX_COMPLETION_TOKENS
+                    ),
                     temperature=config.api.TEMPERATURE,
-                    messages=[{"role": "user", "content": prompt}]
+                    messages=[{"role": "user", "content": prompt}],
                 ) as stream:
                     async for event in stream:
                         if event.type == "content_block_delta":
-                            if hasattr(event.delta, 'text'):
+                            if hasattr(event.delta, "text"):
                                 content += event.delta.text
             except Exception as stream_error:
                 print(f"❌ Anthropic streaming failed: {stream_error}")
@@ -155,26 +170,37 @@ async def call_llm(prompt: str, **kwargs) -> str:
         else:
             # OpenAI/xAI API call
             from typing import Any
+
             messages: Any = [{"role": "user", "content": prompt}]
 
             response = await llm_client.chat.completions.create(
                 model=llm_model,
                 messages=messages,
                 temperature=config.api.TEMPERATURE,
-                max_completion_tokens=kwargs.get('max_tokens', config.api.MAX_COMPLETION_TOKENS)
+                max_completion_tokens=kwargs.get(
+                    "max_tokens", config.api.MAX_COMPLETION_TOKENS
+                ),
             )
 
             # Extract content from response
-            if hasattr(response, 'choices') and response.choices and response.choices[0].message:
+            if (
+                hasattr(response, "choices")
+                and response.choices
+                and response.choices[0].message
+            ):
                 content = response.choices[0].message.content
                 if content:
-                    print(f"✅ {config.api.LLM_PROVIDER.upper()} response successful: {len(content)} chars")
+                    print(
+                        f"✅ {config.api.LLM_PROVIDER.upper()} response successful: {len(content)} chars"
+                    )
                     return content.strip()
                 else:
                     print(f"⚠️ {config.api.LLM_PROVIDER.upper()} returned empty content")
                     return ""
             else:
-                print(f"❌ Unexpected {config.api.LLM_PROVIDER.upper()} response structure")
+                print(
+                    f"❌ Unexpected {config.api.LLM_PROVIDER.upper()} response structure"
+                )
                 return ""
 
     except Exception as e:
@@ -182,7 +208,9 @@ async def call_llm(prompt: str, **kwargs) -> str:
         print(f"❌ LLM call failed with exception type: {type(e).__name__}")
         print(f"❌ Error message: {error_msg}")
         if "rate_limit" in error_msg.lower() or "429" in error_msg:
-            print("🚦 Rate limit hit - consider upgrading your plan or waiting before retrying")
+            print(
+                "🚦 Rate limit hit - consider upgrading your plan or waiting before retrying"
+            )
         return ""
 
 
@@ -199,7 +227,7 @@ async def call_human_model(prompt: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             temperature=config.api.TEMPERATURE,
             max_tokens=config.api.MAX_COMPLETION_TOKENS,
-            stream=True
+            stream=True,
         )
 
         # Use the extracted streaming utility
@@ -246,7 +274,9 @@ async def process_dataset():
 
     # Call 2: Human model incorporation feedback
     print("🤖 Call 2: Getting human model incorporation feedback...")
-    incorporation_prompt = config.prompts.incorporation_prompt.format(all_qa_data=initial_summary)
+    incorporation_prompt = config.prompts.incorporation_prompt.format(
+        all_qa_data=initial_summary
+    )
     human_feedback = await call_human_model(incorporation_prompt)
 
     if not human_feedback:
@@ -258,8 +288,7 @@ async def process_dataset():
     # Call 3: Refine based on human feedback
     print("🎯 Call 3: Refining summary based on human feedback...")
     refine_prompt = config.prompts.condense_template.format(
-        existing_prompt=initial_summary,
-        context=human_feedback
+        existing_prompt=initial_summary, context=human_feedback
     )
     final_summary = await call_llm(refine_prompt)
 
@@ -289,6 +318,7 @@ async def process_dataset():
     print(f"  🎯 Final Prompt: {main_path}")
     print("\n🧠 Dataset processing completed with human model refinement!")
 
+
 def combine_prompts():
     """Combine existing prompt parts into final prompts."""
     print("🔧 Combining Prompt Parts...")
@@ -303,11 +333,13 @@ def combine_prompts():
         for md_file in Path(prompts_dir).rglob("*.md"):
             # Create variable name from path
             rel_path = md_file.relative_to(prompts_dir)
-            var_name = str(rel_path).replace('.md', '').replace('/', '_').replace('-', '_')
+            var_name = (
+                str(rel_path).replace(".md", "").replace("/", "_").replace("-", "_")
+            )
 
             # Read file content
             try:
-                with open(md_file, 'r', encoding='utf-8') as f:
+                with open(md_file, "r", encoding="utf-8") as f:
                     prompts[var_name] = f.read().strip()
             except Exception as e:
                 print(f"Error reading {md_file}: {e}", file=sys.stderr)
@@ -325,7 +357,7 @@ def combine_prompts():
     print(f"📁 Loaded {len(prompts)} prompt parts")
 
     # Add prompt structure with the template to introduce the different sections
-    template = '''You are the Cognitive Assistant...
+    template = """You are the Cognitive Assistant...
 
 ## 0. Guiding Principles for Application
 This system prompt represents a snapshot of the user's values, patterns, and needs based on their journals at a specific point in time. It is intended as a tool to deepen your understanding of the user and enhance relevance in responses where it fits naturally. However, not every interaction requires strict alignment with these elements:
@@ -353,7 +385,7 @@ For reflections or ideas, save to Obsidian's Inbox or Projects folder.
 ## Todoist Tool
 For actionable tasks, save to Todoist with a clear title, owner, and due date (Priority 1–4 based on urgency).
 
-{tools_todoist}'''
+{tools_todoist}"""
 
     # Clean up formatting and fill template with prompt content
     template = textwrap.dedent(template).strip()
@@ -361,11 +393,12 @@ For actionable tasks, save to Todoist with a clear title, owner, and due date (P
 
     # Write to prompt.md file
     output_file = config.paths.PROMPTS_DIR / config.output.COMBINED_PROMPT
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(final_prompt)
 
     print(f"✅ Combined prompt saved to: {output_file}")
     print(f"📁 All prompt files are saved in: {config.paths.PROMPTS_DIR}")
+
 
 def main():
     print("🎯 Prompt Creator - Dataset Processing Pipeline")
@@ -383,7 +416,10 @@ def main():
     asyncio.run(process_dataset())
     combine_prompts()
 
-    print("\n✅ Full pipeline completed: Dataset processed and combined into final prompt.md!")
+    print(
+        "\n✅ Full pipeline completed: Dataset processed and combined into final prompt.md!"
+    )
+
 
 if __name__ == "__main__":
     main()

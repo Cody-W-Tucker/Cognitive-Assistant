@@ -20,7 +20,6 @@ import pandas as pd
 import ollama
 import hashlib
 from datetime import datetime
-from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -62,7 +61,9 @@ def create_collection_if_not_exists(client: QdrantClient, collection_name: str):
         raise
 
 
-def generate_point_id(category: str, goal: str, element: str, question: str, answer: str) -> str:
+def generate_point_id(
+    category: str, goal: str, element: str, question: str, answer: str
+) -> str:
     """Generate a unique point ID based on content."""
     content = f"{category}|{goal}|{element}|{question}|{answer}"
     return hashlib.md5(content.encode()).hexdigest()
@@ -70,7 +71,9 @@ def generate_point_id(category: str, goal: str, element: str, question: str, ans
 
 def main():
     parser = argparse.ArgumentParser(description="Embed and upload Q&A data to Qdrant")
-    parser.add_argument("--username", required=True, help="Username for the Qdrant collection")
+    parser.add_argument(
+        "--username", required=True, help="Username for the Qdrant collection"
+    )
     args = parser.parse_args()
 
     username = args.username.strip()
@@ -123,9 +126,9 @@ def main():
     total_qa_pairs = 0
 
     for idx, row in df.iterrows():
-        category = str(row.get('Category', '')).strip()
-        goal = str(row.get('Goal', '')).strip()
-        element = str(row.get('Element', '')).strip()
+        category = str(row.get("Category", "")).strip()
+        goal = str(row.get("Goal", "")).strip()
+        element = str(row.get("Element", "")).strip()
 
         if not category:
             continue
@@ -134,10 +137,10 @@ def main():
         for human_answer_col in config.csv.HUMAN_ANSWER_COLUMNS:
             # Extract question number from column (e.g., "Human_Answer 1" -> "Question 1")
             question_num = human_answer_col.split()[-1]
-            question_col = f'Question {question_num}'
+            question_col = f"Question {question_num}"
 
-            question = str(row.get(question_col, '')).strip()
-            human_answer = str(row.get(human_answer_col, '')).strip()
+            question = str(row.get(question_col, "")).strip()
+            human_answer = str(row.get(human_answer_col, "")).strip()
 
             if not question or not human_answer or pd.isna(human_answer):
                 continue
@@ -149,11 +152,15 @@ def main():
             try:
                 vector = get_embedding(text_to_embed, config.api.OLLAMA_EMBEDDING_MODEL)
             except Exception as e:
-                print(f"⚠️ Skipping Q&A {idx+1}.{question_num} due to embedding error: {e}")
+                print(
+                    f"⚠️ Skipping Q&A {idx+1}.{question_num} due to embedding error: {e}"
+                )
                 continue
 
             # Create point
-            point_id = generate_point_id(category, goal, element, question, human_answer)
+            point_id = generate_point_id(
+                category, goal, element, question, human_answer
+            )
             now = datetime.now()
 
             payload = {
@@ -166,14 +173,10 @@ def main():
                 "confidence": 1.0,
                 "version": 1,
                 "created_at": now.isoformat(),
-                "updated_at": now.isoformat()
+                "updated_at": now.isoformat(),
             }
 
-            point = models.PointStruct(
-                id=point_id,
-                vector=vector,
-                payload=payload
-            )
+            point = models.PointStruct(id=point_id, vector=vector, payload=payload)
 
             points.append(point)
             processed_count += 1
@@ -185,18 +188,19 @@ def main():
     if points:
         batch_size = 100
         for i in range(0, len(points), batch_size):
-            batch = points[i:i+batch_size]
+            batch = points[i : i + batch_size]
             try:
-                qdrant_client.upsert(
-                    collection_name=collection_name,
-                    points=batch
+                qdrant_client.upsert(collection_name=collection_name, points=batch)
+                print(
+                    f"✅ Uploaded batch {i//batch_size + 1}/{(len(points) + batch_size - 1)//batch_size}"
                 )
-                print(f"✅ Uploaded batch {i//batch_size + 1}/{(len(points) + batch_size - 1)//batch_size}")
             except Exception as e:
                 print(f"❌ Error uploading batch {i//batch_size + 1}: {e}")
                 continue
 
-    print(f"\n✅ Completed! Uploaded {processed_count} human Q&A pairs to collection '{collection_name}'")
+    print(
+        f"\n✅ Completed! Uploaded {processed_count} human Q&A pairs to collection '{collection_name}'"
+    )
 
     # Verify upload
     try:

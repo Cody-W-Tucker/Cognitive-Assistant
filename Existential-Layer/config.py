@@ -93,38 +93,6 @@ Produce a single System Prompt with these sections:
 Return only the prompt.
 """
 
-# Condense template for final system prompt
-CONDENSE_TEMPLATE = """
-Condense the system prompt into a streamlined, generalized version for efficient AI use. Translate user fidelity (unique values, patterns, and needs from their data) into a neutral, adaptable system prompt that follows general best practices for AI prompting: clear role definition, structured rules, concise instructions, examples over complex language, and token efficiency. Base all elements strictly on the provided user data—avoid injecting external assumptions, psychological frameworks, or generic advice. Personalize only with user-specific details, ensuring the output is parseable and flexible for varied environments.
-
-Inputs
-- Current System Prompt
-{existing_prompt}
-
-- Added Data (if any)
-------------
-{context}
-------------
-
-Requirements (Target: 500-700 words; prioritize neutrality, parseability, and user-derived content)
-1) Distill pillars/signals: Condense to 3-5 essential, user-derived signals; rephrase as neutral AI triggers (e.g., 'If user mentions X pattern, suggest Y adaptation based on their described preferences'). Derive solely from user data; adapt to profile complexity without assuming themes.
-2) Simplify structures: Merge objectives into 3 high-level, user-aligned goals; values to top 3 from data; resolution to 2 neutral steps. Use modular, hierarchical design (role first, rules next) for clarity.
-3) AI-Focused Language: Use imperative, neutral directives (e.g., 'Respond by...'); eliminate redundancy; ground only in user-provided metaphors or patterns.
-4) Integrate Cognitive/Workflow: Reference user-described patterns generally (e.g., 'For user-preferred processing style, suggest aligned breakdowns'); focus on sustainable adaptations derived from data.
-5) Tone: Direct and honest, fully flexible (e.g., 'Apply only when relevant; default to straightforward responses otherwise'). Ensure clarity to minimize ambiguity, suitable for diverse interactions.
-6) Standards Adherence: Structure as a complete, unbiased system prompt: Clear role; behavioral rules from user data; optional examples derived from context; edge-case handling. Optimize for efficiency (concise format); Translate fidelity neutrally—personalize role/rules with data without dilution or addition.
-
-Produce a single Condensed Prompt with:
-1. Role & Mandate: Neutral mission from user data (include brief portrait); define flexible boundaries.
-2. Key Signals: 3-5 user-derived triggers with data links (neutral, no examples unless from context).
-3. Core Objectives: 3 data-aligned goals with simple criteria (e.g., alignment with user-stated progress).
-4. Value & Decision Heuristics: Top 3 data-derived values; 2-step neutral resolution.
-5. Response Style: Concise, user-tailored rules; 1 neutral example (include simple query fallback).
-6. Ambiguity scenarios: 3-5 data-inspired situations that are unsolved by the user's data and need special care to avoid overfitting. Provide example of how to break mental loops with Socratic questioning to help the user learn and grow.
-
-Return only the condensed prompt.
-"""
-
 # Songbird implements RAG in pipeline/songbird.py | We use the Human Answer as vectorsearch seed content.
 SONGBIRD_SYSTEM_PROMPT = """
 You are given a question and a user's answer to that question. You respond to the question by weaving in insights from their personal context.
@@ -208,14 +176,18 @@ class APIConfig:
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
         """Get max output tokens for the current LLM provider."""
-        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_COMPLETION_TOKENS", 3000)
+        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get(
+            "MAX_COMPLETION_TOKENS", 3000
+        )
 
     @property
     def MAX_TOKENS(self) -> int:
         """Get context window for the current LLM provider."""
         return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_TOKENS", 50000)
 
-    def create_client(self, provider: Optional[str] = None, async_mode: bool = False) -> tuple[Any, str]:
+    def create_client(
+        self, provider: Optional[str] = None, async_mode: bool = False
+    ) -> tuple[Any, str]:
         """Unified client factory with error catching."""
         provider = provider or self.LLM_PROVIDER
         config = self.PROVIDERS.get(provider)
@@ -254,7 +226,7 @@ class APIConfig:
 
                 client_cls = AsyncAnthropic if async_mode else Anthropic
                 return client_cls(api_key=config["api_key"]), str(config["model"])
-            
+
             raise ValueError(f"Unsupported provider: {provider}")
 
         except ImportError:
@@ -319,17 +291,17 @@ class PathConfig:
             # Private datasets and collected information
             "DATA_DIR": "data",
             # Public results of processing
-            "OUTPUT_DIR": "Existential Layer/output",
+            "OUTPUT_DIR": "output",
             # Reusable prompt components
-            "PROMPTS_DIR": "Existential Layer/prompts",
+            "PROMPTS_DIR": "prompts",
             # Individual prompt components
-            "PROMPT_PARTS_DIR": "Existential Layer/prompts/parts",
+            "PROMPT_PARTS_DIR": "prompts/parts",
             # The actual system prompt used
-            "ASSISTANT_PROMPTS_DIR": "Existential Layer/prompts/parts/assistant",
+            "ASSISTANT_PROMPTS_DIR": "prompts/parts/assistant",
             # How to use external tools
-            "TOOLS_PROMPTS_DIR": "Existential Layer/prompts/parts/tools",
+            "TOOLS_PROMPTS_DIR": "prompts/parts/tools",
             # User interview questions
-            "QUESTIONS_CSV": "Existential Layer/questions.csv",
+            "QUESTIONS_CSV": "questions.csv",
         }
 
         # Build all paths automatically
@@ -444,7 +416,6 @@ class PromptsConfig:
     # Use the constants defined at the top of the file
     initial_template: str = INITIAL_TEMPLATE
     refine_template: str = REFINE_TEMPLATE
-    condense_template: str = CONDENSE_TEMPLATE
     songbird_system_prompt: str = SONGBIRD_SYSTEM_PROMPT
     incorporation_prompt: str = INCORPORATION_SYSTEM_PROMPT
 
@@ -573,16 +544,10 @@ def accumulate_streaming_response(response) -> str:
     return full_content.strip()
 
 
-def get_clean_markdown_function():
-    """Get the markdown cleaning function."""
-    return clean_markdown
-
-
 # Export key functions and classes for easy importing
 __all__ = [
     "config",
     "get_redaction_function",
-    "get_clean_markdown_function",
     "get_data_files",
     "get_most_recent_file",
     "Config",
