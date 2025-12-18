@@ -115,16 +115,10 @@ def load_dataset_context() -> str:
     return combined_context
 
 
-# Initialize LLM client using config methods
-llm_client = None
-llm_model = None
-
-if config.api.LLM_PROVIDER == "openai":
-    llm_client, llm_model = config.api.create_openai_client_async()
-elif config.api.LLM_PROVIDER == "xai":
-    llm_client, llm_model = config.api.create_xai_client_async()
-elif config.api.LLM_PROVIDER == "anthropic":
-    llm_client, llm_model = config.api.create_anthropic_client_async()
+# Initialize LLM client using unified factory
+llm_client: Any
+llm_model: str
+llm_client, llm_model = config.api.create_client(async_mode=True)
 
 async def call_llm(prompt: str, **kwargs) -> str:
     """
@@ -197,7 +191,7 @@ async def call_human_model(prompt: str) -> str:
     Call human model for feedback using config client.
     """
     try:
-        client, model_name = config.api.create_songbird_client()
+        client, model_name = config.api.create_client(provider="songbird")
         print(f"🤖 Calling human model: {model_name}")
 
         response = client.chat.completions.create(

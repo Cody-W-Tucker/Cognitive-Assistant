@@ -7,13 +7,13 @@ the Layer scripts to eliminate duplication and enable easier maintenance.
 
 Usage:
     from config import config
-    api_key = config.api.OPENAI_API_KEY
+    client, model = config.api.create_client()
     prompt = config.prompts.initial_template
 """
 
 import os
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import List, Optional, Any
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
@@ -160,135 +160,118 @@ Generate concise, actionable incorporation instructions based on this analysis.
 @dataclass
 class APIConfig:
     """API and LLM configuration settings."""
-    # OpenAI Configuration
-    OPENAI_API_KEY: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    OPENAI_MODEL: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5"))
-    OPENAI_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("OPENAI_CONTEXT_WINDOW", "400000")))  # GPT-5: 400k total
-    OPENAI_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("OPENAI_MAX_OUTPUT", "128000")))  # GPT-5: 128k output
-
-    # xAI Configuration
-    XAI_API_KEY: str = field(default_factory=lambda: os.getenv("XAI_API_KEY", ""))
-    XAI_BASE_URL: str = "https://api.x.ai/v1"
-    XAI_MODEL: str = field(default_factory=lambda: os.getenv("XAI_MODEL", "grok-4-fast"))
-    XAI_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("XAI_CONTEXT_WINDOW", "2000000")))  # Grok-4-fast: 2m total
-    XAI_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("XAI_MAX_OUTPUT", "30000")))  # Grok-4-fast: 30k output
-
-    # Anthropic Configuration
-    ANTHROPIC_API_KEY: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
-    ANTHROPIC_MODEL: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"))
-    ANTHROPIC_CONTEXT_WINDOW: int = field(default_factory=lambda: int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")))  # Claude-4.5: 200k total
-    ANTHROPIC_MAX_OUTPUT: int = field(default_factory=lambda: int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")))  # Claude-4.5: 64k output
-
-    # Open Web UI / Songbird Configuration
-    OPEN_WEBUI_API_KEY: str = field(default_factory=lambda: os.getenv("OPEN_WEBUI_API_KEY", ""))
-    OPEN_WEBUI_BASE_URL: str = "https://ai.homehub.tv/api"
-
-    # Qdrant Configuration
-    QDRANT_URL: str = field(default_factory=lambda: os.getenv("QDRANT_URL", "http://localhost:6333"))
-
-    # Ollama Configuration
-    OLLAMA_EMBEDDING_MODEL: str = field(default_factory=lambda: os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest"))
 
     # LLM Provider selection
-    LLM_PROVIDER: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "xai"))  # Options: openai, xai, anthropic
-
-    # LLM Model parameters
+    LLM_PROVIDER: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "xai"))
     TEMPERATURE: float = 1.0
+
+    # Unified Provider Metadata
+    PROVIDERS = {
+        "openai": {
+            "api_key": os.getenv("OPENAI_API_KEY", ""),
+            "model": os.getenv("OPENAI_MODEL", "gpt-5"),
+            "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "400000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("OPENAI_MAX_OUTPUT", "128000")),
+        },
+        "xai": {
+            "api_key": os.getenv("XAI_API_KEY", ""),
+            "model": os.getenv("XAI_MODEL", "grok-4-fast"),
+            "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2000000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "30000")),
+            "base_url": "https://api.x.ai/v1",
+        },
+        "anthropic": {
+            "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"),
+            "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")),
+        },
+        "songbird": {
+            "api_key": os.getenv("OPEN_WEBUI_API_KEY", ""),
+            "base_url": "https://ai.homehub.tv/api",
+            "model": "songbird",
+            "MAX_TOKENS": 128000,
+            "MAX_COMPLETION_TOKENS": 4096,
+        },
+    }
+
+    # Other API settings
+    QDRANT_URL: str = field(
+        default_factory=lambda: os.getenv("QDRANT_URL", "http://localhost:6333")
+    )
+    OLLAMA_EMBEDDING_MODEL: str = field(
+        default_factory=lambda: os.getenv(
+            "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest"
+        )
+    )
 
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
         """Get max output tokens for the current LLM provider."""
-        if self.LLM_PROVIDER == "openai":
-            return self.OPENAI_MAX_OUTPUT
-        elif self.LLM_PROVIDER == "xai":
-            return self.XAI_MAX_OUTPUT
-        elif self.LLM_PROVIDER == "anthropic":
-            return self.ANTHROPIC_MAX_OUTPUT
-        else:
-            return 3000  # fallback
+        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_COMPLETION_TOKENS", 3000)
 
     @property
     def MAX_TOKENS(self) -> int:
         """Get context window for the current LLM provider."""
-        if self.LLM_PROVIDER == "openai":
-            return self.OPENAI_CONTEXT_WINDOW
-        elif self.LLM_PROVIDER == "xai":
-            return self.XAI_CONTEXT_WINDOW
-        elif self.LLM_PROVIDER == "anthropic":
-            return self.ANTHROPIC_CONTEXT_WINDOW
-        else:
-            return 50000  # fallback
+        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_TOKENS", 50000)
 
-    def get_model_name(self) -> str:
-        """Get the model name for the current LLM provider."""
-        if self.LLM_PROVIDER == "openai":
-            return self.OPENAI_MODEL
-        elif self.LLM_PROVIDER == "xai":
-            return self.XAI_MODEL
-        elif self.LLM_PROVIDER == "anthropic":
-            return self.ANTHROPIC_MODEL
-        else:
-            return "unknown-model"
+    def create_client(self, provider: Optional[str] = None, async_mode: bool = False) -> tuple[Any, str]:
+        """Unified client factory with error catching."""
+        provider = provider or self.LLM_PROVIDER
+        config = self.PROVIDERS.get(provider)
 
-    def create_songbird_client(self):
-        """Create and return an OpenAI client configured for Songbird/Open Web UI."""
+        if not config:
+            raise ValueError(f"Unsupported provider: {provider}")
+
         try:
-            from openai import OpenAI
+            if provider in ["openai", "xai", "songbird"]:
+                from openai import AsyncOpenAI, OpenAI
 
-            client = OpenAI(
-                api_key=self.OPEN_WEBUI_API_KEY,
-                base_url=self.OPEN_WEBUI_BASE_URL
+                client_cls = AsyncOpenAI if async_mode else OpenAI
+                client = client_cls(
+                    api_key=config["api_key"], base_url=config.get("base_url")
+                )
+
+                # Special handling for songbird model discovery (sync only)
+                if provider == "songbird" and not async_mode:
+                    try:
+                        models = client.models.list()
+                        data = getattr(models, "data", [])
+                        available = [m.id for m in data]
+                        model = (
+                            "songbird"
+                            if "songbird" in available
+                            else (available[0] if available else "unknown")
+                        )
+                        return client, model
+                    except Exception:
+                        return client, "songbird"
+
+                return client, str(config["model"])
+
+            elif provider == "anthropic":
+                from anthropic import Anthropic, AsyncAnthropic
+
+                client_cls = AsyncAnthropic if async_mode else Anthropic
+                return client_cls(api_key=config["api_key"]), str(config["model"])
+            
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        except ImportError:
+            pkg = "anthropic" if provider == "anthropic" else "openai"
+            raise ImportError(
+                f"{pkg.capitalize()} package not installed. Run: pip install {pkg}"
             )
-
-            # Test connection and get available models
-            models = client.models.list()
-            available_models = [m.id for m in models.data]
-
-            if "songbird" in available_models:
-                selected_model = "songbird"
-            elif available_models:
-                selected_model = available_models[0]
-                print(f"⚠️ Songbird model not found, using: {selected_model}")
-            else:
-                raise ValueError("No models available")
-
-            return client, selected_model
-
-        except ImportError:
-            raise ImportError("OpenAI package not installed. Install with: pip install openai")
-        except Exception as e:
-            if "401" in str(e):
-                raise ValueError("Authentication failed. Check OPEN_WEBUI_API_KEY in your .env file")
-            raise
-
-    def create_anthropic_client(self):
-        """Create and return an Anthropic client."""
-        try:
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=self.ANTHROPIC_API_KEY)
-            return client, self.ANTHROPIC_MODEL
-
-        except ImportError:
-            raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
         except Exception as e:
             if "401" in str(e) or "invalid" in str(e).lower():
-                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
-            raise
-
-    def create_openai_client_async(self):
-        """Create and return async OpenAI client."""
-        try:
-            from openai import AsyncOpenAI
-
-            client = AsyncOpenAI(api_key=self.OPENAI_API_KEY)
-            return client, self.OPENAI_MODEL
-
-        except ImportError:
-            raise ImportError("OpenAI package not installed. Install with: pip install openai")
-        except Exception as e:
-            if "401" in str(e) or "invalid" in str(e).lower():
-                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
+                env_key = (
+                    "OPEN_WEBUI_API_KEY"
+                    if provider == "songbird"
+                    else f"{provider.upper()}_API_KEY"
+                )
+                raise ValueError(
+                    f"Authentication failed. Check {env_key} in your .env file"
+                )
             raise
 
     def create_qdrant_client(self):
@@ -296,50 +279,22 @@ class APIConfig:
         try:
             from qdrant_client import QdrantClient
 
-            url_parts = self.QDRANT_URL.replace("http://", "").replace("https://", "").split(":")
+            url_parts = (
+                self.QDRANT_URL.replace("http://", "")
+                .replace("https://", "")
+                .split(":")
+            )
             host = url_parts[0]
             port = int(url_parts[1]) if len(url_parts) > 1 else 6333
 
-            client = QdrantClient(host=host, port=port)
-            return client
+            return QdrantClient(host=host, port=port)
 
         except ImportError:
-            raise ImportError("qdrant-client package not installed. Install with: pip install qdrant-client")
+            raise ImportError(
+                "qdrant-client package not installed. Install with: pip install qdrant-client"
+            )
         except Exception as e:
             raise ValueError(f"Failed to connect to Qdrant at {self.QDRANT_URL}: {e}")
-
-    def create_xai_client_async(self):
-        """Create and return async xAI client."""
-        try:
-            from openai import AsyncOpenAI
-
-            client = AsyncOpenAI(
-                api_key=self.XAI_API_KEY,
-                base_url=self.XAI_BASE_URL
-            )
-            return client, self.XAI_MODEL
-
-        except ImportError:
-            raise ImportError("OpenAI package not installed. Install with: pip install openai")
-        except Exception as e:
-            if "401" in str(e) or "invalid" in str(e).lower():
-                raise ValueError("Authentication failed. Check XAI_API_KEY in your .env file")
-            raise
-
-    def create_anthropic_client_async(self):
-        """Create and return async Anthropic client."""
-        try:
-            from anthropic import AsyncAnthropic
-
-            client = AsyncAnthropic(api_key=self.ANTHROPIC_API_KEY)
-            return client, self.ANTHROPIC_MODEL
-
-        except ImportError:
-            raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
-        except Exception as e:
-            if "401" in str(e) or "invalid" in str(e).lower():
-                raise ValueError("Authentication failed. Check ANTHROPIC_API_KEY in your .env file")
-            raise
 
 
 class PathConfig:
@@ -362,25 +317,19 @@ class PathConfig:
 
         paths = {
             # Private datasets and collected information
-            'DATA_DIR': "data",
-
+            "DATA_DIR": "data",
             # Public results of processing
-            'OUTPUT_DIR': "Existential Layer/output",
-
+            "OUTPUT_DIR": "Existential Layer/output",
             # Reusable prompt components
-            'PROMPTS_DIR': "Existential Layer/prompts",
-
+            "PROMPTS_DIR": "Existential Layer/prompts",
             # Individual prompt components
-            'PROMPT_PARTS_DIR': "Existential Layer/prompts/parts",
-
+            "PROMPT_PARTS_DIR": "Existential Layer/prompts/parts",
             # The actual system prompt used
-            'ASSISTANT_PROMPTS_DIR': "Existential Layer/prompts/parts/assistant",
-
+            "ASSISTANT_PROMPTS_DIR": "Existential Layer/prompts/parts/assistant",
             # How to use external tools
-            'TOOLS_PROMPTS_DIR': "Existential Layer/prompts/parts/tools",
-
+            "TOOLS_PROMPTS_DIR": "Existential Layer/prompts/parts/tools",
             # User interview questions
-            'QUESTIONS_CSV': "Existential Layer/questions.csv",
+            "QUESTIONS_CSV": "Existential Layer/questions.csv",
         }
 
         # Build all paths automatically
@@ -403,7 +352,7 @@ class PathConfig:
         directories = [
             getattr(self, attr_name)
             for attr_name in dir(self)
-            if attr_name.endswith('_DIR') and not attr_name.startswith('_')
+            if attr_name.endswith("_DIR") and not attr_name.startswith("_")
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
@@ -412,44 +361,62 @@ class PathConfig:
 @dataclass
 class CSVConfig:
     """CSV parsing and processing configuration."""
+
     DELIMITER: str = ","
     QUOTECHAR: str = '"'
-    FIELDNAMES: List[str] = field(default_factory=lambda: [
-        "Category", "Goal", "Element", "Question 1", "Question 2", "Question 3",
-        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3",
-        "AI_Answer 1", "AI_Answer 2", "AI_Answer 3", "Incorporation_Instruction"
-    ])
-    ANSWER_COLUMNS: List[str] = field(default_factory=lambda: [
-        "AI_Answer 1", "AI_Answer 2", "AI_Answer 3"
-    ])
-    QUESTION_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Question 1", "Question 2", "Question 3"
-    ])
-    HUMAN_ANSWER_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Human_Answer 1", "Human_Answer 2", "Human_Answer 3"
-    ])
-    INCORPORATION_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Incorporation_Instruction"
-    ])
+    FIELDNAMES: List[str] = field(
+        default_factory=lambda: [
+            "Category",
+            "Goal",
+            "Element",
+            "Question 1",
+            "Question 2",
+            "Question 3",
+            "Human_Answer 1",
+            "Human_Answer 2",
+            "Human_Answer 3",
+            "AI_Answer 1",
+            "AI_Answer 2",
+            "AI_Answer 3",
+            "Incorporation_Instruction",
+        ]
+    )
+    ANSWER_COLUMNS: List[str] = field(
+        default_factory=lambda: ["AI_Answer 1", "AI_Answer 2", "AI_Answer 3"]
+    )
+    QUESTION_COLUMNS: List[str] = field(
+        default_factory=lambda: ["Question 1", "Question 2", "Question 3"]
+    )
+    HUMAN_ANSWER_COLUMNS: List[str] = field(
+        default_factory=lambda: ["Human_Answer 1", "Human_Answer 2", "Human_Answer 3"]
+    )
+    INCORPORATION_COLUMNS: List[str] = field(
+        default_factory=lambda: ["Incorporation_Instruction"]
+    )
     # Columns used to create category keys for matching questions to answers
-    CATEGORY_KEY_COLUMNS: List[str] = field(default_factory=lambda: [
-        "Category", "Goal", "Element"
-    ])
+    CATEGORY_KEY_COLUMNS: List[str] = field(
+        default_factory=lambda: ["Category", "Goal", "Element"]
+    )
 
 
 @dataclass
 class RedactionConfig:
     """Sensitive data redaction configuration."""
-    SENSITIVE_PATTERNS: List[str] = field(default_factory=lambda: [
-        # Names (common patterns)
-        r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Full names
-    ])
+
+    SENSITIVE_PATTERNS: List[str] = field(
+        default_factory=lambda: [
+            # Names (common patterns)
+            r"\b[A-Z][a-z]+\s+[A-Z][a-z]+\b",  # Full names
+        ]
+    )
 
     def get_redaction_function(self):
         """Return a redaction function configured with the patterns."""
         import re
 
-        def redact_sensitive_data(text: str, custom_patterns: Optional[List[str]] = None) -> str:
+        def redact_sensitive_data(
+            text: str, custom_patterns: Optional[List[str]] = None
+        ) -> str:
             """
             Redact sensitive information from text using configured patterns.
 
@@ -463,7 +430,7 @@ class RedactionConfig:
 
             redacted_text = text
             for pattern in patterns:
-                redacted_text = re.sub(pattern, '[REDACTED]', redacted_text)
+                redacted_text = re.sub(pattern, "[REDACTED]", redacted_text)
 
             return redacted_text
 
@@ -473,6 +440,7 @@ class RedactionConfig:
 @dataclass
 class PromptsConfig:
     """All system prompts and LLM prompts used across scripts."""
+
     # Use the constants defined at the top of the file
     initial_template: str = INITIAL_TEMPLATE
     refine_template: str = REFINE_TEMPLATE
@@ -480,9 +448,11 @@ class PromptsConfig:
     songbird_system_prompt: str = SONGBIRD_SYSTEM_PROMPT
     incorporation_prompt: str = INCORPORATION_SYSTEM_PROMPT
 
+
 @dataclass
 class OutputConfig:
     """Output file naming and formatting configuration."""
+
     # Output file naming patterns
     SONGBIRD_OUTPUT_PATTERN: str = "questions_with_answers_songbird_{timestamp}.csv"
     HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
@@ -498,6 +468,7 @@ class OutputConfig:
 @dataclass
 class Config:
     """Main configuration class containing all settings."""
+
     api: APIConfig = field(default_factory=APIConfig)
     paths: PathConfig = field(default_factory=PathConfig)
     csv: CSVConfig = field(default_factory=CSVConfig)
@@ -514,19 +485,22 @@ class Config:
         issues = []
 
         # Check API keys based on selected provider
-        if self.api.LLM_PROVIDER == "openai":
-            if not self.api.OPENAI_API_KEY:
-                issues.append("OPENAI_API_KEY not found in environment (required for LLM_PROVIDER=openai)")
-        elif self.api.LLM_PROVIDER == "xai":
-            if not self.api.XAI_API_KEY:
-                issues.append("XAI_API_KEY not found in environment (required for LLM_PROVIDER=xai)")
-        elif self.api.LLM_PROVIDER == "anthropic":
-            if not self.api.ANTHROPIC_API_KEY:
-                issues.append("ANTHROPIC_API_KEY not found in environment (required for LLM_PROVIDER=anthropic)")
-        else:
-            issues.append(f"Invalid LLM_PROVIDER '{self.api.LLM_PROVIDER}'. Must be one of: openai, xai, anthropic")
+        provider = self.api.LLM_PROVIDER
+        config = self.api.PROVIDERS.get(provider)
 
-        if not self.api.OPEN_WEBUI_API_KEY:
+        if not config:
+            issues.append(
+                f"Invalid LLM_PROVIDER '{provider}'. Must be one of: {', '.join(self.api.PROVIDERS.keys())}"
+            )
+        else:
+            if not config.get("api_key"):
+                issues.append(
+                    f"{provider.upper()}_API_KEY not found in environment (required for LLM_PROVIDER={provider})"
+                )
+
+        # Check songbird key specifically as it's often used
+        songbird_config = self.api.PROVIDERS.get("songbird")
+        if songbird_config and not songbird_config.get("api_key"):
             issues.append("OPEN_WEBUI_API_KEY not found in environment")
 
         # Check required files
@@ -539,16 +513,19 @@ class Config:
 # Create global config instance
 config = Config()
 
+
 # Convenience functions for common operations
 def get_redaction_function():
     """Get configured redaction function."""
     return config.redaction.get_redaction_function()
+
 
 def get_data_files(pattern: str) -> List[Path]:
     """Get list of data files matching pattern."""
     if not config.paths.DATA_DIR.exists():
         return []
     return list(config.paths.DATA_DIR.glob(pattern))
+
 
 def get_most_recent_file(pattern: str) -> Path:
     """Get most recent file matching pattern."""
@@ -557,26 +534,27 @@ def get_most_recent_file(pattern: str) -> Path:
         raise FileNotFoundError(f"No files found matching pattern: {pattern}")
     return max(files, key=lambda f: f.stat().st_mtime)
 
+
 def clean_markdown(text: str) -> str:
     """Clean markdown formatting from text, converting to plain text."""
     import re
 
     # Remove header markers (# ## ###)
-    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
 
     # Remove bold/italic (**text**, *text*)
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.*?)\*", r"\1", text)
 
     # Remove list markers (-, *, +, numbered)
-    text = re.sub(r'^[-*+]\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'^\d+\.\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^[-*+]\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\d+\.\s*", "", text, flags=re.MULTILINE)
 
     # Replace newlines with spaces
-    text = text.replace('\n', ' ')
+    text = text.replace("\n", " ")
 
     # Collapse multiple spaces/tabs
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r"\s+", " ", text)
 
     return text.strip()
 
@@ -585,28 +563,33 @@ def accumulate_streaming_response(response) -> str:
     """Accumulate streaming response from OpenAI client."""
     full_content = ""
     for chunk in response:
-        if hasattr(chunk, 'choices') and chunk.choices:
-            if hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta:
-                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+        if hasattr(chunk, "choices") and chunk.choices:
+            if hasattr(chunk.choices[0], "delta") and chunk.choices[0].delta:
+                if (
+                    hasattr(chunk.choices[0].delta, "content")
+                    and chunk.choices[0].delta.content
+                ):
                     full_content += chunk.choices[0].delta.content
     return full_content.strip()
+
 
 def get_clean_markdown_function():
     """Get the markdown cleaning function."""
     return clean_markdown
 
+
 # Export key functions and classes for easy importing
 __all__ = [
-    'config',
-    'get_redaction_function',
-    'get_clean_markdown_function',
-    'get_data_files',
-    'get_most_recent_file',
-    'Config',
-    'APIConfig',
-    'PathConfig',
-    'CSVConfig',
-    'RedactionConfig',
-    'PromptsConfig',
-    'OutputConfig'
+    "config",
+    "get_redaction_function",
+    "get_clean_markdown_function",
+    "get_data_files",
+    "get_most_recent_file",
+    "Config",
+    "APIConfig",
+    "PathConfig",
+    "CSVConfig",
+    "RedactionConfig",
+    "PromptsConfig",
+    "OutputConfig",
 ]

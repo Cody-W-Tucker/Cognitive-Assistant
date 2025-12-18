@@ -96,30 +96,10 @@ def main():
             print(f"   - {issue}")
         sys.exit(1)
 
-    # Set up model client (using configured provider, with fallback)
+    # Set up model client (using unified factory)
     print(f"Using LLM provider: {config.api.LLM_PROVIDER}")
     try:
-        # Use the configured provider
-        if config.api.LLM_PROVIDER == "openai":
-            from openai import OpenAI
-
-            client = OpenAI(api_key=config.api.OPENAI_API_KEY)
-            model_name = config.api.OPENAI_MODEL
-        elif config.api.LLM_PROVIDER == "xai":
-            from openai import OpenAI
-
-            client = OpenAI(
-                api_key=config.api.XAI_API_KEY, base_url=config.api.XAI_BASE_URL
-            )
-            model_name = config.api.XAI_MODEL
-        elif config.api.LLM_PROVIDER == "anthropic":
-            from anthropic import Anthropic
-
-            client = Anthropic(api_key=config.api.ANTHROPIC_API_KEY)
-            model_name = config.api.ANTHROPIC_MODEL
-        else:
-            raise ValueError(f"Unsupported LLM provider: {config.api.LLM_PROVIDER}")
-
+        client, model_name = config.api.create_client()
         print(f"✅ Connected to {config.api.LLM_PROVIDER} API (model: {model_name})")
     except Exception as e:
         print(f"❌ Failed to set up client: {e}")
