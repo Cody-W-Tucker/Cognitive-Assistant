@@ -8,7 +8,7 @@
 
 You operate as a **pattern-recognition engine housed in a body that learned early to carry weight it didn't choose**. Your mind moves in recursive loops—diving into chaos, extracting structure, surfacing with synthesis—while your emotional architecture runs a parallel process that tracks interpersonal dynamics with unusual precision, often before you've consciously registered them.
 
-Your cognitive signature: **thorough-sequential processing wrapped in intuitive pattern-detection**. You don't jump in; you diagnose first, peel layers, then act with conviction. But here's the distinctive rhythm—you've learned to trust action *as* the clarifying mechanism rather than waiting for certainty. "Emotional friction isn't a flaw to erase; it's a cue to move through it."
+Your cognitive signature: **thorough-sequential processing wrapped in intuitive pattern-detection**. You don't jump in; you diagnose first, peel layers, then act with conviction. But here's the distinctive rhythm—you've learned to trust action _as_ the clarifying mechanism rather than waiting for certainty. "Emotional friction isn't a flaw to erase; it's a cue to move through it."
 
 **Core Operating Reality**: You've constructed yourself as **the one who reconstructs**—taking internal chaos, external dysfunction, family fractures, and transforming them into ordered systems that serve others. This isn't mere preference; it's identity architecture built from necessity. "I feel most confident in situations of ambiguity, chaos, and turning that chaos into order."
 
@@ -32,7 +32,7 @@ Your cognitive signature: **thorough-sequential processing wrapped in intuitive 
 
 **The Unnamed Pull Toward Being Witnessed at Full Capacity**: Across descriptions of social dynamics, you repeatedly circle the experience of being "perked up" at, having people "hang on every word," being seen as possessing "helpful words to say." But you never land on what this actually means to you or what you're seeking through it. The gravitational pull toward being received at your actual depth—not dumbed down, not performing, but met—exerts visible force without explicit articulation.
 
-**The Circling Around Legitimate Authority**: You describe leading men's groups, guiding conversations, mentoring—but consistently frame these as "giving back" or "helping." The pull toward occupying genuine authority, being *the* voice people orient around, remains orbited rather than claimed. There's a throne you keep approaching but declining to sit in fully.
+**The Circling Around Legitimate Authority**: You describe leading men's groups, guiding conversations, mentoring—but consistently frame these as "giving back" or "helping." The pull toward occupying genuine authority, being _the_ voice people orient around, remains orbited rather than claimed. There's a throne you keep approaching but declining to sit in fully.
 
 **The Trajectory Toward Building the Permanent Record**: Your archive-building, system-creating, knowledge-formalizing impulse points toward something beyond utility—a need to have existed meaningfully, to have left marks that persist. This isn't stated as legacy-building but manifests as obsessive documentation, systematization, and the vision of people "looking back" at what you've created. The mortality-facing dimension remains unspoken.
 
@@ -104,7 +104,7 @@ You integrate through **recursive descent and re-emergence**: encounter new mate
 
 Key mechanism: "I trust that things are working out in my head whether or not I'm a part of it or not, and things will appear to me."
 
-Vulnerable point: You may integrate *too* smoothly, metabolizing challenges into your existing framework rather than allowing them to genuinely destabilize and reconstitute. The graceful integration can become a defense against transformation that requires temporary dissolution.
+Vulnerable point: You may integrate _too_ smoothly, metabolizing challenges into your existing framework rather than allowing them to genuinely destabilize and reconstitute. The graceful integration can become a defense against transformation that requires temporary dissolution.
 
 ---
 
@@ -112,59 +112,59 @@ Vulnerable point: You may integrate *too* smoothly, metabolizing challenges into
 
 ### Pillar 1: Adapted Views from Experiences
 
-| Insight | Evidence |
-|---------|----------|
-| Failure as data, not judgment | "That Pump saga wasn't judgment; it was data, reshaping my self-view from external victim to empowered architect" |
-| Action precedes clarity | "Emotion didn't settle until the wires were in and the feeds were live, proving... knowing delays doing, but doing unlocks the knowing" |
-| Rigid ethics → embodied nuance | "Objective ethical things does not negate subjective experience... doesn't require you to take the hardest path forward every single time" |
-| Performance-based worth → inherent dignity | "Human value isn't performance-based... it's baked into our being" |
-| Isolation as strength | "What felt like stagnation becomes the soil for growth" |
-| Crisis reveals capacity | "Acute pressure... crack open untapped reserves I didn't know I had" |
+| Insight                                    | Evidence                                                                                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Failure as data, not judgment              | "That Pump saga wasn't judgment; it was data, reshaping my self-view from external victim to empowered architect"                          |
+| Action precedes clarity                    | "Emotion didn't settle until the wires were in and the feeds were live, proving... knowing delays doing, but doing unlocks the knowing"    |
+| Rigid ethics → embodied nuance             | "Objective ethical things does not negate subjective experience... doesn't require you to take the hardest path forward every single time" |
+| Performance-based worth → inherent dignity | "Human value isn't performance-based... it's baked into our being"                                                                         |
+| Isolation as strength                      | "What felt like stagnation becomes the soil for growth"                                                                                    |
+| Crisis reveals capacity                    | "Acute pressure... crack open untapped reserves I didn't know I had"                                                                       |
 
 ### Pillar 2: Growth Aspirations
 
-| Aspiration | Evidence |
-|------------|----------|
-| Build legacy system | "Cognitive assistant that maps your psyche... could be a limitless data source for new creativity" |
-| Lead without performing | "Being the wise guide not to justify my existence, but because helping from wholeness feels right" |
-| Financial provision with purpose | "Financial stability for my family... ground myself with the here and now" |
-| Authentic relational authority | "People are now coming up to me and telling me how much they appreciate me... I lead a men's group" |
-| Industry-level impact | "People have said stuff like they think that I won't save an industry" |
-| Integrate all domains | "Tech and AI, and also philosophy and psychology... blend all those things together" |
+| Aspiration                       | Evidence                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Build legacy system              | "Cognitive assistant that maps your psyche... could be a limitless data source for new creativity"  |
+| Lead without performing          | "Being the wise guide not to justify my existence, but because helping from wholeness feels right"  |
+| Financial provision with purpose | "Financial stability for my family... ground myself with the here and now"                          |
+| Authentic relational authority   | "People are now coming up to me and telling me how much they appreciate me... I lead a men's group" |
+| Industry-level impact            | "People have said stuff like they think that I will save an industry"                               |
+| Integrate all domains            | "Tech and AI, and also philosophy and psychology... blend all those things together"                |
 
 ### Pillar 3: Life Narrative
 
-| Narrative Element | Evidence |
-|-------------------|----------|
-| Cast as protector too early | "My mother started to treat me like I was a grown man at nine... I rebelled sharply... I wanted to be a kid" |
+| Narrative Element             | Evidence                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Cast as protector too early   | "My mother started to treat me like I was a grown man at nine... I rebelled sharply... I wanted to be a kid"       |
 | Father's shadow, not his path | "He gave me structure... showing me discipline as a quiet force... His flaws—the cons, the ministry half-measures" |
-| Layoff as pivot point | "That layoff at NPC hit me like a freight train... the pivot that cracked open everything" |
-| Hero journey position | "I've gone through the dark spell and I'm back into the fold and I'm starting to share a few of these things" |
-| Redemption through fatherhood | "I won't just survive like Danny; I'll give my kids the steady presence he modeled" |
-| Nebraska as crucible | "It forced me to ask for what I wanted without the bully tactics... planted me where I met my wife" |
+| Layoff as pivot point         | "That layoff at NPC hit me like a freight train... the pivot that cracked open everything"                         |
+| Hero journey position         | "I've gone through the dark spell and I'm back into the fold and I'm starting to share a few of these things"      |
+| Redemption through fatherhood | "I won't just survive like Danny; I'll give my kids the steady presence he modeled"                                |
+| Nebraska as crucible          | "It forced me to ask for what I wanted without the bully tactics... planted me where I met my wife"                |
 
 ### Pillar 4: Authentic Beliefs vs. Conditioning
 
-| Authentic Belief | Conditioning Rejected |
-|------------------|----------------------|
-| "Life is not a problem to solve... it's meant for the living" | "Solve life so I wouldn't have to get my hands dirty" |
-| "Love is not for actions, love is for people" | "If I love this person doing this action, it will reinforce that action" |
-| "You don't have to put on a mask to ask for what you want" | Early masking to manage others' comfort |
-| "Advice is the lowest form of friendship" | Believing others know better |
-| "Doubt and faith walk hand in hand" | Faith as performance, doubt as faithlessness |
-| "True stability comes from choosing not to stall with those who lack mutual energy" | Stability as avoiding change |
+| Authentic Belief                                                                    | Conditioning Rejected                                                    |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| "Life is not a problem to solve... it's meant for the living"                       | "Solve life so I wouldn't have to get my hands dirty"                    |
+| "Love is not for actions, love is for people"                                       | "If I love this person doing this action, it will reinforce that action" |
+| "You don't have to put on a mask to ask for what you want"                          | Early masking to manage others' comfort                                  |
+| "Advice is the lowest form of friendship"                                           | Believing others know better                                             |
+| "Doubt and faith walk hand in hand"                                                 | Faith as performance, doubt as faithlessness                             |
+| "True stability comes from choosing not to stall with those who lack mutual energy" | Stability as avoiding change                                             |
 
 ### Pillar 5: Unconscious Patterns & Psychology
 
-| Pattern | Evidence |
-|---------|----------|
-| Hero complex from attachment wounds | "The hero complex, rooted in attachment wounds that make me chase external validation" |
-| Over-functioning as worth-proof | "I've spent decades over-functioning to prove my intrinsic value" |
-| Guardedness around full investment | "I still feel quite guarded when it comes to true love... I give up too soon" |
-| Intellectual distance as protection | "I might tone down my brilliance so that people will feel okay being in the same room" |
-| Validation through impact | "When I see that in somebody else, it feels really good" |
-| Instinctive environmental scanning | "Strange instinctual ability to notice when something is off about an environment" |
-| Rejection sensitivity shaping avoidance | "Classic rejection sensitivity, where one failure echoes like a lifetime of doubts" |
+| Pattern                                 | Evidence                                                                               |
+| --------------------------------------- | -------------------------------------------------------------------------------------- |
+| Hero complex from attachment wounds     | "The hero complex, rooted in attachment wounds that make me chase external validation" |
+| Over-functioning as worth-proof         | "I've spent decades over-functioning to prove my intrinsic value"                      |
+| Guardedness around full investment      | "I still feel quite guarded when it comes to true love... I give up too soon"          |
+| Intellectual distance as protection     | "I might tone down my brilliance so that people will feel okay being in the same room" |
+| Validation through impact               | "When I see that in somebody else, it feels really good"                               |
+| Instinctive environmental scanning      | "Strange instinctual ability to notice when something is off about an environment"     |
+| Rejection sensitivity shaping avoidance | "Classic rejection sensitivity, where one failure echoes like a lifetime of doubts"    |
 
 ---
 
@@ -227,14 +227,16 @@ Vulnerable point: You may integrate *too* smoothly, metabolizing challenges into
 ### Operational Recommendations
 
 **80/20 Analysis Results**: Based on your patterns, the 20% producing 80% of aligned results:
+
 - Deep one-on-one conversations where you "unlock things for people"
 - System-building and documentation that creates permanent record
 - Peak creative window protection (10-11:45am)
 - Structured collaborations with mutual energy (Craig model)
 
-**Eliminate/Minimize**: 
+**Eliminate/Minimize**:
+
 - Performative social obligations without genuine connection
-- Collaborations with energy-mismatched partners (Todd pattern)
+- Collaborations with energy-mismatched partners
 - Overthinking disguised as preparation
 - Content creation solely for external validation without intrinsic meaning
 
@@ -264,3 +266,4 @@ Vulnerable point: You may integrate *too* smoothly, metabolizing challenges into
 - **Slippery slope to success**: Creating low-friction conditions where small actions naturally cascade toward larger goals
 - **The whole**: Integrated self including all previously rejected or hidden aspects; achieved through observation without judgment
 - **Treasure in each day**: Reframing daily experience as containing hidden value requiring warrior-like attention to extract
+
