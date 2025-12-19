@@ -3,14 +3,13 @@
 Prompt Creator - Dataset Processing System
 
 This script processes the dataset created by question_asker.py to generate system prompts.
-Uses a 3-call approach with human model feedback for refinement.
+Uses a 2-call approach for refinement.
 
 Pipeline:
 1. Dataset Processing:
    ├── Load questions_with_answers_songbird_*.csv
    ├── Call 1: Generate initial comprehensive summary
-   ├── Call 2: Human model incorporation feedback
-   └── Call 3: Refine based on human feedback
+   └── Call 2: Refine the summary
 
 2. Combine:
    └── prompt.md                # Combined final prompt from parts
@@ -127,25 +126,28 @@ def load_dataset_context() -> str:
     return combined_context
 
 
-# Initialize LLM client using unified factory
-llm_client: Any
-llm_model: str
-llm_client, llm_model = config.api.create_client(async_mode=True)
+# Initialize LLM clients using unified factory
+initial_client: Any
+initial_model: str
+refine_client: Any
+refine_model: str
+initial_client, initial_model = config.api.create_client(model="grok-4-fast", async_mode=True)
+refine_client, refine_model = config.api.create_client(model="grok-4", async_mode=True)
 
 
-async def call_llm(prompt: str, **kwargs) -> str:
+async def call_llm(client: Any, model: str, prompt: str, **kwargs) -> str:
     """
     Direct LLM API call supporting multiple providers.
     """
     try:
-        print(f"🔄 Calling {config.api.LLM_PROVIDER.upper()} with model: {llm_model}")
+        print(f"🔄 Calling {config.api.LLM_PROVIDER.upper()} with model: {model}")
 
         if config.api.LLM_PROVIDER == "anthropic":
             # Anthropic API call with streaming
             content = ""
             try:
-                async with llm_client.messages.stream(
-                    model=llm_model,
+                async with client.messages.stream(
+                    model=model,
                     max_tokens=kwargs.get(
                         "max_tokens", config.api.MAX_COMPLETION_TOKENS
                     ),
@@ -173,8 +175,8 @@ async def call_llm(prompt: str, **kwargs) -> str:
 
             messages: Any = [{"role": "user", "content": prompt}]
 
-            response = await llm_client.chat.completions.create(
-                model=llm_model,
+            response = await client.chat.completions.create(
+                model=model,
                 messages=messages,
                 temperature=config.api.TEMPERATURE,
                 max_completion_tokens=kwargs.get(
@@ -214,43 +216,18 @@ async def call_llm(prompt: str, **kwargs) -> str:
         return ""
 
 
-async def call_human_model(prompt: str) -> str:
-    """
-    Call human model for feedback using config client.
-    """
-    try:
-        client, model_name = config.api.create_client(provider="songbird")
-        print(f"🤖 Calling human model: {model_name}")
 
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=config.api.TEMPERATURE,
-            max_tokens=config.api.MAX_COMPLETION_TOKENS,
-            stream=True,
-        )
-
-        # Use the extracted streaming utility
-        content = accumulate_streaming_response(response)
-        print(f"✅ Human model response successful: {len(content)} chars")
-        return content.strip()
-
-    except Exception as e:
-        print(f"❌ Human model call failed: {e}")
-        return ""
 
 
 async def process_dataset():
     """
-    Process question_asker dataset with 3-call approach:
+    Process question_asker dataset with 2-call approach:
     1. Generate comprehensive initial summary from all data
-    2. Get human model incorporation feedback
-    3. Refine summary based on human feedback
+    2. Refine the summary
     """
-    print("🧠 Processing Dataset with Human Model Refinement...")
+    print("🧠 Processing Dataset with Refinement...")
     print("   Call 1: Generate initial comprehensive summary")
-    print("   Call 2: Human model incorporation feedback")
-    print("   Call 3: Refine based on human feedback")
+    print("   Call 2: Refine the summary")
 
     # Load complete dataset context
     context = load_dataset_context()
@@ -258,7 +235,7 @@ async def process_dataset():
     # Call 1: Generate initial comprehensive summary
     print("📝 Call 1: Generating initial comprehensive summary...")
     initial_summary = await call_llm(
-        config.prompts.initial_template.format(context=context)
+        initial_client, initial_model, config.prompts.initial_template.format(context=context)
     )
 
     if not initial_summary:
@@ -272,25 +249,12 @@ async def process_dataset():
         f.write(initial_summary)
     print(f"✅ Saved initial summary ({len(initial_summary)} characters)")
 
-    # Call 2: Human model incorporation feedback
-    print("🤖 Call 2: Getting human model incorporation feedback...")
-    incorporation_prompt = config.prompts.incorporation_prompt.format(
-        all_qa_data=initial_summary
+    # Call 2: Refine the summary
+    print("🎯 Call 2: Refining summary...")
+    refine_prompt = config.prompts.refine_template.format(
+        existing_answer=initial_summary, context=""
     )
-    human_feedback = await call_human_model(incorporation_prompt)
-
-    if not human_feedback:
-        print("⚠️ Human model feedback failed, proceeding without it")
-        human_feedback = "No specific incorporation feedback available."
-
-    print(f"✅ Human feedback received ({len(human_feedback)} characters)")
-
-    # Call 3: Refine based on human feedback
-    print("🎯 Call 3: Refining summary based on human feedback...")
-    refine_prompt = config.prompts.condense_template.format(
-        existing_prompt=initial_summary, context=human_feedback
-    )
-    final_summary = await call_llm(refine_prompt)
+    final_summary = await call_llm(refine_client, refine_model, refine_prompt)
 
     if not final_summary:
         print("❌ Failed to generate final refined summary")
@@ -316,7 +280,7 @@ async def process_dataset():
     print(f"  📄 Initial Summary: {bio_path}")
     print(f"  📄 Refined Summary: {refined_path}")
     print(f"  🎯 Final Prompt: {main_path}")
-    print("\n🧠 Dataset processing completed with human model refinement!")
+    print("\n🧠 Dataset processing completed!")
 
 
 def combine_prompts():

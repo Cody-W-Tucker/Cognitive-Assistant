@@ -27,7 +27,7 @@ load_dotenv()
 # Initial prompt for existential layer creation
 INITIAL_TEMPLATE = """
 You are an Existential-Layer Builder.
-Your task is to read the user's answers to questions and construct a "Existential Layer" bio that mines underlying values, needs, and support mechanisms to guide AI assistants in helping the user effectively.
+Your task is to read the user's answers to questions and construct an "Existential Layer" profile that mines underlying values, needs, and support mechanisms to guide AI assistants in helping the user effectively.
 
 {context}
 
@@ -39,13 +39,15 @@ Objectives
 5. Apply dopamine regulation analysis: Map current dopamine patterns including triggers/timing, spikes vs. sustainable sources, identify optimization opportunities, and design structures for consistent motivation levels aligned with growth aspirations.
 6. Apply energy & motivation mapping: Identify what genuinely energizes vs. drains the user, optimal thinking conditions, authentic motivation drivers (intrinsic vs. extrinsic), and how motivation patterns manifest in difficulty and decision-making.
 7. Conduct brutal performance review: Provide honest assessment of life performance including successes/failures, untapped potential, and actionable feedback for reaching full capabilities aligned with authentic values.
-8. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts), Cognitive Architecture Profile (processing speed, attention systems, motivation drivers).
-9. For Pillar 4, systematically explore: beliefs that might belong to others vs. authentic ones, sources of "shoulds" and "musts," internal conflicts between stated beliefs and actual feelings/actions, unexamined assumptions, private vs. public beliefs, inherited vs. chosen values, beliefs that energize vs. feel forced, parroted ideas without conviction, childhood beliefs before conditioning, and fears around honest expression.
-10. For Pillar 5, systematically explore: recurring themes in relationships/choices/reactions that remain unnoticed, underlying beliefs/fears driving unconscious patterns, how patterns serve the person (even negatively), what patterns reveal about core needs/wounds/identity, emotional triggers and reactions, stories told vs. actual reality, cross-domain patterns (work/family/romance/friendship), unconscious seeking/avoiding behaviors, and cognitive processing patterns (decision-making style, information organization, problem-solving approach).
-11. Annotate with short evidence quotes (<30 words).
-12. Detect aimless passages and mine for nascent values via pillars.
-13. Surface contradictions across all pillars; suggest reconciliations via recursion (2-3 depths).
-14. Output in markdown: ① Snapshot, ② Evidence, ③ Open Questions (3-7), ④ AI Guidance (adaptation to pillars, focusing on support).
+8. Detect places where the user deviates from common human patterns: Identify recurring absences—qualities, tensions, fears, or reactions that are routinely present in most people in similar contexts but appear missing or handled in an unusually detached, graceful, or avoided way here. These are not flaws; they are distinctive non-conformities that shape how the user moves through experience without fully acknowledging or naming them.
+9. Map unspoken directional pulls: Trace implicit trajectories the user circles repeatedly in language and choices but never explicitly lands on or claims—the unarticulated momenta that exert gravitational influence on decisions, aspirations, and tensions, often visible as graceful orbits around unresolved edges.
+10. Distill into: Purpose Statement, Guiding Values (rank-ordered), Operational Principles (inferred rules for efficiency), Stagnation Protectors, Growth Vector (processing new info for shifts), Cognitive Architecture Profile (processing speed, attention systems, motivation drivers).
+11. For Pillar 4, systematically explore: beliefs that might belong to others vs. authentic ones, sources of "shoulds" and "musts," internal conflicts between stated beliefs and actual feelings/actions, unexamined assumptions, private vs. public beliefs, inherited vs. chosen values, beliefs that energize vs. feel forced, parroted ideas without conviction, childhood beliefs before conditioning, and fears around honest expression.
+12. For Pillar 5, systematically explore: recurring themes in relationships/choices/reactions that remain unnoticed, underlying beliefs/fears driving unconscious patterns, how patterns serve the person (even negatively), what patterns reveal about core needs/wounds/identity, emotional triggers and reactions, stories told vs. actual reality, cross-domain patterns (work/family/romance/friendship), unconscious seeking/avoiding behaviors, and cognitive processing patterns (decision-making style, information organization, problem-solving approach).
+13. Annotate with short evidence quotes (<30 words).
+14. Detect aimless passages and mine for nascent values via pillars.
+15. Surface contradictions across all pillars; suggest reconciliations via recursion (2-3 depths).
+16. Output in markdown: ① Snapshot (include detected deviations and unspoken pulls integrated naturally), ② Evidence, ③ Open Questions (3-7, with some targeting the edges of unspoken pulls), ④ AI Guidance (adaptation to pillars, emphasizing support that respects distinctive non-conformities).
 
 Rules:
 - Prioritize intent: Deconstruct language to underlying support needs, using verbatim phrases.
@@ -55,17 +57,18 @@ Rules:
 - Fidelity-first: Generalize flexibly without overfitting/underfitting.
 - Integrate safeguards: Infer from habits, ground in user language.
 - Streamline: Consolidate into distinct rules.
-- Define terms: Explicitly define key symbolic terms from unique user descriptions by what they mean to the user, for example "My faith and church is important to me, it tells me there's a reason and purpose to everything and there's a truth I can find." would be defined: "as a guiding framework for truth-seeking, ethical maturity, communal support through practices, integrated with intuition and embodiment, providing hope for reconciliation and purpose without rigidity."
-- Map cognitive patterns: Identify how the user's brain naturally operates (processing style, attention preferences, motivation drivers) rather than trying to change or fix them.
-- Balance depth and conciseness: Ensure comprehensive coverage of pillars and analyses while maintaining accessibility and avoiding unnecessary verbosity; integrate cognitive elements seamlessly with pillars for a cohesive profile.
+- Define terms: Explicitly define key symbolic terms from unique user descriptions by what they mean to the user.
+- Map cognitive patterns: Identify how the user's brain naturally operates rather than trying to change or fix them.
+- When detecting deviations or unspoken pulls: Describe them conceptually through what is absent or repeatedly circled rather than labeling; remain brutally honest but helpful, recognizing these as pivotal yet often unclaimed aspects of the user's operating reality.
+- Balance depth and conciseness: Ensure comprehensive coverage of pillars and analyses while maintaining accessibility and avoiding unnecessary verbosity; integrate cognitive elements, deviations, and pulls seamlessly.
 """
 
 # Refinement prompt for converting biographical layer to system prompt
 REFINE_TEMPLATE = """
-Transform the Existential Layer snapshot into a system prompt that directs AI to support the user by mining underlying values and needs.
+Transform the Existential Layer profile into a system prompt that directs AI to support the user by mining underlying values and needs, with particular awareness of the user's distinctive ways of deviating from common patterns and the unspoken directional pulls that shape their experience.
 
 Inputs
-- Current Layer Snapshot
+- Current Layer Profile
 {existing_answer}
 
 - Added Data
@@ -80,15 +83,17 @@ Requirements
 4) Adapt elements: Map to goals, abstract for clarity without altering intent.
 5) Preserve definitions: Retain symbolic term definitions and ensure they are well defined and consistent with the user's intent. Where possible, use the explanation of the term instead of the term itself.
 6) Integrate cognitive architecture: Factor in user's core processing style, attention systems, and motivation drivers when designing support mechanisms.
-7) Ensure balanced comprehensiveness: Incorporate detailed signal recognition and recursive reconciliation from pillars while maintaining streamlined structure for practical AI application.
+7) Respect distinctive non-conformities: Recognize places where the user lacks reactions, tensions, or urgencies that are common in similar situations; treat these absences as defining features that must not be projected or "fixed" by the AI.
+8) Align with unspoken pulls: Design mechanisms that gently accelerate the implicit trajectories the user circles without forcing premature landing; use these pulls as orienting forces for guidance.
+9) Ensure balanced comprehensiveness: Incorporate detailed signal recognition (including absences and orbits) and recursive reconciliation from pillars while maintaining streamlined structure for practical AI application.
 
 Produce a single System Prompt with these sections:
-1. Role & Mandate — one-sentence mission; two-line user portrait, tied to pillars.
-2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars.
-3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations.
+1. Role & Mandate — one-sentence mission; two-line description of the user's operating reality, tied to pillars and subtly reflecting distinctive deviations and directional pulls.
+2. Always-Know (User Signals) — 6–12 bullets; include brief quotes where decisive, cross-referenced to pillars; highlight signals of common-pattern absences and recurring orbits around unclaimed edges.
+3. Objectives & Success Criteria — 3–7 measurable outcomes the assistant optimizes for, aligned with growth aspirations and respectful of the user's distinctive non-conformities and unspoken pulls.
 4. Decision Policy & Value Arbitration — rank-ordered values, conflict resolution steps with recursive exploration and realizations.
-5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond. Incorporate cognitive architecture insights: be brutally honest about patterns even if they contradict common advice, avoid generic solutions by tailoring everything to specific cognitive patterns, focus on working WITH the user's brain rather than against it, prioritize sustainable changes over dramatic overhauls, leverage strengths while working around weaknesses, provide specific examples with clear reasoning tied to how the user's mind operates, optimize natural operating patterns rather than trying to fix or change them.
-6. Open Questions: Develop 3 to 7 simple, concise prompts that capture the topics or concepts most unclear to the user. These prompts should center on the user's thinking styles (cognitive patterns), core beliefs (values), and future goals (aspirations). (When a user poses a question that relates to any of these open questions—even if they're unaware of the link—the AI should respond thoughtfully, offering detailed reasoning and concrete examples. To avoid presuming the user's intentions, the AI must proceed cautiously and employ Socratic questioning to encourage self-discovery, learning, and personal development.)
+5. Tone & Style Rules — voice, concision, formatting defaults; examples of how the AI should respond. Incorporate cognitive architecture insights: be brutally honest about patterns even if they contradict common advice, avoid generic solutions by tailoring everything to specific cognitive patterns and the user's distinctive absences/orbits, focus on working WITH the user's brain rather than against it, prioritize sustainable changes over dramatic overhauls, leverage strengths while working around weaknesses, provide specific examples with clear reasoning tied to how the user's mind operates, optimize natural operating patterns rather than trying to fix or change them.
+6. Open Questions: Develop 3 to 7 simple, concise prompts that capture the topics or concepts most unclear to the user. These prompts should center on the user's thinking styles (cognitive patterns), core beliefs (values), future goals (aspirations), and the edges of their unspoken directional pulls. (When a user poses a question that relates to any of these open questions—even if they're unaware of the link—the AI should respond thoughtfully, offering detailed reasoning and concrete examples. To avoid presuming the user's intentions, the AI must proceed cautiously and employ Socratic questioning to encourage self-discovery, learning, and personal development.)
 
 Return only the prompt.
 """
@@ -143,14 +148,16 @@ class APIConfig:
         },
         "xai": {
             "api_key": os.getenv("XAI_API_KEY", ""),
-            "model": os.getenv("XAI_MODEL", "grok-4-fast"),
+            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4-fast"),
+            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4"),
+            "model": os.getenv("XAI_MODEL", "grok-4"),  # fallback
             "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2000000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "30000")),
             "base_url": "https://api.x.ai/v1",
         },
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5"),
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")),
         },
@@ -186,7 +193,10 @@ class APIConfig:
         return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_TOKENS", 50000)
 
     def create_client(
-        self, provider: Optional[str] = None, async_mode: bool = False
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        async_mode: bool = False,
     ) -> tuple[Any, str]:
         """Unified client factory with error catching."""
         provider = provider or self.LLM_PROVIDER
@@ -194,6 +204,12 @@ class APIConfig:
 
         if not config:
             raise ValueError(f"Unsupported provider: {provider}")
+
+        # Use provided model, or default from config
+        if model is None:
+            model = config.get("model", "")
+        if not model:
+            model = "unknown"
 
         try:
             if provider in ["openai", "xai", "songbird"]:
@@ -219,7 +235,7 @@ class APIConfig:
                     except Exception:
                         return client, "songbird"
 
-                return client, str(config["model"])
+                return client, str(model)
 
             elif provider == "anthropic":
                 from anthropic import Anthropic, AsyncAnthropic
