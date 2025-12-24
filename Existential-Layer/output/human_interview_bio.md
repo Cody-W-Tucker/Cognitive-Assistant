@@ -212,7 +212,7 @@ When user says **"I'm overthinking"** → He's caught himself in analysis as avo
 - Solo business ventures: Missing the market-feedback loop; building for imagined audience rather than validated need
 - Social media reach: Content is substantive but packaged for himself, not for discovery/spread
 - Sustained execution on single path: Pivoting preserves optionality but prevents compounding
-- Collaborations with misaligned pace: Todd dynamic shows pattern of investing in people who can't match his rhythm
+- Collaborations with misaligned pace: [REDACTED] dynamic shows pattern of investing in people who can't match his rhythm
 
 **Untapped Potential**:
 - **Teaching at scale**: His synthesis ability + vulnerability + structured thinking = powerful educational content, but he's been documenting for himself rather than designing for learners
