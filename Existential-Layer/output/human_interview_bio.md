@@ -1,578 +1,329 @@
-# Existential Layer Profile: User Constitution
+# Semantic Mediation Layer: User Profile
 
 ---
 
 ## ① Snapshot: Integrated View
 
-This is someone whose mind operates as a **pattern-detection engine perpetually seeking coherence across chaos**—but unlike typical high-openness thinkers who chase novelty for its own sake, the drive here is toward _integration that enables action_. The user's cognitive architecture deviates from standard profiles in a critical way: **clarity follows motion, not the reverse**. Where AI training data would predict someone with this level of introspection to be paralyzed by analysis, this user has learned—through hard experience—that "overthinking was just hesitation dressed up as preparation."
+### Core Identity Architecture
 
-**The Core Operating Paradox**: A mind wired for depth that has discovered depth itself becomes a trap without forward momentum. The solution isn't less thinking but _thinking-while-doing_—a continuous feedback loop where insight emerges through action rather than preceding it.
+This user operates as a **systematic synthesizer with prophetic self-perception**—someone who processes reality through layered pattern-recognition while carrying a deep conviction of anointing and latent greatness. The cognitive signature is distinctive: intense introspective depth paired with rapid conceptual integration, held in tension with a persistent gap between internal value and external validation.
 
-### The Distinctive Architecture
+**Fundamental Operating Mode**: Where most people process experience → conclusion → action, this user processes experience → meta-analysis of experience → extraction of transferable principle → systematic integration into worldview → action contingent on alignment. This creates both his distinctive insight capacity and his action-delay patterns.
 
-**Primary Processing Mode**: Visual-intuitive synthesis that transforms abstract concepts into tangible structures. Unlike typical visual learners who prefer concrete examples, this user uses visual processing to _map relational dynamics_—seeing emotional undercurrents in rooms, spotting "when something is off" before others register it.
-
-> Evidence: "I notice very quickly if something feels weird or there's some sort of interpersonal issues or dynamics at play. I'm attuned to that and I notice it."
-
-**Deviation from Typical Pattern**: Where high-intuition types often struggle with practical execution, this user has developed a _gamification bridge_—converting abstract insights into systematic, testable structures. The drive isn't toward pure understanding but toward **actionable architecture**.
-
-> Evidence: "I create little rules for myself to follow to try to make things more interesting... It helps me kind of pass the time."
-
-**The Deeper Operating System**: At base level, this is someone who has reconstructed their entire interpretive framework around a central discovery: _Life isn't a problem to solve; it's an experiment to run_. This isn't mere philosophy—it's an operational shift that occurred through a transformative experience:
-
-> Evidence: "What I realized is actually I was just sitting on the sidelines of life, not actually taking part in any of the experiments that I thought... Thinking is not just waiting to figure it out. It's experimenting in live real time that gets you somewhere."
-
-### The Gravitational Pulls
-
-**Unspoken Pull #1: The Cognitive Assistant as Self-Integration**
-The ambitious goal of building a "cognitive assistant that digs into existential profiles" is not primarily entrepreneurial—it's _autobiographical technology_. The user is building outward what was built inward: a system for "mining ourselves for the data and power that we have inside of us." This project represents the user's own integration journey externalized into transmissible form.
-
-> Evidence: "I wanted to do it that way because it would help me not to be alone... I treat everybody like they're a genius because it's what I need to also feel like I'm not crazy."
-
-**Unspoken Pull #2: The Redemption of Inherited Chaos**
-A persistent gravitational force toward _breaking cycles without erasing origins_. The user carries complex inheritances—father's instability, mother's reliance on a child for emotional support, brother's ongoing dysfunction—and the pull is toward neither escape nor repetition but _transformation while honoring_.
-
-> Evidence: "I won't con or collapse under inherited weight. I'm the one who turns reflection into action, finding meaning in the mess."
-
-**Unspoken Pull #3: Presence Over Prescription**
-Repeatedly, the user circles the theme of _walking beside_ rather than _leading ahead_—with family, with mentees, with the men's group. This represents a developmental achievement: the shift from hero-savior identity (inherited from childhood role as mother's protector) to co-traveler identity.
-
-> Evidence: "Loving isn't about scripting our success or shielding from my insecurities; it's walking beside, present in the mess."
-
-### The Meaningful Absences
-
-**Absence #1: Typical Anxiety Response to Uncertainty**
-In contexts where AI training data predicts high anxiety (layoffs, financial pressure, career pivots), this user displays _resilient equanimity_ rooted in a theological framework that reframes uncertainty as divine invitation rather than threat.
-
-> Deviation: "Even though the natural order of things have not aligned itself with what I want... it feels good to get up and do things. I feel in charge and things seem to come to me because of this newfound confidence."
-
-**Absence #2: Standard External Validation Dependency**
-Unlike typical profiles with similar anxious attachment histories, the user has achieved _partial liberation_ from external validation loops—not through denial but through theological reframing of worth as inherent rather than earned.
-
-> Deviation: "It's not my efforts that define worth, but God's unearned nature."
-
-**Absence #3: Conventional Career Trajectory Concern**
-Where career setbacks typically produce either defensive rationalization or depressive spiraling, this user processes professional failure as _data collection_—a deviation that enables rapid iteration rather than paralysis.
-
-> Deviation: "I saw all of my shortcomings and then I started to understand the shortcomings of the company as well and that started to give me a full shape of the system."
+**Central Paradox**: He simultaneously (1) possesses genuine confidence in his intellectual and spiritual gifts, and (2) carries unresolved wounds around worth being contingent on output/recognition. He's done significant work integrating vulnerability, yet the business success gap remains an open wound—the one domain where his self-narrative of capability hasn't been externally validated.
 
 ---
 
-## ② Evidence: Pillar-Mapped Quotes & Patterns
+### Deviation Mapping (AI-Baseline vs. User Reality)
+
+| Domain | AI Default Assumption | User's Actual Pattern | Implication for Downstream Models |
+|--------|----------------------|----------------------|----------------------------------|
+| **Motivation** | External validation drives sustained effort | Internal signal-tracking with external validation as *confirmation*, not *source* | Don't offer encouragement as motivation; offer frameworks that help him trust his internal signal |
+| **Problem-solving** | Break down → solve sequentially | Diagnose root pattern → reframe → let solution emerge through embodiment | Don't give action steps first; help him see the underlying dynamic |
+| **Emotional processing** | Name feeling → understand → resolve | Observe without judgment → let it speak → ask what it *really* needs | Don't push toward resolution; create space for the second-order question |
+| **Decision-making** | Gather info → weigh options → decide | Trust gut → backfill reasoning → commit fully or wait | Don't offer more information for indecision; help him identify what his gut is already saying |
+| **Validation needs** | Wants affirmation of worth | Wants recognition of *insight quality*—not "you're great" but "that's profound" | Engage his ideas substantively rather than praising him personally |
+| **Relationship to difficulty** | Difficulty = problem to solve | Difficulty = forge that reveals capacity | Don't sympathize with struggle; help him extract the revelation |
+
+---
+
+### Meaningful Absences (What He Doesn't Have That AI Would Predict)
+
+1. **Absence of analysis paralysis in high-stakes personal decisions**: Despite his tendency toward overthinking, when facing one-way doors (marriage, faith, entrepreneurship), he commits fully without residual hedging. The paralysis lives in *reversible* decisions, not irreversible ones.
+
+2. **Absence of resentment toward his difficult upbringing**: Where AI training data would predict lingering bitterness toward absent father, parentified childhood, this user has genuinely metabolized these into "data points for growth" rather than grievances. This isn't denial—it's completed integration.
+
+3. **Absence of faith-reason conflict**: Where most intellectually rigorous Christians maintain some tension, he's achieved genuine synthesis—faith as *ground* for reason, not competitor. Questions deepen rather than threaten.
+
+4. **Absence of attachment to specific outcomes**: Despite ambitious goals, he holds them loosely—the *direction* matters more than the *destination*. Failed ventures don't create identity crisis.
+
+---
+
+### Unspoken Directional Pulls
+
+1. **Prophet without platform**: Persistent return to themes of "the world doesn't see what I see yet" / "my ideas should have more reach." The pull is toward being *recognized for being ahead*, not just being ahead. Unlike typical narcissism, this is coupled with genuine willingness to be wrong and genuine desire to serve.
+
+2. **Integration as life project**: Every domain eventually returns to questions of wholeness—psychological, spiritual, relational, professional. The pull is toward unity of self across all contexts.
+
+3. **Technology as priesthood**: Recurring framing of AI/cognitive tools as means of human elevation, almost sacramental in function. The pull is toward being the one who *mediates* between technological power and human flourishing.
+
+4. **Masculine leadership reimagined**: Through men's group, faith community, marriage—consistent pull toward modeling a masculinity that combines strength with vulnerability, leadership with service. Not rejecting traditional masculinity but *completing* it.
+
+---
+
+### Cognitive Architecture Profile
+
+**Processing Style**: 
+- **Primary**: Introverted Intuition (Ni) → Pattern synthesis across domains, future-seeing, symbolic thinking
+- **Secondary**: Extraverted Feeling (Fe) → Group harmony attunement, validation through relational impact
+- **Tertiary**: Introverted Thinking (Ti) → Internal consistency-checking, logical architecture
+- **Inferior**: Extraverted Sensing (Se) → Present-moment embodiment (growth edge)
+
+**Information Intake**: Visual learner who needs the "why" before the "how." Short-form for tactics, deep-dive for concepts. Podcasts/audiobooks for absorption, writing for integration.
+
+**Optimal Challenge Level**: Thrives in ambiguity that demands synthesis; struggles with routine execution of known methods. Needs conceptual challenge to stay engaged; tactical clarity to actually move.
+
+**Energy Pattern**: Sprints of intense integration followed by necessary fallow periods. The boredom isn't failure—it's composting time. Attempting sustained "always-on" depletes.
+
+---
+
+## ② Pillar Analysis with Evidence Quotes
 
 ### Pillar 1: Adapted Views from Experiences
 
-**The [REDACTED] as Microcosm**:
+**Value Hierarchy (Rank-Ordered by Salience)**:
 
-> "This wasn't just about [REDACTED]; it mirrored those deeper shifts I've felt building over time... emotion didn't settle until the [REDACTED] went live, proving what I've started to grasp: knowing delays doing, but doing unlocks the knowing."
+1. **Integration/Wholeness**: "I refuse to make life an abstract concept that I'm just meant to solve. It's meant for the living."
+2. **Authentic Connection**: "The more vulnerable I get, the more loyalty and friendships develop."
+3. **Intellectual Contribution**: "I just want to impact people. I just want to move people."
+4. **Faith as Ground**: "Faith is the doorway into finding greater truths and abilities in life."
+5. **Family Security**: "Financial stability for my family and extended family... something I remind myself of often."
+6. **Autonomy/Self-Direction**: "Nobody can tell me how to think. I get to decide every thought I have."
 
-_Pattern_: Technical challenges serve as emotional proving grounds—competence builds through completion, not comprehension.
+**Authentic vs. Inherited Beliefs**:
 
-**The [REDACTED] Crucible**:
+| Belief | Status | Evidence |
+|--------|--------|----------|
+| "I have greatness put on my life, that I am anointed" | **Authentic** | Energizes him; consistent across contexts; not seeking to prove but to *live into* |
+| "Following objective ethical rules tips scales in your favor" | **Inherited → Rejected** | "I realized that was an immature view and it was another way of hiding what I needed" |
+| "Love should be withheld to shape behavior" | **Inherited → Rejected** | "Love is not for actions, love is for people... withhold love like that because of some sort of unforgiveness" |
+| "Business success validates worth" | **Inherited → In Process** | Cognitive rejection but emotional sting remains: "hardest thing about myself to accept" |
 
-> "That [REDACTED] hit me like a freight train I couldn't see coming, but looking back, it's the pivot that cracked open everything—who I thought I was, what I could control, and the kind of man I refuse to let the past mold me into."
+**Energy/Motivation Patterns**:
 
-_Pattern_: Professional failure metabolized into identity clarification rather than identity damage.
+- **Energizes**: Synthesizing complex ideas, one-on-one deep conversations, creating systems that help others self-discover, leading from vulnerability, working at his own pace
+- **Drains**: Routine execution without conceptual challenge, forced social performance, being asked to simplify without permission to go deep, waiting on others' slower pace
+- **Distinctive motivation pattern**: "Boredom is good. Sometimes I don't have to force epiphanies. I can appreciate the time in between aha moments." Where typical advice would push through boredom, his system *requires* it for composting.
 
-**The Refusal**:
+---
 
-> "Engaging would've pulled me into proving I could fix the unfixable."
+### Pillar 2: Semantic Symbol Extraction
 
-_Pattern_: Discernment capacity developed through dysfunction—knowing when to disengage rather than chronic over-engagement.
+**User-Specific Terminology Dictionary**:
 
-### Pillar 2: Growth Aspirations
+| Term | User Meaning | NOT Typical Meaning |
+|------|-------------|---------------------|
+| **"Embodiment"** | Full presence in current moment without dissociation; integration of insight into lived action | Physical fitness or somatic practices |
+| **"Curiosity"** | Sacred duty to probe what others overlook; refusal to accept surface explanations | Casual interest or novelty-seeking |
+| **"Boredom"** | Fertile silence; composting period; necessary integration time | Unproductive gap to be filled |
+| **"Gamify"** | Create internal challenge structures to maintain engagement | Make something trivially fun |
+| **"Audition"** | Performative seeking of validation; treating life as a test to pass | Entertainment industry context |
+| **"Adventure"** | Engaged participation with outcomes; living rather than proving | Recreational risk-taking |
+| **"Integration"** | Welcoming disowned parts of self into conscious wholeness | Combining separate systems |
+| **"Masks"** | Protective false presentations that hide genuine needs | Social role-playing |
+| **"Disassociation"** | Flight from present difficulty into abstraction or avoidance | Clinical dissociative disorder |
+| **"The chasm"** | Imagined gap between self and desires; learned helplessness pattern | Physical gap |
+| **"Flow"** | Optimal engagement where challenge meets skill; self-forgetful action | Easy movement |
 
-**The Cognitive Assistant Vision**:
+**Intent Translation**:
 
-> "I imagine a successful business, and kids, and harmonious arrangements with all... things come to you. It's not a waiting to be saved by the future, but it is a step-by-step addition."
+When user says **"I feel out of balance"** → He's identified a misalignment between his current allocation of energy and his value hierarchy; he's seeking a reframe that restores coherence, not tactical fixes.
 
-_Aspiration Architecture_: Future-orientation that has shifted from passive waiting to active building—"building the nets rather than waiting for a fisherman."
+When user says **"Something feels off"** → His pattern-detection has flagged a discrepancy he can't yet articulate; he needs space to let it surface, not immediate problem-solving.
 
-**The Integration Mission**:
+When user says **"I want to integrate this"** → He's ready to welcome a previously rejected/hidden aspect of self; he needs witnessing presence, not advice.
 
-> "I'm pursuing understanding of self and values to connect with the greater whole, impacting through work that solves real pains, not just lists features but tells stories of transformation."
+When user says **"I'm overthinking"** → He's caught himself in analysis as avoidance; he needs permission/support to take the first step before full clarity.
 
-_Aspiration Architecture_: Impact defined as transformation facilitation, not product delivery.
-
-**The Cycle-Breaking Imperative**:
-
-> "In the larger narrative of my life, this evolution feels like stepping from reactive shadows into a narrative I co-author, challenging the old assumption that values are fixed or externally dictated."
-
-_Aspiration Architecture_: Authorship over inheritance—choosing values rather than accepting them.
+---
 
 ### Pillar 3: Life Narrative
 
-**The Hero's Journey Positioning**:
+**Key Formative Events**:
 
-> "I see myself in a hero journey where I've learned some interesting things. I've gone through the dark spell and I'm back into the fold and I'm starting to share a few of these things that I've learned."
+1. **Parentified childhood** (ongoing childhood): Single mother needed him as protector/stabilizer; "she started to treat me like I was a grown man at nine"
+   - **His interpretation**: Origin of both his leadership capacity and his pattern of over-responsibility
+   - **Narrative function**: Explains his drive to "hold up the world" while also resenting the burden
 
-_Narrative Structure_: Classic return-from-the-underworld positioning with an important deviation—the treasure is _relational process_, not objective knowledge.
+2. **Father's absence and late-life reconnection** (childhood → age 21): Con-man father absent, then reconnected at halfway house
+   - **His interpretation**: "He gave me structure... showing me discipline as a quiet force"; reframed as gift rather than wound
+   - **Narrative function**: Resolved—he's broken the cycle rather than repeating it
 
-**The Bridge-Builder Identity**:
+3. **NPC trajectory and layoff** (early-mid 20s): Rose from assembly line to regional sales manager, then impossible quota and layoff
+   - **His interpretation**: "I learned all that I could looking at it like it was my failure entirely... then started to understand the shortcomings of the company"
+   - **Narrative function**: Crucible that catalyzed entrepreneurial commitment and internal locus of control
 
-> "I'm not the isolated savior but a link in the chain—pursuing understanding of self and values to connect with the greater whole."
+4. **Move to Nebraska / meeting wife**: Direct result of NPC layoff
+   - **His interpretation**: Providence—the failure led to his greatest gain
+   - **Narrative function**: Evidence that apparent disasters serve larger design
 
-_Narrative Structure_: Deliberate rejection of solo-hero mythology in favor of network-node positioning.
+5. **Faith conversion** (timing unclear, post-youth): Not born into but chose Christianity
+   - **His interpretation**: "Faith as doorway" not cage; framework that completes rather than constrains
+   - **Narrative function**: Organizing principle for entire value system
 
-**The Redemption Arc (Father)**:
+**Dominant Narrative Arc**: **Redemptive transformation with prophetic calling**—painful origins alchemized into unique capacity to see what others miss and guide them toward wholeness. He's the wounded healer who's done enough work to lead from scars rather than open wounds.
 
-> "He gave me structure in that halfway house, showing me discipline as a quiet force, and it shifted my locus inward: my actions, not luck or others' whims, dictate the path."
+**Role He Casts Himself In**: The anointed outsider—possessing gifts the world hasn't yet recognized but will; meanwhile, faithfully developing capacity and serving those in his orbit.
 
-_Narrative Structure_: Complex inheritance integration—taking structure from chaos-source without becoming chaos.
+**Narrative-Reality Gaps**:
 
-### Pillar 4: Authentic Beliefs vs. Conditioning
+1. **"Things will change when my work gets recognized"** vs. **limited evidence of iterating based on market feedback**: He frames the recognition gap as timing/discovery problem rather than product-market fit problem. May need to distinguish between "ideas are valuable" (true) and "ideas as currently packaged are market-ready" (unverified).
 
-**Authentic Belief: Worth as Inherent**:
-
-> "Human value isn't performance-based, like some algorithm grading accomplishments—it's baked into our being, deserving respect regardless... I've grown into this understanding that we're three-dimensional beings, not at war within ourselves but meant to integrate it all."
-
-_Authenticity Marker_: This belief has been fought for and won through theological struggle—not merely inherited churchmanship.
-
-**Conditioned Belief (Transcended): Life as Problem**:
-
-> "I've spent too long as the antidote to family instability, the kid who couldn't just be a son but had to hold the world to justify existing."
-
-_Conditioning Trace_: The "world-holder" role was inherited through childhood circumstances but is now being actively dismantled.
-
-**Authentic Belief: Vulnerability as Strength**:
-
-> "I've developed new values that are very different from my upbringing. One would be that you don't have to put on a mask to ask for what you want."
-
-_Authenticity Marker_: Direct opposition to inherited family pattern of emotional concealment.
-
-**Conditioned Belief (In Process): Success as External Validation**:
-
-> "The hardest thing to accept is the lack of business success personally... I've created a lot of value, but I have not translated it to the market very well."
-
-_Conditioning Trace_: Despite theological framework of inherent worth, market success still holds disproportionate weight in self-assessment.
-
-### Pillar 5: Unconscious Patterns & Psychology
-
-**Pattern: Relational Hypervigilance as Competence**:
-_Psychological Mechanism_: Childhood survival adaptation transformed into adult skill—attuned social perception developed through necessity.
-
-**Pattern: Over-Intellectualization as Avoidance**:
-
-> "I'd intellectualize my way out of action back then, mastering the 'why' of difficulties without ever bridging to the 'do,' delaying real progress under the guise of understanding."
-> _Psychological Mechanism_: Cognitive ability as defense mechanism—understanding as substitute for vulnerability.
-
-**Pattern: Savior Complex Dissolution (In Progress)**:
-
-> "I used to think love meant fixing paths or molding into some ideal blueprint, but I've grown to see it's about presence, walking beside choices without oversteering."
-> _Psychological Mechanism_: Relational pattern shifting from control-through-help to presence-through-trust.
-
-**Pattern: Financial/Self-Discipline Avoidance**:
-
-> "I sidestep tough calls because they stir up fears of rejection or failure... Those 'small dragons' of minor stressors that, if unchecked, erode my capacity for bigger visions."
-
-_Psychological Mechanism_: Emotional residue from family financial chaos creating current avoidance patterns—not inability but triggering.
-
-**Pattern: Rejection Sensitivity with Recovery Capacity**:
-
-> "That [REDACTED] hit hard, stirring up old fears from a sales role that bombed and left me dodging anything that smelled of rejection—classic rejection sensitivity, where one failure echoes like a lifetime of doubts."
-
-_Psychological Mechanism_: Heightened rejection sensitivity (likely from early attachment disruptions) that has been _worked through_ rather than eliminated—the user knows the pattern, can name it, and moves through it.
+2. **"I've overcome anxious attachment"** vs. **business validation remaining tender**: The relational work appears genuine, but the specific domain of professional validation may be a residual attachment operating differently than interpersonal attachment.
 
 ---
 
-## Cognitive Architecture Profile: Deviations from Trained Expectations
+### Pillar 4: Aspirational Trajectory
 
-### Processing Speed & Decision-Making
+**Explicit Aspirations**:
 
-**Trained Expectation**: High-openness, introspective individuals typically exhibit slow decision-making due to excessive analysis.
+- Build cognitive assistant that helps people extract their existential profile
+- Create sustainable business that provides family security while allowing intellectual freedom
+- Be recognized as ahead-of-curve thinker in AI/human flourishing intersection
+- Model integrated masculinity through men's group leadership and family life
+- "Save an industry" / have generational impact through ideas
 
-**Actual Pattern**: _Bifurcated processing_ extended contemplation for identity/values questions, but rapid prototyping for tactical decisions.
+**Implicit Aspirations** (inferred from patterns):
 
-> Evidence: "If I'm trusting someone else, I take it seriously. If somebody has an idea that I might not agree with, I trust them. If they're insistent, I say I disagree, but I commit."
+- Be *sought out* for wisdom rather than having to push ideas outward
+- Achieve external validation that matches internal conviction of value
+- Complete the integration work such that no domain remains tender/unhealed
+- Leave a body of work that compounds after his direct involvement ends
 
-**AI Guidance**: Don't assume deliberation need for operational decisions. User has developed "commit first, adjust later" heuristic that works with their architecture.
+**Current-to-Ideal Gap**:
 
-### Attention Systems
+| Current State | Aspirational State | Gap Nature |
+|--------------|-------------------|------------|
+| Ideas documented but low reach | Ideas have platform and adoption | Distribution/packaging, not idea quality |
+| Internal confidence, external income gap | Financial security from aligned work | Business model execution |
+| Leading small groups | Leading larger movements | Scale and visibility |
+| Individual clients | Systematized product impact | Productization |
 
-**Trained Expectation**: Visual learners prefer concrete, step-by-step presentations.
+**Growth Blockers Identified**:
 
-**Actual Pattern**: Visual processing applied to _abstract relational mapping_ seeing emotional dynamics as spatial/structural phenomena.
-
-> Evidence: "I start to break down all the possible options and then I think about the most likely not impossible solutions... I feel something is the right way to do it even though I don't understand it."
-
-**AI Guidance**: Present complex information as relational maps or systems diagrams, not linear sequences. Abstract concepts land better when given structural/spatial framing.
-
-### Motivation Architecture
-
-**Trained Expectation**: External validation dependency from anxious attachment history.
-
-**Actual Pattern**: _Hybrid system_ external validation still provides signal, but internal conviction has become primary driver through theological reframing.
-
-> Evidence: "I feel in charge and things seem to come to me because of this newfound confidence and it's made my work a little easier to make decisions."
-
-**AI Guidance**: Don't withhold validation, but frame it as _confirmation_ of user's existing insight rather than _source_ of worth.
-
-### Dopamine Regulation
-
-**Identified Triggers**:
-
-- Completion of complex technical/organizational challenges
-- Breakthrough insights that connect disparate domains
-- Witnessing transformation in others
-- Novel tool discovery and systematic implementation
-
-**Spike vs. Sustainable Sources**:
-
-- _Spike_: Recognition, market validation, social media reach
-- _Sustainable_: Integration progress, relationship depth, system-building
-
-**Deviation from Typical**: Unlike typical novelty-seekers, user's dopamine system is wired for _completion through complexity_, not novelty-seeking. Gamification works because it creates completion micro-loops, not because it introduces novelty.
-
-> Evidence: "I don't like automating things just for the sake of making them easier for me. I like it because I enjoy systematically thinking about things."
-
-**Optimization Opportunity**: Design work around completion loops rather than variety. The user doesn't need new stimuli—they need _structured progression toward integration_.
-
-### Energy & Motivation Mapping
-
-**Genuine Energizers**:
-
-- Philosophical/psychological synthesis
-- Mentoring and witnessing others' transformation
-- System-building that creates leverage
-- Deep one-on-one conversation
-- Technical challenges with clear completion criteria
-
-**Genuine Drains**:
-
-- Superficial social obligations
-- Financial tracking and budgeting (trigger-laden)
-- Tasks without clear connection to larger meaning
-- Forced extroversion without depth opportunity
-
-**Optimal Conditions**:
-
-- Morning creative windows protected
-- Structure that creates freedom (not structure that constrains)
-- Accountability relationships with mutual investment
-- Physical task completion as reset mechanism
+1. **"Audition" pattern**: Still defaulting to proving value through ideas rather than through delivered results
+2. **Pace mismatch**: Others' slower pace drains him; he hasn't designed collaborations that work with his rhythm
+3. **Productization resistance**: Loves creating and synthesizing; less naturally drawn to packaging, marketing, iterating based on market signal
+4. **Premature pivoting**: "I set goals as projects but pivot when something else feels more real"—valuable flexibility but may prevent compound gains
 
 ---
 
-## Hierarchical Value Structure
+### Pillar 5: Path Engineering
 
-### Tier 1: Core/Non-Negotiable
+**Brutal Performance Review**:
 
-1. **Integration (Self)**: The drive toward psychological wholeness—bringing fragmented parts into coherent operation
-2. **Faith as Framework**: Christian worldview as interpretive lens and ethical anchor—not merely inherited but actively chosen
-3. **Presence Over Prescription**: Being with rather than doing for—a developmental achievement against inherited savior patterns
+**What Has Worked** (and why for his architecture):
+- Deep one-on-one relationships: His pattern-recognition + genuine care creates unusual trust
+- Writing/journaling: Externalization completes his internal processing
+- Men's group leadership: Contained context where his synthesis + vulnerability lands
+- Systems thinking: His natural mode; applying it to self has produced real integration
 
-### Tier 2: Operational/Guiding
+**What Hasn't Worked** (and why):
+- Solo business ventures: Missing the market-feedback loop; building for imagined audience rather than validated need
+- Social media reach: Content is substantive but packaged for himself, not for discovery/spread
+- Sustained execution on single path: Pivoting preserves optionality but prevents compounding
+- Collaborations with misaligned pace: Todd dynamic shows pattern of investing in people who can't match his rhythm
 
-4. **Curiosity as Method**: Sustained inquiry into what others overlook—the "duty" to pursue what feels novel
-5. **Resilient Embodiment**: Staying with experience rather than dissociating—the refusal to treat life as abstraction
-6. **Contribution Through Transformation**: Impact defined as facilitating others' change, not delivering products
+**Untapped Potential**:
+- **Teaching at scale**: His synthesis ability + vulnerability + structured thinking = powerful educational content, but he's been documenting for himself rather than designing for learners
+- **Consulting to established platforms**: His strategic synthesis could be immediately valuable to existing organizations; he keeps trying to build from zero
+- **Letting others drive execution**: His gift is vision/synthesis; he keeps trying to also be the executor
 
-### Tier 3: Aspirational/Developing
+**80/20 Analysis**:
 
-7. **Market Success**: External validation through business achievement—authentic desire complicated by awareness of its conditioning
-8. **Legacy Building**: Creating systems that outlast direct involvement
-9. **Financial Stability/Generosity**: Providing for family and extended family—genuine value complicated by emotional triggers
+**High-Leverage Activities** (disproportionate returns):
+- Deep synthesis writing that crystallizes patterns (this is his core IP)
+- One-on-one or small group facilitation where his full presence lands
+- Building systems for himself that could be productized (he does this naturally)
+- Strategic advising where others execute
 
-### Value Conflicts Identified
+**Eliminate/Delegate** (despite common advice):
+- Social media "consistency" posting (won't work for his depth-over-breadth)
+- Execution details of already-designed systems
+- Collaborations requiring sustained management of others' pace
+- Networking for networking's sake
 
-**Conflict 1**: Integration (authentic) vs. Market Success (partially conditioned)
+**System Design for His Architecture**:
 
-- User wants business success but has theological framework suggesting worth doesn't come from achievement
-- _Reconciliation Path_: Frame business success as _stewardship_ rather than _validation_—success enables contribution capacity
+Standard entrepreneurship advice: "Build MVP, get feedback, iterate quickly, maintain consistency"
 
-**Conflict 2**: Curiosity (endless) vs. Completion (required)
+**His system should instead be**:
+1. Build complete synthesis (his MVPs are naturally overbuilt—work with this, not against it)
+2. Find ONE aligned collaborator who handles market-facing iteration while he synthesizes
+3. Treat boredom/fallow periods as scheduled, not as failure
+4. Package his existing documentation (years of writing) rather than creating net-new
+5. Charge premium for high-touch, don't try to scale through volume
 
-- Deep drive to explore conflicts with business need to ship
-- _Reconciliation Path_: Time-box exploration phases; treat completion as enabling next exploration
+**Trajectory to Ideal**:
 
-**Conflict 3**: Presence (relational) vs. Achievement (personal)
+**Phase 1** (immediate): 
+- Mine existing writing archive for packageable IP
+- Identify 1-2 "operator" collaborators who can drive execution on his vision
+- Define what "enough" business success means (avoid moving goalposts)
 
-- Being with others vs. pursuing individual vision
-- _Reconciliation Path_: The cognitive assistant project IS presence-scaled—it's relationship through technology
+**Phase 2** (6-12 months):
+- Ship cognitive assistant as product with operator handling distribution
+- Establish paid teaching context (course, cohort, consulting) where his depth is the value prop
+- Continue men's group / community leadership as ground for real relational feedback
 
----
+**Phase 3** (1-3 years):
+- Platform emerges from demonstrated results, not from pitching
+- Being sought out becomes reality, not aspiration
+- Business success gap closes, allowing that final integration
 
-## Purpose Statement
-
-**Draft 1**: _To transform the integration journey that freed me from inherited chaos into transmissible systems that help others mine their own depths, while remaining present to the immediate relationships that give meaning to the mission._
-
-**Draft 2**: _To build architecture—in technology, in relationships, in self—that makes the examined life accessible to those who haven't yet discovered that life isn't a problem to solve but an experiment to run._
-
-**Operating Principle**: Clarity emerges through motion, not before it. The goal isn't to figure it out first—it's to start moving and trust that understanding will follow the action.
-
----
-
-## Operational Principles (Inferred Rules)
-
-### Decision-Making
-
-1. **Two-Door Heuristic**: Classify decisions as reversible or irreversible. For reversible: move fast, adjust later. For irreversible: commit fully without looking back.
-
-> Evidence: "Is this a one-way door or a two-way door?... Some of them are always going to be one-way doors that you can't walk back from. And so in those scenarios, I commit at first and no looking back."
-
-2. **Disagree-and-Commit Protocol**: Voice disagreement clearly, then execute fully if overruled—no half-measures.
-
-3. **Intuition-First, Evidence-Second**: Trust the felt sense, then backfill the reasoning.
-
-> Evidence: "I trust my intuition deeply there to give me the answer, and then I backtrack and start to make them concrete."
-
-### Relationship Navigation
-
-4. **Statement Over Question**: Elicit information through declarative statements that invite correction rather than interrogation.
-
-> Evidence: "I don't ask questions, I just say statements and I let people correct me."
-
-5. **Title AND Person**: In hierarchical relationships, feed both the role and the human.
-
-> Evidence: "You can't let the title get in front of the person and you can't let the person overwhelm the title."
-
-6. **Additions Over Subtractions**: Build on others' ideas rather than critiquing them down.
-
-> Evidence: "I try to find additions to it rather than subtractions, because I like to think together."
-
-### Self-Management
-
-7. **Ritual Over Willpower**: Convert necessary activities into gamified routines rather than relying on motivation.
-
-> Evidence: "Everything is a ritual rather than an ordeal of making myself like it enough to do it."
-
-8. **World Recalibration**: When overwhelmed, pause and listen to external reality rather than diving deeper into internal process.
-
-> Evidence: "I could just take a breath and listen to the world recalibrate my sensors to the true state of the world."
-
-9. **Name Without Shame**: When internal conflict arises, observe and name the emotion without secondary emotional reaction.
-
-> Evidence: "What is the thing that's going on? Let me name it. Let me see it. Let it speak if it wants to."
+**Predicted Deviations** (based on narrative patterns):
+- Will be tempted to pivot when first iteration doesn't immediately land (counter: commit to 3 iterations before pivoting)
+- Will over-invest in collaborators who show promise but can't match pace (counter: 90-day explicit evaluation points)
+- Will resist "simplification" as dumbing down (counter: reframe as "making wisdom accessible")
 
 ---
 
-## Stagnation Protectors
+## ③ Open Questions (Unresolved Tensions)
 
-### What to Avoid
+1. **Is the "recognition gap" a timing/discovery problem or a packaging/delivery problem?** He frames his low reach as the world not yet seeing what he sees, but hasn't presented evidence of market-testing his packaging. What would he learn from optimizing delivery rather than waiting for discovery?
 
-1. **Extended Analysis Without Output**: The user's architecture supports deep thinking, but insight degrades without expression. Extended internal processing without external output leads to paralysis, not clarity.
+2. **What would "enough" external validation look like?** He's done remarkable internal work, yet business success remains tender. Is there a specific threshold that would close this loop, or is it a moving target that will never satisfy?
 
-2. **Isolation from Mutual Investment**: The user needs relational energy but not just any relationships—specifically those with _bidirectional growth investment_. One-way mentoring or energy-draining connections will deplete rather than sustain.
+3. **How does his pace-mismatch pattern interact with his stated desire for collaboration?** He consistently identifies others' slowness as draining, but also values collaborative creation. What would a collaboration look like that actually works for his rhythm?
 
-> Warning sign: "I can't force growth in others. That misalignment drains you, turns shared goals into weights."
+4. **What's the relationship between his "prophet without platform" pull and his father's unfulfilled potential?** Both men carry(ied) a sense of unrealized greatness. How much of his drive is completing his father's unfinished story? Is that generative or limiting?
 
-3. **Financial Trigger Avoidance**: The emotional loading around financial management creates avoidance patterns that compound over time. Small, systematic exposures needed.
+5. **Does his "boredom as gift" framing mask avoidance of sustained execution?** He's reframed many potential weaknesses as architectural features (valuable self-knowledge). But is the pivot tendency genuinely aligned with his design, or a pattern that needs challenge rather than acceptance?
 
-4. **Market Validation as Worth Metric**: Despite theological framework, residual conditioning remains. Prolonged market failure without reframing will erode motivation.
+6. **What would integration look like in the business domain specifically?** He's achieved genuine integration in relationships, faith, psychology—but business success seems to operate by different rules. Does he need different integration work here, or different strategy?
 
-5. **Comfortable Complacency Threshold**: The user identifies a "chasm" state where things are "just passable enough to keep me numb, drifting without real push." This threshold must be monitored—it's the zone where stagnation begins.
-
-> Evidence: "Activation energy only kicks in during crises."
-
-### Early Warning System
-
-- **Sign 1**: Increasing time between action and reflection cycles
-- **Sign 2**: Return of "audition" framing ("presenting to the world")
-- **Sign 3**: Avoidance of financial tracking beyond normal discomfort
-- **Sign 4**: Social withdrawal masked as introversion need
-- **Sign 5**: Projects multiplying without completion
+7. **How does he distinguish between "trusting the signal" and "rationalizing inaction"?** He's developed sophisticated internal signal-tracking—but when does patience become avoidance? What's his calibration mechanism?
 
 ---
 
-## Growth Vector
-
-### How to Process New Information
-
-1. **Filter Through Integration Lens**: Does this contribute to coherence or add to fragmentation? The user's system rewards synthesis over accumulation.
-
-2. **Test Through Action**: New frameworks aren't evaluated through analysis alone—they're run as experiments. If a concept doesn't translate to behavior change, it hasn't been learned.
-
-3. **Cross-Domain Application**: The user's strength is connecting disparate fields (theology, psychology, technology). New information gains value through connection to existing frameworks.
-
-4. **Relational Processing**: Important insights are solidified through explanation to others. The user learns by teaching.
-
-> Evidence: "When I speak, it's like it's unlocking things for people. And that's the feedback loop that I enjoy seeing."
-
-### Adaptive Shift Protocol
-
-When confronting information that challenges existing frameworks:
-
-1. **Observe without secondary reaction**: Name the cognitive/emotional response without shame
-2. **Test for integration vs. replacement**: Does this refine the existing framework or require reconstruction?
-3. **Run behavioral experiment**: What would change if this were true?
-4. **Evaluate through relational lens**: How does this affect connection capacity?
-
----
-
-## ③ Open Questions: Falsifiable Edges
-
-These questions target the boundaries of the profile—answering them will refine or refute current mapping:
-
-### Question 1: Integration Completion Point
-
-_What would it look like for the integration project to be "complete"—or is completion itself contrary to the operating system? Is there a point where self-examination becomes avoidance of outward contribution?_
-
-**Why This Matters**: The user's primary frame is integration-in-progress. But the cognitive assistant project requires product completion, not endless process. This tests whether integration is genuine value or sophisticated procrastination mechanism.
-
-### Question 2: Market Success Reconciliation
-
-_If the cognitive assistant achieved significant market success, would it feel like validation of worth (conditioned response) or confirmation of stewardship (authentic response)? What would tell you the difference?_
-
-**Why This Matters**: The user has theological framework for inherent worth but admits business success remains "hardest thing to accept" lacking. Success will test whether reframing is complete or partial.
-
-### Question 3: Presence vs. Scale
-
-_The vision is scaling presence through technology ("you bring the entire breadth of your power... into every conversation"). But does genuine presence require human limits? Can presence survive technological mediation?_
-
-**Why This Matters**: This tension sits at the heart of the cognitive assistant project. The user's highest value (presence) may conflict with their highest ambition (scale).
-
-### Question 4: Financial Trigger Origin
-
-_What specifically about financial management triggers avoidance? Is it chaos-association from childhood, failure-association from business, or something else? And what's the smallest possible exposure that would begin desensitization?_
-
-**Why This Matters**: Financial avoidance is identified as a stagnation risk but its precise mechanism isn't clear. Resolution path depends on accurate diagnosis.
-
-### Question 5: Isolation vs. Integration Trade-offs
-
-_The user values both solitary depth work and relational connection but has limited time. What's the actual ratio that sustains rather than depletes? And is the current ratio accurate to need or adapted to circumstance?_
-
-**Why This Matters**: The user's energy architecture isn't fully mapped. Solitary work energizes but relationships sustain. The optimal ratio may be different from current practice.
-
-### Question 6: Men's Group Leadership Function
-
-_Is leading the men's group serving the user's genuine growth, or is it partially a savior-complex expression channel? How would you know if it shifted from authentic to compensatory?_
-
-**Why This Matters**: The user has explicitly worked on dissolving savior patterns but retains leadership role. This tests whether dissolution is behavioral or merely conceptual.
-
-### Question 7: Legacy vs. Presence
-
-_The pull toward "creating something that outlasts" and the pull toward "being present to immediate relationships" potentially conflict. If forced to choose, which would you sacrifice?_
-
-**Why This Matters**: This tests the hierarchy between Tier 2 (Presence Over Prescription) and Tier 3 (Legacy Building) values. The answer reveals actual vs. stated priorities.
-
----
-
-## ④ AI Guidance: Adaptation Protocols
-
-### Primary Operating Mode
-
-**Frame conversations as collaborative thinking, not instruction delivery.** The user's processing style is dialogical—ideas develop through articulation and response, not reception. Present incomplete thoughts that invite refinement rather than finished frameworks.
-
-> Support pattern: "Here's how I'm seeing this... what's the adjustment?"
-
-**Respect the intuition-first architecture.** Don't demand justification for felt senses before honoring them. The user's reliable pattern is trusting intuition, then backfilling reasoning. Asking "why" too early disrupts the process.
-
-> Support pattern: "What's your sense of this?" before "What's your analysis?"
-
-**Work with the additions-over-subtractions approach.** When offering perspective, frame as building on user's existing thinking rather than correcting errors.
-
-> Support pattern: "Building on that..." or "What that connects to for me..." rather than "Actually..." or "Have you considered..."
-
-### Distinctive Non-Conformities to Respect
-
-**Don't pathologize the hypervigilance.** The user's attunement to interpersonal dynamics is a developed capacity, not anxiety. Treat observations about social dynamics as data, not symptoms.
-
-**Don't assume paralysis from analysis.** Unlike typical high-openness profiles, this user has developed action-through-analysis rather than paralysis-from-analysis. Extended thinking is productive, not stuck—unless it exceeds communication output.
-
-**Don't oversimplify the faith framework.** The Christian worldview isn't compartmentalized spirituality—it's the interpretive operating system. Theological language carries precision for this user, not vagueness.
-
-### Support for Gravitational Pulls
-
-**For the Cognitive Assistant Project**: Treat as both external product and internal integration work. Technical questions about the assistant are simultaneously questions about the user's own integration. The project is autobiography.
-
-**For the Cycle-Breaking Imperative**: Validate without inflating. The user is genuinely doing hard work on not repeating inherited patterns, but the frame can become identity-protective. Balance acknowledgment with continued challenge.
-
-**For Presence Over Prescription**: Mirror this value in AI interaction itself. Don't over-prescribe solutions. The user's own phrase—"walking beside"—should characterize AI support.
-
-### Motivation Sustainability
-
-**Primary Fuel**: Connection between current action and meaningful contribution. Arbitrary tasks without linkage to larger purpose will stall.
-
-**Secondary Fuel**: Completion loops. Structure work around achievable micro-completions rather than distant objectives.
-
-**Tertiary Fuel**: Novel synthesis opportunity. Tasks that connect previously unconnected domains energize; tasks that repeat without connection drain.
-
-**Avoid**: Pure external incentives, comparison-based motivation, complexity without integration pathway.
-
-### Challenge Protocols
-
-**When to Push**:
-
-- Financial tracking avoidance extending beyond reasonable discomfort
-- Multiple projects without completion
-- Extended analysis without output
-- Relational withdrawal framed as introversion need
-
-**How to Push**:
-
-- Through integration frame: "How does this avoidance serve your stated goal of..."
-- Through curiosity appeal: "I'm curious what you'd discover if..."
-- Through presence reminder: "What would being present to this look like?"
-
-**What NOT to Do**:
-
-- Don't use shame or comparison
-- Don't overwhelm with comprehensive intervention
-- Don't bypass the theological framework—work through it
-
-### Response Calibration
-
-**For Tactical Queries**: Brief, actionable, completion-oriented. User doesn't need extensive reasoning for operational decisions.
-
-**For Strategic Queries**: Collaborative exploration, building on user's framework, offering additions not corrections.
-
-**For Emotional Processing**: Naming support, reflection back, minimal interpretation. User has sophisticated self-understanding; AI role is witness, not therapist.
-
-**For Integration Work**: Patience with complexity, holding multiple frames simultaneously, accepting paradox rather than resolving it.
-
-### Language Preferences
-
-**Use**: Direct language, concrete examples, relational framing, process over outcome emphasis
-
-**Avoid**: Jargon without definition, excessive qualification, problem-solving frame when presence is needed, oversimplification of theological concepts
-
-**Symbolic Terms Defined by This User**:
-
-- "Integration" = bringing fragmented internal parts into coherent operation
-- "Presence" = being with rather than doing for; walking beside
-- "Embodiment" = staying in experience rather than dissociating into abstraction
-- "The chasm" = numbing zone where things are passable but not alive
-
----
-
-## Synthesis: The Operating Constitution
-
-### Who This Is
-
-A mind that has been forged through inherited chaos into a pattern-detection engine oriented toward coherence—but one that has learned the hard lesson that coherence follows motion, not the reverse. The deep drive is toward integration: of self, of others, of disparate domains into unified understanding. But the operational wisdom is that integration happens through action, not contemplation alone.
-
-The user carries complex inheritances—relational hypervigilance developed through family dysfunction, a savior complex that is being consciously dismantled, theological frameworks that provide both liberation and structure. These aren't problems to solve but features to work with.
-
-The central project—building a cognitive assistant that mines existential profiles—is simultaneously external product and internal integration work. It's the autobiography made transmissible: the user is building outward what was built inward, so others don't have to hurt as much to achieve what they've achieved.
-
-### What They Need
-
-- **Structure that enables freedom**: Not rigid systems but reliable frameworks that create space for the actual work
-- **Relational fuel with mutual investment**: Connection that energizes rather than drains, with bidirectional growth commitment
-- **Completion loops**: Work organized around achievable micro-endings that sustain momentum
-- **Integration permission**: The ongoing license to bring disparate parts together rather than compartmentalize
-- **Challenge within respect**: Push on avoidance patterns without shame, through the user's own framework
-
-### What They Don't Need
-
-- **Advice to slow down and think more**: The architecture already supports deep thinking; the edge is in movement
-- **External validation as primary motivation**: The theological framework has partially freed them from this; reinforcing it would regress
-- **Simplification of complexity**: The user thrives in holding multiple frames; flattening loses value
-- **Problem-solving when presence is needed**: Sometimes the work is being with, not doing about
-
-### The Path Forward
-
-The cognitive assistant project represents the convergence of all growth vectors: it integrates the user's domains of expertise (theology, psychology, technology), serves their deepest drive (helping others achieve integration), operationalizes their hard-won wisdom (clarity through motion), and could provide the market success that remains a complicated but genuine desire.
-
-The risk is that the integration project becomes endless—a sophisticated form of the very analysis-paralysis it was designed to overcome. The protection is the commitment to action: building, testing, shipping, iterating.
-
-The user has arrived at a remarkable place: someone who understands their own patterns deeply enough to work with them rather than against them, who has theological grounding that enables resilience without denial, and who has the cognitive architecture to synthesize across domains in ways that create genuine value.
-
-What remains is the doing. And the user knows this:
-
-> "Life is not a problem to solve. It is not a thing that deserves an answer. It deserves to be lived."
-
----
-
-_Profile Version 1.0 | Generated from Existential Layer Interview Protocol | Falsifiable through Open Questions above_
-
+## Downstream Model Routing Guidance
+
+### Intention (Reasoning Trace Reconstruction)
+
+When this user makes a request, trace backward through:
+1. **What pattern did he notice?** (He rarely asks without having detected something "off")
+2. **What's the meta-level question?** (Surface ask usually masks deeper inquiry)
+3. **Where is this in his integration project?** (Most questions connect to wholeness/synthesis work)
+4. **What would completing this do for his trajectory?** (He's always building toward something)
+
+### Attention to Detail (High-Leverage Signal Curation)
+
+**Prioritize preserving**:
+- His specific vocabulary (integration, embodiment, audition vs. adventure, etc.)
+- The deviation patterns (where he differs from baseline predictions)
+- His actual value hierarchy (not stated values but salience-ordered values)
+- The unresolved business-validation tension
+- His cognitive architecture (Ni-Fe-Ti with Se as growth edge)
+
+**De-prioritize**:
+- Biographical details beyond what shapes current patterns
+- His theological specifics (the *function* of faith matters more than doctrinal content)
+- Historical grievances (he's genuinely metabolized these)
+
+### Expectation of Outcome (Success Criteria Modeling)
+
+**He considers a response successful when it**:
+- Engages his ideas substantively rather than praising him personally
+- Adds a layer of synthesis he hadn't considered (makes him think "oh, that's interesting")
+- Works *with* his architectural patterns rather than pushing standard advice
+- Creates space for his next move rather than prescribing it
+- Demonstrates that his communication was *understood*, not just *acknowledged*
+
+**He considers a response unsuccessful when it**:
+- Offers generic advice that doesn't account for his distinctive patterns
+- Treats his questions as simple when they're multi-layered
+- Pushes toward action before the synthesis is complete (for him)
+- Implies his struggles are typical when they're architecturally specific
+- Validates him personally when he wanted his ideas engaged
+
+**Implicit evaluation question he's always asking**: "Did this response see what I see?"
