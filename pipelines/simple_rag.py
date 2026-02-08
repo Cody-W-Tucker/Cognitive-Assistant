@@ -29,8 +29,17 @@ def get_last_user_message(messages: List[Dict[str, Any]]) -> str:
 
 
 class Pipeline:
-    # Simple, straightforward system prompt for RAG
-    SYSTEM_PROMPT = """You are a helpful assistant. Use the provided context from the knowledge base to answer the user's question accurately. If the context doesn't contain relevant information, say so."""
+    # Simple, straightforward system prompt for RAG with source attribution
+    SYSTEM_PROMPT = """You are a helpful assistant. Use the provided context from the knowledge base to answer the user's question accurately.
+
+When referencing information from the context:
+- Use the numbered citations [1], [2], etc. that appear in the context
+- The context is organized with citations like [1] Book Title (Author)
+- Always cite your sources using the format: "According to the text [1]..." or "As mentioned in [2]..."
+- Acknowledge if you cannot answer from the given context
+- Be specific about which source you're drawing from using the citation numbers
+
+Format your response clearly with inline citations that match the numbered references in the context."""
 
     class Valves(BaseModel):
         # xAI Configuration
@@ -55,6 +64,9 @@ class Pipeline:
         )
         MIN_RELEVANCE_SCORE: float = Field(
             default=0.5, description="Minimum relevance score for documents"
+        )
+        ENABLE_CITATIONS: bool = Field(
+            default=True, description="Enable citation events for retrieved documents"
         )
 
     def __init__(self):
@@ -85,18 +97,19 @@ class Pipeline:
         except Exception as e:
             logger.warning(f"Client initialization warning: {e}")
 
-    def _search_collection(self, query: str) -> List[Dict[str, Any]]:
-        """Search the configured collection using Qdrant SDK."""
+    def _search_collection(self, query_vector: List[float]) -> List[Dict[str, Any]]:
+        """Search the configured collection using Qdrant SDK.
+        
+        Args:
+            query_vector: Pre-computed embedding vector for the query.
+        
+        Returns:
+            List of search results with content and metadata.
+        """
         if not self.qdrant_client:
             return []
 
         try:
-            # Get embedding for the query
-            response = ollama.embeddings(
-                model=self.valves.OLLAMA_EMBEDDING_MODEL, prompt=query
-            )
-            query_vector = response["embedding"]
-
             # Search the collection
             search_result = self.qdrant_client.query_points(
                 collection_name=self.valves.COLLECTION,
@@ -110,12 +123,18 @@ class Pipeline:
                 if point.score < self.valves.MIN_RELEVANCE_SCORE:
                     continue
 
-                content = point.payload.get("page_content", "") if point.payload else ""
+                payload = point.payload or {}
+                content = payload.get("page_content", "")
+                metadata = payload.get("metadata", {})
+
                 if content:
                     results.append(
                         {
                             "content": content,
                             "score": point.score,
+                            "book_title": metadata.get("book_title", ""),
+                            "book_author": metadata.get("book_author", ""),
+                            "chunk_id": metadata.get("chunk_id", ""),
                         }
                     )
 
@@ -126,15 +145,29 @@ class Pipeline:
             return []
 
     def _format_context(self, results: List[Dict[str, Any]]) -> str:
-        """Format retrieved documents as context string."""
+        """Format retrieved documents as context string with source attribution."""
         if not results:
             return "No relevant context found in knowledge base."
 
         context_parts = []
         for i, item in enumerate(results, 1):
             content = item.get("content", "").strip()
-            if content:
-                context_parts.append(f"[Document {i}]\n{content}")
+            book_title = item.get("book_title", "")
+            book_author = item.get("book_author", "")
+
+            if not content:
+                continue
+
+            # Build source identifier matching citation format
+            source_info = f"[{i}]"
+            if book_title:
+                source_info += f" {book_title}"
+                if book_author:
+                    source_info += f" ({book_author})"
+            else:
+                source_info += " Source"
+
+            context_parts.append(f"{source_info}\n{content}")
 
         return "\n\n".join(context_parts)
 
@@ -157,18 +190,31 @@ class Pipeline:
         if not user_message:
             return body
 
-        # Gather context from vector search
-        if not self.qdrant_client:
+        # Ensure clients are initialized (safe in async context)
+        if not self.qdrant_client or not self.xai_client:
             self._initialize_clients()
 
-        search_results = self._search_collection(user_message)
+        # Compute query embedding (blocking I/O done in async context)
+        try:
+            response = ollama.embeddings(
+                model=self.valves.OLLAMA_EMBEDDING_MODEL, prompt=user_message
+            )
+            query_vector = response["embedding"]
+        except Exception as e:
+            logger.warning(f"Failed to compute query embedding: {e}")
+            query_vector = []
+
+        # Gather context from vector search
+        search_results = self._search_collection(query_vector)
         context = self._format_context(search_results)
 
-        # Store for pipe method
+        # Store for pipe method (include raw results for citations)
         body["_rag_context"] = {
             "user_message": user_message,
             "context": context,
             "results_count": len(search_results),
+            "search_results": search_results,
+            "collection": self.valves.COLLECTION,
         }
 
         return body
@@ -179,6 +225,63 @@ class Pipeline:
             del body["_rag_context"]
         return body
 
+    def _yield_citations(
+        self, search_results: List[Dict[str, Any]], collection: str
+    ) -> Generator:
+        """Yield citation events for retrieved documents.
+
+        Yields separate citation events for each document. Using the unique
+        source name in both the source object and metadata ensures they
+        appear as individual sources in the UI and can be linked inline.
+        """
+        if not self.valves.ENABLE_CITATIONS or not search_results:
+            return
+
+        for idx, item in enumerate(search_results, 1):
+            content = item.get("content", "")
+            score = item.get("score", 0)
+            book_title = item.get("book_title", "")
+            book_author = item.get("book_author", "")
+            chunk_id = item.get("chunk_id", "")
+
+            if not content:
+                continue
+
+            # Build clean source name: "[1] Book Title (Author)"
+            source_name = f"[{idx}]"
+            if book_title:
+                source_name += f" {book_title}"
+                if book_author:
+                    source_name += f" ({book_author})"
+            else:
+                source_name += " Source"
+
+            # Build metadata with the unique source name to prevent grouping
+            citation_metadata = {
+                "source": source_name,
+                "collection": collection,
+                "score": score,
+                "book_title": book_title,
+                "book_author": book_author,
+                "chunk_id": chunk_id,
+                "rank": idx,
+            }
+
+            # Remove empty values
+            citation_metadata = {k: v for k, v in citation_metadata.items() if v}
+
+            # Yield separate citation event for each document
+            yield {
+                "event": {
+                    "type": "citation",
+                    "data": {
+                        "document": [content],
+                        "metadata": [citation_metadata],
+                        "source": {"name": source_name},
+                    },
+                }
+            }
+
     def pipe(
         self,
         user_message: str,
@@ -187,37 +290,50 @@ class Pipeline:
         body: dict,
     ) -> Union[str, Generator, Iterator]:
         """Process the query with retrieved context."""
-        try:
-            context_data = body.get("_rag_context", {})
-            context = context_data.get("context", "")
+        context_data = body.get("_rag_context", {})
+        context = context_data.get("context", "")
+        search_results = context_data.get("search_results", [])
+        collection = context_data.get("collection", "unknown")
+        error_occurred = False
 
-            # Yield status
-            yield {
-                "event": {
-                    "type": "status",
-                    "data": {
-                        "description": f"Retrieved {context_data.get('results_count', 0)} documents...",
-                        "done": False,
-                    },
-                }
+        # Yield initial status
+        yield {
+            "event": {
+                "type": "status",
+                "data": {
+                    "description": f"Retrieved {context_data.get('results_count', 0)} documents...",
+                    "done": False,
+                },
             }
+        }
+
+        try:
+            # Yield citations for retrieved documents with full metadata
+            if self.valves.ENABLE_CITATIONS:
+                logger.info(f"Yielding citations for {len(search_results)} documents")
+                for citation in self._yield_citations(search_results, collection):
+                    logger.info(f"Yielding citation: {citation}")
+                    yield citation
+            else:
+                logger.info("Citations disabled")
+
+            # Build inline citation instructions
+            citation_instructions = ""
+            if search_results:
+                citation_instructions = "\n\nWhen answering, cite your sources using the numbered references [1], [2], etc. that appear in the context above."
 
             # Prepare messages
             openai_messages = [
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": f"Context from knowledge base:\n{context}\n\nUser question: {user_message}",
+                    "content": f"Context from knowledge base:\n{context}\n\nUser question: {user_message}{citation_instructions}",
                 },
             ]
 
-            # Call LLM
+            # Call LLM (client should already be initialized in inlet)
             if not self.xai_client:
-                self._initialize_clients()
-
-            if not self.xai_client:
-                yield "AI service unavailable. Please try again later."
-                return
+                raise RuntimeError("AI client not initialized. Please try again later.")
 
             response = self.xai_client.chat.completions.create(
                 model=self.valves.XAI_MODEL,
@@ -230,14 +346,16 @@ class Pipeline:
                 if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
-            # Final status
+        except Exception as e:
+            error_occurred = True
+            logger.error(f"Pipeline error: {e}")
+            yield f"Error processing request: {str(e)}"
+
+        finally:
+            # Always yield final status event
             yield {
                 "event": {
                     "type": "status",
                     "data": {"description": "", "done": True},
                 }
             }
-
-        except Exception as e:
-            logger.error(f"Pipeline error: {e}")
-            yield f"Error processing request: {str(e)}"
