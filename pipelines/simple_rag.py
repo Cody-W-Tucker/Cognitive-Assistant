@@ -308,10 +308,10 @@ Format your response clearly with inline citations that match the numbered refer
         }
 
         try:
-# Yield citations for retrieved documents with full metadata
-if self.valves.ENABLE_CITATIONS:
-    for citation in self._yield_citations(search_results, collection):
-        yield citation
+            # Yield citations for retrieved documents with full metadata
+            if self.valves.ENABLE_CITATIONS:
+                for citation in self._yield_citations(search_results, collection):
+                    yield citation
 
             # Build inline citation instructions
             citation_instructions = ""
