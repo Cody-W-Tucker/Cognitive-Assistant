@@ -1,0 +1,3 @@
+# Ephemeral memory files - don't commit
+*.md
+!README.md
