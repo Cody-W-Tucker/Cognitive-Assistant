@@ -11,8 +11,9 @@ Eventually, the Existential Layer for LLMs will be implicit through the interpla
 2. Embed text you've written into a vector store.
 3. Run the Question Asker.
     - It will ask questions to your journals designed to understand you.
-4. Run the System Prompt Creator.
-    - It will create a prompt you can add to LLMs apps to provide personal context to your different AI apps.
+4. Run the profile and skills generators.
+    - They create a human-readable profile plus lazily loaded skills that downstream AI systems can use when generic behavior is not enough.
+    - Generated outputs are written to `artifacts/`.
   
 ### Updated Pipeline Method
 
@@ -22,11 +23,11 @@ This new method creates a profile of the question and its semantically similar c
 
 ## What it is
 
-These notebooks create a system prompt based on philosophical inquiries by thinkers like Piaget, Nietzsche, and Jordan Peterson who emphasized the importance of values and self-realization.
+These scripts create a profile and skill set based on philosophical inquiries by thinkers like Piaget, Nietzsche, and Jordan Peterson who emphasized the importance of values and self-realization.
 
 These ideas laid the groundwork for integrating an existential layer into LLMs, enabling them to contextualize their actions in alignment with long-term human goals and ethical considerations.
 
-We ask these questions to the user's journal and create a system prompt that allows AI systems to understand the user.
+We ask these questions to the user's journal and create a profile plus focused skills that allow AI systems to understand the user better in novel or high-context situations.
 
 | Category                        | Goal                              | Element                                                                                                                                    | Question                                                                                                                                                                                                                     |
 | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

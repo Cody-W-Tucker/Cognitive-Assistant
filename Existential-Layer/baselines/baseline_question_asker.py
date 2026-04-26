@@ -78,10 +78,10 @@ def main():
         print(f"Error: Questions file not found at {questions_file}")
         return
 
-    # Create timestamped output file for baseline in baselines/ folder
+    # Create timestamped output file in the same folder as this script
     timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
-    baselines_dir = config.paths.DATA_DIR / "baselines"
-    baselines_dir.mkdir(exist_ok=True)
+    from pathlib import Path
+    baselines_dir = Path(__file__).parent
     output_filename = f"{model_name}_answers_{timestamp}.csv"
     output_file = baselines_dir / output_filename
 

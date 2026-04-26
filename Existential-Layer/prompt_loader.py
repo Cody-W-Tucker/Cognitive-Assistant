@@ -11,11 +11,10 @@ PROMPT_FILES = {
     "synthesis_prompt": "synthesis_prompt.md",
     "initial_template": "initial_template.md",
     "refine_template": "refine_template.md",
+    "skills_creation_template": "skills_creation_template.md",
     "rlm_query_template": "rlm_query_template.md",
     "rlm_query_template_filesystem_only": "rlm_query_template_filesystem_only.md",
-    "workspace_extraction_template": "workspace_extraction_template.md",
     "baseline_system_prompt": "baseline_system_prompt.md",
-    "combined_prompt_template": "combined_prompt_template.md",
 }
 
 

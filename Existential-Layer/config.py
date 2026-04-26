@@ -156,18 +156,14 @@ class PathConfig:
         paths = {
             # Private datasets and collected information
             "DATA_DIR": "data",
-            # Public results of processing
-            "OUTPUT_DIR": "output",
+            # Public generated artifacts from the workflow
+            "ARTIFACTS_DIR": "artifacts",
+            # Generated OpenCode-style skills
+            "SKILLS_DIR": "artifacts/skills",
             # Reusable prompt components
             "PROMPTS_DIR": "prompts",
             # Runtime prompt templates loaded directly by scripts
             "PROMPT_RUNTIME_DIR": "prompts/runtime",
-            # Individual prompt components
-            "PROMPT_PARTS_DIR": "prompts/parts",
-            # The actual system prompt used
-            "ASSISTANT_PROMPTS_DIR": "prompts/parts/assistant",
-            # How to use external tools
-            "TOOLS_PROMPTS_DIR": "prompts/parts/tools",
             # User interview questions
             "QUESTIONS_CSV": "questions.csv",
         }
@@ -179,12 +175,10 @@ class PathConfig:
 
         # Set the annotated attributes
         self.DATA_DIR = self.DATA_DIR
-        self.OUTPUT_DIR = self.OUTPUT_DIR
+        self.ARTIFACTS_DIR = self.ARTIFACTS_DIR
+        self.SKILLS_DIR = self.SKILLS_DIR
         self.PROMPTS_DIR = self.PROMPTS_DIR
         self.PROMPT_RUNTIME_DIR = self.PROMPT_RUNTIME_DIR
-        self.PROMPT_PARTS_DIR = self.PROMPT_PARTS_DIR
-        self.ASSISTANT_PROMPTS_DIR = self.ASSISTANT_PROMPTS_DIR
-        self.TOOLS_PROMPTS_DIR = self.TOOLS_PROMPTS_DIR
         self.QUESTIONS_CSV = self.QUESTIONS_CSV
 
     def ensure_directories_exist(self):
@@ -311,6 +305,9 @@ class PromptsConfig:
     synthesis_prompt: str = field(default_factory=lambda: load_prompt("synthesis_prompt"))
     initial_template: str = field(default_factory=lambda: load_prompt("initial_template"))
     refine_template: str = field(default_factory=lambda: load_prompt("refine_template"))
+    skills_creation_template: str = field(
+        default_factory=lambda: load_prompt("skills_creation_template")
+    )
     rlm_query_template: str = field(default_factory=lambda: load_prompt("rlm_query_template"))
     rlm_query_template_filesystem_only: str = field(
         default_factory=lambda: load_prompt("rlm_query_template_filesystem_only")
@@ -324,10 +321,6 @@ class OutputConfig:
     # Output file naming patterns
     QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_rlm_{timestamp}.csv"
     HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
-
-    # Prompt output files
-    MAIN_PROMPT: str = "main.md"  # Main system prompt
-    COMBINED_PROMPT: str = "prompt.md"
 
     # Timestamp format
     TIMESTAMP_FORMAT: str = "%Y%m%d_%H%M%S"

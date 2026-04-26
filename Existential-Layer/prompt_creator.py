@@ -2,28 +2,23 @@
 """
 Prompt Creator - Dataset Processing System
 
-This script processes the dataset created by question_asker.py to generate system prompts.
+This script processes the dataset created by question_asker.py to generate user-profile artifacts.
 Uses a 2-call approach for refinement.
 
 Pipeline:
 1. Dataset Processing:
    ├── Load questions_with_answers_rlm_*.csv
    ├── Call 1: Generate initial comprehensive summary
-   └── Call 2: Refine the summary
-
-2. Combine:
-   └── prompt.md                # Combined final prompt from parts
+   └── Call 2: Refine the summary into an operational profile
 
 Usage:
     python prompt_creator.py  # Runs full pipeline automatically
 
-All files are saved to output/ and prompts/ directories.
+Generated profile artifacts are saved to artifacts/.
 """
 
 import os
-import sys
 import csv
-from pathlib import Path
 import asyncio
 
 # Import config from current directory
@@ -33,8 +28,6 @@ from config import (
     get_most_recent_file,
 )
 from llm import LLMHandle, create_client, generate_text_async
-from prompt_loader import load_prompt
-
 # Get the redaction function
 redact_sensitive_data = get_redaction_function()
 
@@ -174,7 +167,7 @@ async def process_dataset():
         return
 
     # Save as human_interview_bio.md
-    bio_path = config.paths.OUTPUT_DIR / "human_interview_bio.md"
+    bio_path = config.paths.ARTIFACTS_DIR / "human_interview_bio.md"
     print(f"Info: Saving initial summary to {bio_path}")
     with open(bio_path, "w", encoding="utf-8") as f:
         f.write(initial_summary)
@@ -192,79 +185,16 @@ async def process_dataset():
         return
 
     # Save refined version as ai_interview_bio.md
-    refined_path = config.paths.OUTPUT_DIR / "ai_interview_bio.md"
+    refined_path = config.paths.ARTIFACTS_DIR / "ai_interview_bio.md"
     print(f"Info: Saving refined summary to {refined_path}")
     with open(refined_path, "w", encoding="utf-8") as f:
         f.write(final_summary)
     print(f"Info: Saved refined summary ({len(final_summary)} characters)")
 
-    # Save final condensed prompt to assistant directory
-    main_path = config.paths.ASSISTANT_PROMPTS_DIR / "main.md"
-    main_path.parent.mkdir(parents=True, exist_ok=True)
-
-    print(f"Info: Saving final prompt to {main_path}")
-    with open(main_path, "w", encoding="utf-8") as f:
-        f.write(final_summary)
-    print(f"Info: Saved final prompt ({len(final_summary)} characters)")
-
-    print("Info: Files created")
+    print("Info: Artifacts created")
     print(f"- Initial summary: {bio_path}")
     print(f"- Refined summary: {refined_path}")
-    print(f"- Final prompt: {main_path}")
     print("Info: Dataset processing completed")
-
-
-def combine_prompts():
-    """Combine existing prompt parts into final prompts."""
-    print("Info: Combining prompt parts")
-
-    import textwrap
-
-    def load_prompts(prompts_dir):
-        """Load all prompt files into a dictionary."""
-        prompts = {}
-
-        # Find all .md files recursively
-        for md_file in Path(prompts_dir).rglob("*.md"):
-            # Create variable name from path
-            rel_path = md_file.relative_to(prompts_dir)
-            var_name = (
-                str(rel_path).replace(".md", "").replace("/", "_").replace("-", "_")
-            )
-
-            # Read file content
-            try:
-                with open(md_file, "r", encoding="utf-8") as f:
-                    prompts[var_name] = f.read().strip()
-            except Exception as e:
-                print(f"Error: Failed to read {md_file}: {e}", file=sys.stderr)
-                prompts[var_name] = ""
-
-        return prompts
-
-    # Load all prompts from prompt_parts directory
-    prompts_dir = config.paths.PROMPT_PARTS_DIR
-    if not prompts_dir.exists():
-        print(f"Error: Prompt parts directory not found at {prompts_dir}")
-        return
-
-    prompts = load_prompts(prompts_dir)
-    print(f"Info: Loaded {len(prompts)} prompt parts")
-
-    # Add prompt structure with the template to introduce the different sections
-    template = load_prompt("combined_prompt_template")
-
-    # Clean up formatting and fill template with prompt content
-    template = textwrap.dedent(template).strip()
-    final_prompt = template.format(**prompts)
-
-    # Write to prompt.md file
-    output_file = config.paths.PROMPTS_DIR / config.output.COMBINED_PROMPT
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(final_prompt)
-
-    print(f"Info: Combined prompt saved to {output_file}")
-    print(f"Info: All prompt files are saved in {config.paths.PROMPTS_DIR}")
 
 
 def main():
@@ -279,12 +209,11 @@ def main():
             print(f"- {issue}")
         sys.exit(1)
 
-    # Run dataset processing followed by combine
+    # Run dataset processing
     asyncio.run(process_dataset())
-    combine_prompts()
 
     print(
-        "\nInfo: Full pipeline completed; dataset processed and combined into final prompt.md"
+        "\nInfo: Full pipeline completed; dataset processed and written to artifacts/"
     )
 
 

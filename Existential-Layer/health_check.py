@@ -14,14 +14,14 @@ from prompt_loader import PROMPT_FILES, load_prompt
 
 PROJECT_ROOT = Path(__file__).parent
 SCRIPT_MODULES = [
-    "baseline_question_asker",
-    "bio_to_workspace",
+    "baselines.baseline_question_asker",
     "config",
     "human_interview",
     "llm",
     "prompt_creator",
     "prompt_loader",
     "question_asker",
+    "skills_creator",
 ]
 
 
@@ -58,6 +58,14 @@ def check_prompt_rendering() -> List[str]:
         issues.append(f"Failed to render refine_template: {exc}")
 
     try:
+        config.prompts.skills_creation_template.format(
+            bio_content="sample bio",
+            skill_specs="sample specs",
+        )
+    except Exception as exc:
+        issues.append(f"Failed to render skills_creation_template: {exc}")
+
+    try:
         config.prompts.rlm_query_template.format(
             synthesis_prompt="sample synthesis",
             question="sample question",
@@ -75,28 +83,9 @@ def check_prompt_rendering() -> List[str]:
         issues.append(f"Failed to render rlm_query_template_filesystem_only: {exc}")
 
     try:
-        load_prompt("workspace_extraction_template").format(
-            bio_content="sample bio",
-            file_specs="sample specs",
-            timestamp="2026-01-01T00:00:00",
-        )
-    except Exception as exc:
-        issues.append(f"Failed to render workspace_extraction_template: {exc}")
-
-    try:
         load_prompt("baseline_system_prompt").format(question="sample question")
     except Exception as exc:
         issues.append(f"Failed to render baseline_system_prompt: {exc}")
-
-    try:
-        load_prompt("combined_prompt_template").format(
-            assistant_main="assistant",
-            tools_memory="memory",
-            tools_obsidian="obsidian",
-            tools_todoist="todoist",
-        )
-    except Exception as exc:
-        issues.append(f"Failed to render combined_prompt_template: {exc}")
 
     return issues
 
