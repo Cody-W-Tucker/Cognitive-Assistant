@@ -166,8 +166,8 @@ async def process_dataset():
         print("Error: Failed to generate initial summary")
         return
 
-    # Save as human_interview_bio.md
-    bio_path = config.paths.ARTIFACTS_DIR / "human_interview_bio.md"
+    # Save as human_profile.md
+    bio_path = config.paths.ARTIFACTS_DIR / "human_profile.md"
     print(f"Info: Saving initial summary to {bio_path}")
     with open(bio_path, "w", encoding="utf-8") as f:
         f.write(initial_summary)
@@ -184,8 +184,8 @@ async def process_dataset():
         print("Error: Failed to generate final refined summary")
         return
 
-    # Save refined version as ai_interview_bio.md
-    refined_path = config.paths.ARTIFACTS_DIR / "ai_interview_bio.md"
+    # Save refined version as system_prompt.md
+    refined_path = config.paths.ARTIFACTS_DIR / "system_prompt.md"
     print(f"Info: Saving refined summary to {refined_path}")
     with open(refined_path, "w", encoding="utf-8") as f:
         f.write(final_summary)

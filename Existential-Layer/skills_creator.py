@@ -145,10 +145,10 @@ class SkillsCreator:
                 raise FileNotFoundError(f"Bio file not found: {resolved_path}")
             return resolved_path
 
-        bio_files = sorted(config.paths.ARTIFACTS_DIR.glob("human_interview_bio*.md"))
+        bio_files = sorted(config.paths.ARTIFACTS_DIR.glob("human_profile*.md"))
         if not bio_files:
             raise FileNotFoundError(
-                "No human_interview_bio*.md files found in artifacts/. Run prompt_creator.py first or pass --bio."
+                "No human_profile*.md files found in artifacts/. Run prompt_creator.py first or pass --bio."
             )
         return bio_files[-1]
 
@@ -163,7 +163,7 @@ class SkillsCreator:
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,
-            temperature=0.3,
+            temperature=config.api.TEMPERATURE,
             max_output_tokens=config.api.MAX_COMPLETION_TOKENS,
         )
         payload = self._parse_json_response(response)
@@ -234,12 +234,12 @@ class SkillsCreator:
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create the command-line interface parser."""
     parser = argparse.ArgumentParser(
-        description="Generate OpenCode-style skills from human_interview_bio.md",
+        description="Generate OpenCode-style skills from human_profile.md",
     )
     parser.add_argument(
         "--bio",
         type=Path,
-        help="Path to a specific human_interview_bio.md file",
+        help="Path to a specific human_profile.md file",
     )
     parser.add_argument(
         "--output",
