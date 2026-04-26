@@ -19,7 +19,6 @@ Usage:
     python human_interview.py --help             # Show help
 """
 
-import os
 import csv
 import pandas as pd
 import argparse
@@ -52,7 +51,7 @@ def load_existing_answers(output_file: Path) -> Dict[str, Dict[str, str]]:
 
         return answers
     except Exception as e:
-        print(f"⚠️ Warning: Could not load existing answers: {e}")
+        print(f"Warning: Could not load existing answers: {e}")
         return {}
 
 
@@ -95,15 +94,12 @@ def ask_question_interactive(
 ) -> str:
     """Ask a single question interactively and get user response."""
     print("\n" + "=" * 80)
-    print(f"📂 Category: {category_context}")
-    print(f"❓ Question {question_number}: {question}")
+    print(f"Category: {category_context}")
+    print(f"Question {question_number}: {question}")
     print("=" * 80)
 
-    print(
-        "\n💭 Take your time to think about your answer. When ready, type or dictate your response."
-    )
-    print("💡 Press Enter twice (blank line) to finish your answer.")
-    print("📝 Your response:")
+    print("\nInfo: Press Enter twice on a blank line to finish your answer.")
+    print("Response:")
 
     # Collect multi-line input
     lines = []
@@ -115,7 +111,7 @@ def ask_question_interactive(
                 break
             lines.append(line)
         except KeyboardInterrupt:
-            print("\n\n⏹️  Interview paused. You can resume later with --resume")
+            print("\n\nWarning: Interview paused. You can resume later with --resume")
             return ""
         except EOFError:
             # Handle Ctrl+D
@@ -147,16 +143,12 @@ def conduct_interview(
         if answer.strip()
     )
 
-    print("🎯 Human Interview Process")
-    print(f"📊 Total questions: {total_questions}")
-    print(f"✅ Already answered: {answered_count}")
-    print(f"⏳ Remaining: {total_questions - answered_count}")
-    print("\n💡 Instructions:")
-    print("   - Take your time with each answer")
-    print("   - Be honest and reflective")
-    print("   - Press Ctrl+C at any time to pause and resume later")
-    print("   - Press Enter twice on an empty line to finish an answer")
-    print("\n🚀 Starting interview...\n")
+    print("Human Interview Process")
+    print(f"Info: Total questions {total_questions}")
+    print(f"Info: Already answered {answered_count}")
+    print(f"Info: Remaining {total_questions - answered_count}")
+    print("Info: Press Ctrl+C to pause and Enter twice on a blank line to finish an answer")
+    print("\nInfo: Starting interview\n")
 
     for idx, row in questions_df.iterrows():
         category = row["Category"]
@@ -170,7 +162,7 @@ def conduct_interview(
         if category_key not in answers:
             answers[category_key] = {"Answer 1": "", "Answer 2": "", "Answer 3": ""}
 
-        print(f"\n🎯 Section {idx + 1}/{len(questions_df)}: {category}")
+        print(f"\nInfo: Section {idx + 1}/{len(questions_df)}: {category}")
 
         # Ask each question in this category
         for q_num in range(1, 4):
@@ -179,7 +171,7 @@ def conduct_interview(
 
             # Skip if already answered
             if answers[category_key][answer_col].strip():
-                print(f"✅ Question {q_num}: Already answered (skipping)")
+                print(f"Info: Question {q_num} already answered; skipping")
                 continue
 
             question = row[question_col]
@@ -189,10 +181,10 @@ def conduct_interview(
                 answers[category_key][answer_col] = answer
                 answered_count += 1
                 print(
-                    f"✅ Answer recorded! Progress: {answered_count}/{total_questions}"
+                    f"Info: Answer recorded. Progress {answered_count}/{total_questions}"
                 )
             else:
-                print("⏭️  Question skipped (no answer provided)")
+                print("Info: Question skipped because no answer was provided")
 
     return answers
 
@@ -227,15 +219,15 @@ Instructions:
 
     args = parser.parse_args()
 
-    print("🎯 Human Interview Process")
+    print("Human Interview Process")
     print("=" * 50)
 
     # Validate configuration
     issues = config.validate()
     if issues:
-        print("❌ Configuration issues found:")
+        print("Error: Configuration issues found")
         for issue in issues:
-            print(f"   - {issue}")
+            print(f"- {issue}")
         return
 
     # Set up file paths
@@ -245,7 +237,7 @@ Instructions:
 
     # Check if input file exists
     if not questions_file.exists():
-        print(f"❌ Error: Questions file not found at: {questions_file}")
+        print(f"Error: Questions file not found at {questions_file}")
         return
 
     # Determine output file
@@ -255,9 +247,9 @@ Instructions:
         try:
             latest_file = get_most_recent_file("human_interview_*.csv")
             output_file = latest_file
-            print(f"📂 Resuming from: {output_file}")
+            print(f"Info: Resuming from {output_file}")
         except FileNotFoundError:
-            print("❌ No previous interview file found to resume")
+            print("Error: No previous interview file found to resume")
             return
     else:
         # Create new timestamped output file
@@ -272,10 +264,10 @@ Instructions:
     if args.resume and output_file.exists():
         existing_answers = load_existing_answers(output_file)
         if existing_answers:
-            print(f"📖 Loaded {len(existing_answers)} existing answer sets")
+            print(f"Info: Loaded {len(existing_answers)} existing answer sets")
 
     # Read questions
-    print(f"📖 Reading questions from: {questions_file}")
+    print(f"Info: Reading questions from {questions_file}")
     questions_df = pd.read_csv(questions_file)
 
     # Conduct the interview
@@ -295,25 +287,25 @@ Instructions:
         )
 
         print("\n" + "=" * 80)
-        print("🎉 Interview Complete!")
-        print(f"📁 Results saved to: {output_file}")
-        print(f"📊 Total answers recorded: {total_answers}")
-        print("💡 You can now use these answers to build your Existential Layer!")
+        print("Info: Interview complete")
+        print(f"Info: Results saved to {output_file}")
+        print(f"Info: Total answers recorded {total_answers}")
+        print("Info: You can now use these answers to build your Existential Layer")
 
     except KeyboardInterrupt:
-        print("\n\n⏹️  Interview interrupted. Saving progress...")
+        print("\n\nWarning: Interview interrupted. Saving progress")
         save_answers_to_csv(questions_df, answers, output_file)
-        print(f"💾 Progress saved to: {output_file}")
-        print("🔄 You can resume later with: python human_interview.py --resume")
+        print(f"Info: Progress saved to {output_file}")
+        print("Info: Resume later with python human_interview.py --resume")
 
     except Exception as e:
-        print(f"\n❌ Error during interview: {e}")
-        print("💾 Attempting to save any progress...")
+        print(f"\nError: Interview failed: {e}")
+        print("Info: Attempting to save any progress")
         try:
             save_answers_to_csv(questions_df, answers, output_file)
-            print(f"💾 Emergency save completed: {output_file}")
+            print(f"Info: Emergency save completed: {output_file}")
         except Exception as save_error:
-            print(f"❌ Could not save progress: {save_error}")
+            print(f"Error: Could not save progress: {save_error}")
 
 
 if __name__ == "__main__":

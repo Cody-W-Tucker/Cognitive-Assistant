@@ -60,8 +60,10 @@ def ask_question(question: str, human_answer: str, include_human_answer: bool) -
         return run_rlm_query(prompt)
 
     except Exception as e:
-        print(f"⚠️ Error calling RLM: {e}")
+        print(f"Warning: Error calling RLM: {e}")
         return f"Error: {str(e)}"
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
@@ -80,16 +82,16 @@ def main():
     # Validate configuration
     issues = config.validate_question_answering()
     if issues:
-        print("❌ Configuration issues found:")
+        print("Error: Configuration issues found")
         for issue in issues:
-            print(f"   - {issue}")
+            print(f"- {issue}")
         sys.exit(1)
 
-    print("📚 RLM review paths:")
+    print("Info: RLM review paths")
     for review_path in config.rlm.REVIEW_PATHS:
-        print(f"   - {review_path}")
+        print(f"- {review_path}")
     mode_label = "human-seeded" if include_human_answer else "filesystem-only"
-    print(f"🧭 Question mode: {mode_label}")
+    print(f"Info: Question mode {mode_label}")
 
     # Set up file paths from config
     questions_file = config.paths.QUESTIONS_CSV
@@ -97,15 +99,15 @@ def main():
     # Auto-detect latest human interview file
     try:
         human_interview_file = get_most_recent_file("human_interview_*.csv")
-        print(f"Loaded {human_interview_file}")
+        print(f"Info: Loaded {human_interview_file}")
     except FileNotFoundError:
-        print("❌ No human interview files found in data directory")
-        print("💡 Please run the human interview script first")
+        print("Error: No human interview files found in data directory")
+        print("Info: Run the human interview script first")
         sys.exit(1)
 
     # Check if input file exists
     if not questions_file.exists():
-        print(f"❌ Error: Questions file not found at: {questions_file}")
+        print(f"Error: Questions file not found at {questions_file}")
         return
 
     # Create timestamped output file
@@ -117,7 +119,7 @@ def main():
     try:
         human_interview_df = pd.read_csv(human_interview_file)
         if human_interview_df.shape[0] == 0:
-            print("❌ Error: No human interview data loaded.")
+            print("Error: No human interview data loaded")
             sys.exit(1)
 
         # Create lookup dictionary using CSVConfig column names
@@ -134,15 +136,15 @@ def main():
             human_interview_data[category_key] = answer_data
 
     except Exception as e:
-        print(f"❌ Error loading human interview data: {e}")
+        print(f"Error: Failed to load human interview data: {e}")
         sys.exit(1)
 
     print(
-        f"📖 Loaded {len(human_interview_data)} interview sections for personalization"
+        f"Info: Loaded {len(human_interview_data)} interview sections for personalization"
     )
 
     # Read the CSV file
-    print(f"📖 Reading questions from: {questions_file}")
+    print(f"Info: Reading questions from {questions_file}")
     df = pd.read_csv(questions_file)
 
     # Add answer columns if they don't exist using centralized configuration
@@ -171,7 +173,7 @@ def main():
     processed_count = 0
 
     print(
-        f"\n🚀 Starting to process {total_questions} questions with RLM-backed responses..."
+        f"\nInfo: Starting to process {total_questions} questions with RLM-backed responses"
     )
 
     for index, row in df.iterrows():
@@ -189,7 +191,7 @@ def main():
                     if category_key in human_interview_data:
                         human_answer = human_interview_data[category_key].get(human_col, "")
 
-                    print(f"🤔 Processing with RLM ({mode_label}): {query[:60]}...")
+                    print(f"Info: Processing with RLM ({mode_label}): {query[:60]}...")
 
                     max_retries = 3
                     base_delay = 1
@@ -203,7 +205,7 @@ def main():
                         if attempt < max_retries - 1:
                             delay = base_delay * (2**attempt)
                             print(
-                                f"⚠️ {mode_label} RLM call failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})"
+                                f"Warning: {mode_label} RLM call failed, retrying in {delay}s (attempt {attempt+1}/{max_retries})"
                             )
                             time.sleep(delay)
 
@@ -219,7 +221,7 @@ def main():
                     df.at[index, human_col] = human_answer
 
                     processed_count += 1
-                    print(f"✅ Processed {processed_count}/{total_questions} questions")
+                    print(f"Info: Processed {processed_count}/{total_questions} questions")
 
                     # Save after each answer to prevent data loss
                     df.to_csv(
@@ -240,7 +242,7 @@ def main():
     )
 
     print(
-        f"\n✅ Completed! Processed {processed_count} questions and saved to {output_file}"
+        f"\nInfo: Completed processing {processed_count} questions; saved to {output_file}"
     )
 
 

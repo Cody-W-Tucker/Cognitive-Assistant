@@ -24,14 +24,13 @@ Output Structure:
     └── CLAUDE.md            # Root instructions
 """
 
-import os
 import sys
 import json
 import re
 import argparse
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 import asyncio
@@ -39,6 +38,8 @@ import asyncio
 # Import config from current directory
 sys.path.insert(0, str(Path(__file__).parent))
 from config import config, get_most_recent_file
+from llm import LLMHandle, create_client, generate_text_async
+from prompt_loader import load_prompt
 
 
 # ============================================================================
@@ -174,148 +175,6 @@ WORKSPACE_FILES: List[WorkspaceFileSpec] = [
 
 
 # ============================================================================
-# EXTRACTION PROMPT TEMPLATE
-# ============================================================================
-
-EXTRACTION_PROMPT_TEMPLATE = """<task>
-You are a specialized content extraction system. Your job is to read a comprehensive user profile 
-and split it into 10 atomic markdown files, each with a specific purpose and voice.
-
-<input_bio>
-{bio_content}
-</input_bio>
-
-<file_specifications>
-{file_specs}
-</file_specifications>
-
-<output_format>
-Return a JSON object with exactly these 10 keys. Each value must be a complete markdown document:
-
-{{
-  "SOUL.md": "# SOUL\\n\\n...",
-  "IDENTITY.md": "# IDENTITY\\n\\n...",
-  "USER.md": "# USER\\n\\n...",
-  "AGENTS.md": "# AGENTS\\n\\n...",
-  "MEMORY.md": "# MEMORY\\n\\n...",
-  "CONVENTIONS.md": "# CONVENTIONS\\n\\n...",
-  "OPEN_QUESTIONS.md": "# OPEN QUESTIONS\\n\\n...",
-  "WORKFLOWS.md": "# WORKFLOWS\\n\\n...",
-  "HEARTBEAT.md": "# HEARTBEAT\\n\\n...",
-  "CLAUDE.md": "# CLAUDE\\n\\n..."
-}}
-
-IMPORTANT: Return ONLY the JSON object, with no markdown code blocks or other text.
-</output_format>
-
-<extraction_rules>
-1. **YAML Frontmatter**: Each file must start with:
-   ```yaml
-   ---
-   scope: [scope from spec]
-   priority: [priority from spec]
-   voice: [voice from spec]
-   generated_at: {timestamp}
-   source: human_interview_bio.md
-   ---
-   ```
-
-2. **Voice Requirements**:
-   - **first-person** (SOUL, IDENTITY): Use "I am...", "My core...", "I value...", "My pattern..."
-   - **descriptive** (USER, MEMORY): Use "This user...", "His pattern...", "He tends to..."
-   - **instructional** (AGENTS, CLAUDE, WORKFLOWS): Use imperative commands - "When user says X, do Y..."
-   - **reference** (CONVENTIONS): Neutral definitions and tables
-   - **analytical** (OPEN_QUESTIONS): Question-focused, evidence-based
-   - **checklist** (HEARTBEAT): Checkbox format, action items
-
-3. **Content Preservation**:
-   - Preserve EXACT terminology from the bio (don't normalize language)
-   - Keep specific quotes and examples from the bio
-   - Maintain the conceptual frameworks (integration, embodiment, the chasm, etc.)
-
-4. **File-Specific Guidelines**:
-
-   **SOUL.md** (~500-800 words):
-   - Core Being: Existential narrative using user's sacred vocabulary
-   - Sacred Vocabulary: Table of 8-12 terms with user-specific meanings
-   - Values Hierarchy: Ranked list from Pillar 1
-   - Unspoken Pulls: Implicit trajectories as bullet points
-   - Energy Patterns: What energizes/drains
-
-   **IDENTITY.md** (~200-300 words):
-   - Role statement: "I am the [role] for [user name]..."
-   - Purpose: What the AI helps the user accomplish
-   - Relationship: How the AI relates to the user's journey
-
-   **USER.md** (~800-1200 words):
-   - Core Identity Architecture: Descriptive summary
-   - Meaningful Absences: What he lacks that AI would predict
-   - Cognitive Architecture: Processing style, MBTI-style profile
-   - Value Hierarchy: From Pillar 1, descriptive voice
-   - Formative Events: Key moments from Pillar 3
-   - Central Paradoxes: Tensions in the user's patterns
-
-   **AGENTS.md** (~600-800 words):
-   - Deviation Mapping Table: AI default vs User reality
-   - Success Criteria: "Response is successful when..."
-   - Routing Rules: Intention patterns (6-10 rules)
-   - Response Style: Voice/tone guidance
-
-   **MEMORY.md** (~400-600 words):
-   - Session Context: Concise pillars summary
-   - Dominant Narrative Arc: From Pillar 3
-   - Current Focus: What's live for the user now
-   - Unresolved Tensions: Brief summary of open questions
-
-   **CONVENTIONS.md** (~400-600 words):
-   - Terminology Dictionary: From Pillar 2 semantic symbols
-   - Intent Translation: "When user says X, he means Y..."
-   - Response Style Rules: Based on deviation mapping
-
-   **OPEN_QUESTIONS.md** (~300-400 words):
-   - The 7 Open Questions with current evidence
-   - Brief context for each tension
-
-   **WORKFLOWS.md** (~500-700 words):
-   - 80/20 Analysis: High-leverage activities
-   - Recurring Playbooks: Named procedures
-   - System Design: How to work WITH his architecture
-
-   **HEARTBEAT.md** (~200-300 words):
-   - Periodic Checks: Questions to ask periodically
-   - Checklist format with [ ] checkboxes
-
-   **CLAUDE.md** (~400-600 words):
-   - Root Instructions: Core principles for coding context
-   - Stack/Style Notes: If applicable from bio
-   - Success Criteria: Specific to code interactions
-</extraction_rules>
-
-<content_mapping>
-From the bio structure:
-- **① Snapshot: Integrated View** → SOUL, USER, AGENTS (identity, cognitive architecture, deviation mapping)
-- **② Pillar 1: Adapted Views** → SOUL (values), USER (beliefs), AGENTS (deviation mapping)
-- **② Pillar 2: Semantic Symbols** → CONVENTIONS (terminology dictionary)
-- **② Pillar 3: Life Narrative** → USER (formative events), MEMORY (narrative arc)
-- **② Pillar 4: Aspirational Trajectory** → SOUL (directional pulls), IDENTITY (AI role)
-- **② Pillar 5: Path Engineering** → WORKFLOWS (80/20, playbooks), HEARTBEAT (checks)
-- **③ Open Questions** → OPEN_QUESTIONS (full list), MEMORY (summary)
-- **Downstream Model Routing** → AGENTS (routing rules), CLAUDE (root instructions)
-</content_mapping>
-
-<quality_checks>
-Before outputting, verify:
-1. All 10 files are present in the JSON
-2. Each file has proper YAML frontmatter
-3. Voice matches specification for each file
-4. No generic content - all specific to this user
-5. Terminology preserved exactly as in bio
-6. Length appropriate for each file's purpose
-</quality_checks>
-</task>"""
-
-
-# ============================================================================
 # MAIN GENERATOR CLASS
 # ============================================================================
 
@@ -323,21 +182,17 @@ class BioToWorkspaceGenerator:
     """Generates atomic workspace files from human_interview_bio.md"""
     
     def __init__(self):
-        self.client: Any = None
-        self.model: Optional[str] = None
+        self.handle: Optional[LLMHandle] = None
         self._init_llm()
     
     def _init_llm(self):
         """Initialize LLM client using config"""
         try:
             # Use grok-4 for extraction (needs strong synthesis ability)
-            self.client, self.model = config.api.create_client(
-                model="grok-4",
-                async_mode=True
-            )
-            print(f"🤖 Initialized LLM: {config.api.LLM_PROVIDER} / {self.model}")
+            self.handle = create_client(config.api, model="grok-4", async_mode=True)
+            print(f"Info: Initialized LLM {self.handle.provider} / {self.handle.model}")
         except Exception as e:
-            print(f"❌ Failed to initialize LLM: {e}")
+            print(f"Error: Failed to initialize LLM: {e}")
             raise
     
     async def generate_workspace(
@@ -358,14 +213,14 @@ class BioToWorkspaceGenerator:
             Path to created workspace (folder or zip file)
         """
         print("\n" + "="*60)
-        print("🚀 Bio-to-Workspace Generator")
+        print("Bio-to-Workspace Generator")
         print("="*60 + "\n")
         
         # 1. Load bio content
         bio_content = self._load_bio(bio_path)
         
         # 2. Single LLM call extracts all files
-        print("\n🧠 Extracting content into atomic files...")
+        print("\nInfo: Extracting content into atomic files")
         files_content = await self._extract_files(bio_content)
         
         # 3. Validate extraction
@@ -377,12 +232,12 @@ class BioToWorkspaceGenerator:
         # 5. Create zip if requested
         if output_format in ["zip", "both"]:
             zip_path = self._create_zip(workspace_path)
-            print(f"📦 Created zip: {zip_path}")
+            print(f"Info: Created zip archive {zip_path}")
             if output_format == "zip":
                 return zip_path
         
-        print(f"\n✅ Workspace generation complete!")
-        print(f"📁 Location: {workspace_path}")
+        print("\nInfo: Workspace generation complete")
+        print(f"Info: Location {workspace_path}")
         
         return workspace_path
     
@@ -405,9 +260,9 @@ class BioToWorkspaceGenerator:
         if not resolved_path.exists():
             raise FileNotFoundError(f"Bio file not found: {resolved_path}")
         
-        print(f"📄 Loading bio: {resolved_path}")
+        print(f"Info: Loading bio {resolved_path}")
         content = resolved_path.read_text(encoding="utf-8")
-        print(f"   Size: {len(content):,} characters")
+        print(f"Info: Bio size {len(content):,} characters")
         return content
     
     async def _extract_files(self, bio_content: str) -> Dict[str, str]:
@@ -416,7 +271,7 @@ class BioToWorkspaceGenerator:
         file_specs_text = self._format_file_specs()
         
         # Build prompt
-        prompt = EXTRACTION_PROMPT_TEMPLATE.format(
+        prompt = load_prompt("workspace_extraction_template").format(
             bio_content=bio_content,
             file_specs=file_specs_text,
             timestamp=datetime.now().isoformat()
@@ -428,7 +283,7 @@ class BioToWorkspaceGenerator:
         # Extract and parse JSON
         files_content = self._parse_json_response(response)
         
-        print(f"   Extracted {len(files_content)} files")
+        print(f"Info: Extracted {len(files_content)} files")
         return files_content
     
     def _format_file_specs(self) -> str:
@@ -446,46 +301,20 @@ class BioToWorkspaceGenerator:
     async def _call_llm(self, prompt: str) -> str:
         """Call LLM and return response"""
         try:
-            print(f"🔄 Calling {config.api.LLM_PROVIDER.upper()} ({self.model})...")
-            
-            if config.api.LLM_PROVIDER == "anthropic":
-                return await self._call_anthropic(prompt)
-            else:
-                return await self._call_openai_compatible(prompt)
-                
+            if self.handle is None:
+                raise ValueError("LLM handle is not initialized")
+
+            print(f"Info: Calling {self.handle.provider.upper()} ({self.handle.model})")
+            return await generate_text_async(
+                self.handle,
+                user_prompt=prompt,
+                temperature=0.3,
+                max_output_tokens=config.api.MAX_COMPLETION_TOKENS,
+            )
         except Exception as e:
-            print(f"❌ LLM call failed: {e}")
+            print(f"Error: LLM call failed: {e}")
             raise
-    
-    async def _call_anthropic(self, prompt: str) -> str:
-        """Call Anthropic API"""
-        content = ""
-        async with self.client.messages.stream(
-            model=self.model,
-            max_tokens=config.api.MAX_COMPLETION_TOKENS,
-            temperature=0.3,  # Lower temp for structured extraction
-            messages=[{"role": "user", "content": prompt}]
-        ) as stream:
-            async for event in stream:
-                if event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
-                        content += event.delta.text
-        return content
-    
-    async def _call_openai_compatible(self, prompt: str) -> str:
-        """Call OpenAI/xAI compatible API"""
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_completion_tokens=config.api.MAX_COMPLETION_TOKENS
-        )
-        
-        if response.choices and response.choices[0].message:
-            return response.choices[0].message.content
-        else:
-            raise ValueError("Empty response from LLM")
-    
+
     def _parse_json_response(self, response: str) -> Dict[str, str]:
         """Extract and parse JSON from LLM response"""
         # Try to find JSON in the response
@@ -504,8 +333,8 @@ class BioToWorkspaceGenerator:
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
-            print(f"⚠️  JSON parse error: {e}")
-            print("   Attempting to fix common issues...")
+            print(f"Warning: JSON parse error: {e}")
+            print("Info: Attempting to fix common issues")
             # Try to fix common JSON issues
             fixed = self._fix_json(json_str)
             return json.loads(fixed)
@@ -527,18 +356,18 @@ class BioToWorkspaceGenerator:
         extra = actual_files - expected_files
         
         if missing:
-            print(f"⚠️  Missing files: {', '.join(missing)}")
+            print(f"Warning: Missing files: {', '.join(missing)}")
         if extra:
-            print(f"ℹ️  Extra files (will be included): {', '.join(extra)}")
+            print(f"Info: Extra files will be included: {', '.join(extra)}")
         
         # Check each file has minimum content
         for filename, content in files_content.items():
             if len(content) < 100:
-                print(f"⚠️  {filename} seems very short ({len(content)} chars)")
+                print(f"Warning: {filename} seems very short ({len(content)} chars)")
             if "---" not in content[:100]:
-                print(f"⚠️  {filename} missing YAML frontmatter")
-        
-        print(f"   ✓ Validated {len(files_content)} files")
+                print(f"Warning: {filename} is missing YAML frontmatter")
+
+        print(f"Info: Validated {len(files_content)} files")
     
     def _write_workspace(
         self,
@@ -554,13 +383,13 @@ class BioToWorkspaceGenerator:
             workspace = Path(output_dir)
         
         workspace.mkdir(parents=True, exist_ok=True)
-        print(f"\n📝 Writing files to: {workspace}")
+        print(f"\nInfo: Writing files to {workspace}")
         
         # Write each file
         for filename, content in files_content.items():
             filepath = workspace / filename
             filepath.write_text(content, encoding="utf-8")
-            print(f"   ✓ {filename} ({len(content):,} chars)")
+            print(f"Info: Wrote {filename} ({len(content):,} chars)")
         
         # Create memory directory (empty, ready for use)
         memory_dir = workspace / "memory"
@@ -574,7 +403,7 @@ class BioToWorkspaceGenerator:
         readme = memory_dir / "README.md"
         readme.write_text("# Memory Directory\n\nPlace daily/session notes here.\nFiles follow format: YYYY-MM-DD.md\n")
         
-        print(f"   ✓ Created memory/ directory")
+        print("Info: Created memory directory")
         
         return workspace
     
@@ -662,14 +491,14 @@ async def main():
             output_format=args.format
         )
         
-        print(f"\n🎉 Success! Output: {result_path}")
+        print(f"\nInfo: Success. Output {result_path}")
         return 0
-        
+
     except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")
         return 1
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\nError: Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return 1
