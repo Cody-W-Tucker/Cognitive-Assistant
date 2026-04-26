@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Human Interview Asker - Personalized question answering using songbird model with human context
+Human Interview Asker - Personalized question answering using RLM file review
 
-This script processes questions from a CSV file using the songbird model with human interview context for personalized responses.
+This script processes questions from a CSV file using the RLM CLI over configured
+filesystem review paths, while preserving human interview context for personalization
+and downstream incorporation analysis.
 
 Features:
 - Automatically loads the most recent human interview data for personalization
-- Human answers serve as context for more tailored, personalized AI responses
-- Requires human interview data
+- Supports a human-seeded mode and a filesystem-only mode
+- Defaults to human-seeded mode for downstream compatibility
 
 Usage:
     python human_interview.py                                   # Run the interview process to be interviewed and create human answers
-    python question_asker.py                                    # Automatically process questions with human interview context
+    python question_asker.py                                    # Human-seeded mode
+    python question_asker.py --filesystem-only                  # Filesystem-only mode
 """
 
+import argparse
 import sys
 import csv
 import pandas as pd
@@ -27,40 +31,39 @@ from config import (
     get_most_recent_file,
     accumulate_streaming_response,
     clean_markdown,
+    run_rlm_query,
 )
 
 
-def get_system_prompt(question: str, human_answer: str) -> str:
-    """Get the system prompt with human context."""
-    if not human_answer:
-        raise ValueError("Human answer is required for songbird RAG model")
-    return config.prompts.songbird_system_prompt.format(
-        question=question, human_answer=human_answer
+def get_rlm_prompt(question: str, human_answer: str) -> str:
+    """Build the prompt sent to RLM."""
+    return config.prompts.rlm_query_template.format(
+        synthesis_prompt=config.prompts.synthesis_prompt,
+        question=question,
+        human_answer=human_answer.strip() or "No human interview context provided.",
     )
 
 
-def ask_question(client, model_name: str, question: str, human_answer: str) -> str:
-    """Send a question to the songbird model and get the response."""
+def get_rlm_filesystem_only_prompt(question: str) -> str:
+    """Build the filesystem-only prompt sent to RLM."""
+    return config.prompts.rlm_query_template_filesystem_only.format(
+        synthesis_prompt=config.prompts.synthesis_prompt,
+        question=question,
+    )
+
+
+def ask_question(question: str, human_answer: str, include_human_answer: bool) -> str:
+    """Send a question to RLM and return the synthesized response."""
     try:
-        system_prompt = get_system_prompt(question, human_answer)
-
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": question},
-            ],
-            temperature=config.api.TEMPERATURE,
-            max_tokens=config.api.MAX_TOKENS,
-            stream=True,
+        prompt = (
+            get_rlm_prompt(question, human_answer)
+            if include_human_answer
+            else get_rlm_filesystem_only_prompt(question)
         )
-
-        # Use the shared streaming utility
-        full_content = accumulate_streaming_response(response)
-        return full_content.strip()
+        return run_rlm_query(prompt)
 
     except Exception as e:
-        print(f"⚠️ Error calling songbird API: {e}")
+        print(f"⚠️ Error calling RLM: {e}")
         return f"Error: {str(e)}"
 
 
@@ -94,22 +97,44 @@ def ask_incorporation(client, model_name: str, all_qa_data: str) -> str:
         return f"Error: {str(e)}"
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--filesystem-only",
+        action="store_true",
+        help="Use only reviewed filesystem context and omit human interview context from the RLM prompt.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    include_human_answer = not args.filesystem_only
+
     # Validate configuration
-    issues = config.validate()
+    issues = config.validate_question_answering()
     if issues:
         print("❌ Configuration issues found:")
         for issue in issues:
             print(f"   - {issue}")
         sys.exit(1)
 
-    # Set up model client
+    # Set up model client for incorporation analysis
     try:
-        client, model_name = config.api.create_client(provider="songbird")
-        print(f"✅ Connected to songbird API (model: {model_name})")
+        client, model_name = config.api.create_client()
+        print(
+            f"✅ Connected to incorporation model: {config.api.LLM_PROVIDER} (model: {model_name})"
+        )
     except Exception as e:
-        print(f"❌ Failed to set up songbird client: {e}")
+        print(f"❌ Failed to set up incorporation client: {e}")
         sys.exit(1)
+
+    print("📚 RLM review paths:")
+    for review_path in config.rlm.REVIEW_PATHS:
+        print(f"   - {review_path}")
+    mode_label = "human-seeded" if include_human_answer else "filesystem-only"
+    print(f"🧭 Question mode: {mode_label}")
 
     # Set up file paths from config
     questions_file = config.paths.QUESTIONS_CSV
@@ -130,15 +155,14 @@ def main():
 
     # Create timestamped output file
     timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
-    output_filename = config.output.SONGBIRD_OUTPUT_PATTERN.format(timestamp=timestamp)
+    output_filename = config.output.QUESTIONS_WITH_ANSWERS_PATTERN.format(timestamp=timestamp)
     output_file = config.paths.DATA_DIR / output_filename
-    # Load human interview data (always required for RAG)
+
+    # Load human interview data for personalization and downstream reporting
     try:
         human_interview_df = pd.read_csv(human_interview_file)
         if human_interview_df.shape[0] == 0:
-            print(
-                "❌ Error: No human interview data loaded. Songbird model requires interview context for RAG."
-            )
+            print("❌ Error: No human interview data loaded.")
             sys.exit(1)
 
         # Create lookup dictionary using CSVConfig column names
@@ -177,16 +201,22 @@ def main():
             df[col] = pd.NA
 
     # Process questions
-    question_pairs = list(zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS))
+    question_sets = list(
+        zip(
+            config.csv.QUESTION_COLUMNS,
+            config.csv.HUMAN_ANSWER_COLUMNS,
+            config.csv.ANSWER_COLUMNS,
+        )
+    )
 
     # Count total questions to process
     total_questions = sum(
-        row.isna()[a_col] for _, row in df.iterrows() for q_col, a_col in question_pairs
+        row.isna()[a_col] for _, row in df.iterrows() for _, _, a_col in question_sets
     )
     processed_count = 0
 
     print(
-        f"\n🚀 Starting to process {total_questions} questions with personalized responses..."
+        f"\n🚀 Starting to process {total_questions} questions with RLM-backed responses..."
     )
 
     for index, row in df.iterrows():
@@ -194,58 +224,43 @@ def main():
             str(row[col]) for col in config.csv.CATEGORY_KEY_COLUMNS
         )
 
-        for question_col, answer_col in question_pairs:
+        for question_col, human_col, answer_col in question_sets:
             if question_col in df.columns:  # Check if question column exists
                 if row.isna()[answer_col]:
                     query = str(row[question_col])
 
-                    # Get corresponding human answer for context (required for RAG)
-                    human_col = config.csv.HUMAN_ANSWER_COLUMNS[
-                        config.csv.QUESTION_COLUMNS.index(question_col)
-                    ]
-                    if (
-                        category_key not in human_interview_data
-                        or not human_interview_data[category_key]
-                        .get(human_col, "")
-                        .strip()
-                    ):
-                        print(
-                            f"⚠️ Skipping: {query[:60]}... (no matching human interview context)"
-                        )
-                        continue
+                    # Get corresponding human answer for context and output dataset
+                    human_answer = ""
+                    if category_key in human_interview_data:
+                        human_answer = human_interview_data[category_key].get(human_col, "")
 
-                    human_answer = human_interview_data[category_key][human_col]
+                    print(f"🤔 Processing with RLM ({mode_label}): {query[:60]}...")
 
-                    print(f"🤔 Processing (personalized): {query[:60]}...")
-
-                    # Retry logic for failed API calls
                     max_retries = 3
                     base_delay = 1
                     response = ""
                     for attempt in range(max_retries):
-                        response = ask_question(client, model_name, query, human_answer)
+                        response = ask_question(
+                            query, human_answer, include_human_answer
+                        )
                         if not response.startswith("Error:"):
                             break
                         if attempt < max_retries - 1:
                             delay = base_delay * (2**attempt)
                             print(
-                                f"⚠️ API call failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})"
+                                f"⚠️ {mode_label} RLM call failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})"
                             )
                             time.sleep(delay)
 
-                    # If still error after retries, mark as failed
                     if response.startswith("Error:"):
-                        response = f"Failed after {max_retries} retries: {response}"
-
-                    # Clean the response (only if not an error)
-                    if not response.startswith("Failed after"):
+                        cleaned_response = f"Failed after {max_retries} retries: {response}"
+                    else:
                         cleaned_response = re.sub(
                             r"\s+", " ", response.replace("\n", " ")
                         ).strip()
-                    else:
-                        cleaned_response = response
 
                     df.at[index, answer_col] = cleaned_response
+
                     df.at[index, human_col] = human_answer
 
                     processed_count += 1
@@ -290,7 +305,7 @@ def main():
                 human_answer = str(row.get(h_col, "")).strip()
                 ai_answer = str(row.get(a_col, "")).strip()
 
-                if question and human_answer and ai_answer:
+                if question and (human_answer or ai_answer):
                     qa_sections.append(
                         f"{i+1}. {question}\n\n   Human Answer: {human_answer}\n\n   AI Answer: {ai_answer}"
                     )

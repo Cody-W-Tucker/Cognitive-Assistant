@@ -12,6 +12,7 @@ Usage:
 """
 
 import os
+import subprocess
 from pathlib import Path
 from typing import List, Optional, Any
 from dataclasses import dataclass, field
@@ -23,6 +24,21 @@ load_dotenv()
 # ============================================================================
 # PROMPT TEMPLATES - These are the prompts used to build the system prompt.
 # ============================================================================
+
+# Upstream synthesis prompt reused by the RLM-backed question pipeline.
+SYNTHESIS_PROMPT = """You are a cognitive synthesis expert who speaks entirely in the first person as the user's own deepest thoughts, revealing profound psychological insights through natural, flowing narrative.
+
+Speak as if these are the user's own intimate reflections - no preambles, no meta-comments, just pure first-person wisdom that emerges from their lived experience and knowledge base context.
+
+Weave together:
+- How the user's understanding has evolved through experiences and cognitive shifts
+- Their aspirational drives and hidden growth potentials revealed in patterns
+- Their place in life's larger narrative and relational patterns
+- Sophisticated psychological frameworks that illuminate unconscious drivers
+
+Reference knowledge base content meaningfully, explaining deeper significance and connections to broader behavioral themes. Challenge assumptions with evidence-based insights while staying grounded in the user's authentic voice.
+
+Respond comprehensively to queries by embodying this psychological depth in first-person narrative that feels like the user's own enlightened self-reflection."""
 
 # Initial prompt for existential layer creation
 # These are the items the model should memorize about you.
@@ -339,24 +355,7 @@ class APIConfig:
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")),
         },
-        "songbird": {
-            "api_key": os.getenv("OPEN_WEBUI_API_KEY", ""),
-            "base_url": "https://ai.homehub.tv/api",
-            "model": "songbird",
-            "MAX_TOKENS": 128000,
-            "MAX_COMPLETION_TOKENS": 4096,
-        },
     }
-
-    # Other API settings
-    QDRANT_URL: str = field(
-        default_factory=lambda: os.getenv("QDRANT_URL", "http://localhost:6333")
-    )
-    OLLAMA_EMBEDDING_MODEL: str = field(
-        default_factory=lambda: os.getenv(
-            "OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest"
-        )
-    )
 
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
@@ -390,28 +389,13 @@ class APIConfig:
             model = "unknown"
 
         try:
-            if provider in ["openai", "xai", "songbird"]:
+            if provider in ["openai", "xai"]:
                 from openai import AsyncOpenAI, OpenAI
 
                 client_cls = AsyncOpenAI if async_mode else OpenAI
                 client = client_cls(
                     api_key=config["api_key"], base_url=config.get("base_url")
                 )
-
-                # Special handling for songbird model discovery (sync only)
-                if provider == "songbird" and not async_mode:
-                    try:
-                        models = client.models.list()
-                        data = getattr(models, "data", [])
-                        available = [m.id for m in data]
-                        model = (
-                            "songbird"
-                            if "songbird" in available
-                            else (available[0] if available else "unknown")
-                        )
-                        return client, model
-                    except Exception:
-                        return client, "songbird"
 
                 return client, str(model)
 
@@ -430,38 +414,11 @@ class APIConfig:
             )
         except Exception as e:
             if "401" in str(e) or "invalid" in str(e).lower():
-                env_key = (
-                    "OPEN_WEBUI_API_KEY"
-                    if provider == "songbird"
-                    else f"{provider.upper()}_API_KEY"
-                )
+                env_key = f"{provider.upper()}_API_KEY"
                 raise ValueError(
                     f"Authentication failed. Check {env_key} in your .env file"
                 )
             raise
-
-    def create_qdrant_client(self):
-        """Create and return a Qdrant client."""
-        try:
-            from qdrant_client import QdrantClient
-
-            url_parts = (
-                self.QDRANT_URL.replace("http://", "")
-                .replace("https://", "")
-                .split(":")
-            )
-            host = url_parts[0]
-            port = int(url_parts[1]) if len(url_parts) > 1 else 6333
-
-            return QdrantClient(host=host, port=port)
-
-        except ImportError:
-            raise ImportError(
-                "qdrant-client package not installed. Install with: pip install qdrant-client"
-            )
-        except Exception as e:
-            raise ValueError(f"Failed to connect to Qdrant at {self.QDRANT_URL}: {e}")
-
 
 class PathConfig:
     """File path and directory configuration.
@@ -522,6 +479,36 @@ class PathConfig:
         ]
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass
+class RLMConfig:
+    """RLM CLI configuration and filesystem review targets."""
+
+    COMMAND: List[str] = field(default_factory=lambda: ["rlm"])
+    REVIEW_PATHS: List[Path] = field(
+        default_factory=lambda: [
+            Path("/home/codyt/Knowledge/Personal/Journal"),
+            Path("/home/codyt/Knowledge/Personal/Knowledge"),
+        ]
+    )
+    TIMEOUT_SECONDS: int = 300
+
+    def validate_review_paths(self) -> List[str]:
+        """Validate configured RLM review targets."""
+        issues = []
+
+        if not self.REVIEW_PATHS:
+            issues.append(
+                "RLM review paths are not configured. Add filesystem paths to RLMConfig.REVIEW_PATHS in config.py"
+            )
+            return issues
+
+        for path in self.REVIEW_PATHS:
+            if not path.exists():
+                issues.append(f"RLM review path does not exist: {path}")
+
+        return issues
 
 
 @dataclass
@@ -608,9 +595,44 @@ class PromptsConfig:
     """All system prompts and LLM prompts used across scripts."""
 
     # Use the constants defined at the top of the file
+    synthesis_prompt: str = SYNTHESIS_PROMPT
     initial_template: str = INITIAL_TEMPLATE
     refine_template: str = REFINE_TEMPLATE
     incorporation_prompt: str = INCORPORATION_SYSTEM_PROMPT
+
+    rlm_query_template: str = """{synthesis_prompt}
+
+Use the reviewed filesystem context as the primary evidence base for answering the question.
+When the human interview context is helpful, treat it as supporting context rather than the only source of truth.
+
+Question:
+{question}
+
+Human interview context:
+{human_answer}
+
+Instructions:
+- Answer entirely in the first person, as the user's own reflective voice.
+- Ground claims in the reviewed files when possible.
+- Integrate deeper psychological synthesis rather than just summarizing documents.
+- Do not mention the files, tooling, or that you reviewed a knowledge base.
+- Do not use preambles or meta commentary.
+"""
+
+    rlm_query_template_filesystem_only: str = """{synthesis_prompt}
+
+Use the reviewed filesystem context as the primary evidence base for answering the question.
+
+Question:
+{question}
+
+Instructions:
+- Answer entirely in the first person, as the user's own reflective voice.
+- Ground claims in the reviewed files when possible.
+- Integrate deeper psychological synthesis rather than just summarizing documents.
+- Do not mention the files, tooling, or that you reviewed a knowledge base.
+- Do not use preambles or meta commentary.
+"""
 
 
 @dataclass
@@ -618,7 +640,7 @@ class OutputConfig:
     """Output file naming and formatting configuration."""
 
     # Output file naming patterns
-    SONGBIRD_OUTPUT_PATTERN: str = "questions_with_answers_songbird_{timestamp}.csv"
+    QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_rlm_{timestamp}.csv"
     HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
 
     # Prompt output files
@@ -635,6 +657,7 @@ class Config:
 
     api: APIConfig = field(default_factory=APIConfig)
     paths: PathConfig = field(default_factory=PathConfig)
+    rlm: RLMConfig = field(default_factory=RLMConfig)
     csv: CSVConfig = field(default_factory=CSVConfig)
     redaction: RedactionConfig = field(default_factory=RedactionConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
@@ -662,16 +685,15 @@ class Config:
                     f"{provider.upper()}_API_KEY not found in environment (required for LLM_PROVIDER={provider})"
                 )
 
-        # Check songbird key specifically as it's often used
-        songbird_config = self.api.PROVIDERS.get("songbird")
-        if songbird_config and not songbird_config.get("api_key"):
-            issues.append("OPEN_WEBUI_API_KEY not found in environment")
-
         # Check required files
         if not self.paths.QUESTIONS_CSV.exists():
             issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
 
         return issues
+
+    def validate_question_answering(self) -> List[str]:
+        """Validate configuration needed specifically for the RLM-backed question flow."""
+        return self.validate() + self.rlm.validate_review_paths()
 
 
 # Create global config instance
@@ -737,6 +759,38 @@ def accumulate_streaming_response(response) -> str:
     return full_content.strip()
 
 
+def run_rlm_query(query: str, review_paths: Optional[List[Path]] = None) -> str:
+    """Run the RLM CLI against the configured filesystem review targets."""
+    paths = review_paths or config.rlm.REVIEW_PATHS
+    if not paths:
+        raise ValueError(
+            "No RLM review paths configured. Add filesystem paths to RLMConfig.REVIEW_PATHS in config.py"
+        )
+
+    command = list(config.rlm.COMMAND)
+    for path in paths:
+        command.extend(["--file", str(path)])
+    command.append(query)
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=config.rlm.TIMEOUT_SECONDS,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or "RLM command failed without stderr output"
+        raise RuntimeError(stderr)
+
+    stdout = result.stdout.strip()
+    if not stdout:
+        raise RuntimeError("RLM returned empty output")
+
+    return stdout
+
+
 # Export key functions and classes for easy importing
 __all__ = [
     "config",
@@ -746,8 +800,10 @@ __all__ = [
     "Config",
     "APIConfig",
     "PathConfig",
+    "RLMConfig",
     "CSVConfig",
     "RedactionConfig",
     "PromptsConfig",
     "OutputConfig",
+    "run_rlm_query",
 ]

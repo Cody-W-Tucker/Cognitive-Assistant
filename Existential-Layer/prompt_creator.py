@@ -7,7 +7,7 @@ Uses a 2-call approach for refinement.
 
 Pipeline:
 1. Dataset Processing:
-   ├── Load questions_with_answers_songbird_*.csv
+   ├── Load questions_with_answers_rlm_*.csv
    ├── Call 1: Generate initial comprehensive summary
    └── Call 2: Refine the summary
 
@@ -47,7 +47,7 @@ def load_dataset_context() -> str:
         Formatted context containing human answers, AI answers, and incorporation instructions
     """
     try:
-        dataset_csv = get_most_recent_file("questions_with_answers_songbird_*.csv")
+        dataset_csv = get_most_recent_file("questions_with_answers_rlm_*.csv")
     except FileNotFoundError:
         raise FileNotFoundError("No question_asker dataset files found")
 

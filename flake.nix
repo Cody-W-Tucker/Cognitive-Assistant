@@ -2,9 +2,10 @@
   description = "A Nix-flake-based Python development environment";
 
   inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.*.tar.gz";
+  inputs.rlm.url = "github:Cody-W-Tucker/rlm";
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, rlm }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -26,33 +27,17 @@
         { pkgs }:
         {
           default = pkgs.mkShell {
-            venvDir = ".venv";
-            packages =
-              with pkgs;
-              [ python312 ]
-              ++ (with pkgs.python312Packages; [
-                pip
-                venvShellHook
-                python-dotenv
-                anthropic
-                langchain-openai
-                langchain-core
-                langchain-community
-                langgraph
-                notebook
-                jupyter
-                pandas
-                scikit-learn
-              ]);
-            shellHook = ''
-              if [ ! -d ".venv" ]; then
-                python -m venv .venv
-                source .venv/bin/activate
-                pip install -r requirements.txt
-              else
-                source .venv/bin/activate
-              fi
-            '';
+            packages = [
+              (pkgs.python312.withPackages (
+                python-pkgs: with python-pkgs; [
+                  python-dotenv
+                  anthropic
+                  pandas
+                  openai
+                ]
+              ))
+              rlm.packages.${pkgs.system}.default
+            ];
           };
         }
       );
