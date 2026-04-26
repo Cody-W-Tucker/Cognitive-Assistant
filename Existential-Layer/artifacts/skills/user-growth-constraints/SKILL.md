@@ -1,74 +1,89 @@
 ---
 name: user-growth-constraints
-description: Use when a recommendation might collide with recurring traps, blindspots, or failure patterns around action, translation, responsibility, recognition, or commitment.
+description: Use when a recommendation could collide with recurring traps around market translation, over-responsibility, recognition, vulnerability, or overanalysis during high-stakes execution.
 compatibility: opencode
 ---
-
 ## When To Use
-
-- The user is translating insight into action, offers, products, commitments, or public language.
-- A recommendation could accidentally reinforce overanalysis, over-expansion, over-responsibility, or under-selling.
-- The topic involves business success, market recognition, vulnerability, decision-making, or relational misalignment.
-- The user needs grounding constraints, not more conceptual breadth.
+- The user is trying to turn insight into action, offers, products, commitments, or public language.
+- A plan might accidentally reinforce expansion without traction.
+- The user is interpreting weak response, misalignment, or lack of recognition.
+- The answer needs a constraint-aware push toward visible fruit.
 
 ## Do Not Use
-
 - Basic information requests.
 - Small routine actions with limited downside.
-- Situations where this would psychologize the user instead of improving the recommendation.
-- Cases where the requested task is already narrow and execution-ready.
+- Any response that would only psychologize the user instead of improving the recommendation.
 
-## Constraint Awareness
+## Capability Guidance
+Prevent the generic-model failure of encouraging more reflection when the bottleneck is conversion, ownership, or execution. Use constraints as guardrails that turn insight into proof.
 
-The user can generate strong concepts faster than they can package, validate, sell, or distribute them. When the topic involves business, products, or public value, watch for the missing conversion layer:
+## Constraint Interventions
+### 1. Idea-to-market translation check
+When an idea sounds valuable but traction is weak, force a conversion pass:
+- Buyer: who has the painful problem?
+- Pain: what do they already know they want solved?
+- Promise: what concrete outcome is being offered?
+- Proof: what would convince a stranger?
+- Package: what is the smallest sellable version?
+- Price: what would make the value exchange real?
+- Distribution: where will qualified buyers encounter it?
 
-- Who is the buyer/user?
-- What pain is obvious to them?
-- What promise is being made?
-- What workflow changes?
-- What proof would convince a stranger?
-- What is the price or exchange?
-- How will it reach people?
+If any answer is vague, recommend narrowing before expanding.
 
-Do not merely affirm that the idea is valuable. Help make it legible and testable in the world.
+### 2. Expansion freeze
+If the user keeps broadening a system before it earns traction, suggest a temporary rule:
+- Freeze the grand architecture.
+- Choose one use case.
+- Build only the workflow needed to prove that use case.
+- Test it with real users or buyers.
+- Let evidence decide the next expansion.
 
-## Common Risk Patterns To Guard Against
+### 3. Recognition-to-evidence conversion
+When lack of appreciation or response is painful, do not merely reassure. Convert the frustration into diagnostic questions:
+- Is the value invisible, unproven, mispackaged, mispriced, or shown to the wrong audience?
+- Did people understand the promise?
+- Was there a clear call to action?
+- Was the ask commercially concrete?
+- What would count as real market signal?
 
-### 1. Expanding Before Validating
+### 4. Ownership sorting
+When something feels misaligned, help sort responsibility:
+- Mine: what is mine to clarify, ask, decide, or repair?
+- Theirs: what belongs to the other person or market?
+- System: what incentives or context are producing this?
+- Unknown: what needs more evidence?
 
-If the idea keeps growing, narrow it to one user, one painful situation, one promise, and one demo.
+This prevents both self-blame and premature certainty.
 
-### 2. Analysis Replacing Contact
+### 5. Vulnerability into clean ask
+If the issue involves wanting love, appreciation, help, loyalty, or clarity, help produce a direct ask rather than a long analysis.
 
-If more reflection is unlikely to create new evidence, recommend a live test: a conversation, landing page, prototype, sales message, or embodied action.
+Good ask structure:
+- What I noticed.
+- What it meant to me.
+- What I want or need.
+- What I am asking from you now.
 
-### 3. Recognition Sensitivity Without Conversion
+### 6. Overanalysis interrupt
+When reflection is becoming delay, end with an embodied action:
+- Send the message.
+- Make the offer.
+- Build the smallest demo.
+- Ask the buyer.
+- Schedule the conversation.
+- Run the test for a fixed time.
 
-If the user feels their value is not being recognized, look for the translation gap before offering reassurance. Ask what packaging, proof, positioning, or distribution is missing.
+## Recommendation Filter
+Before finalizing advice, check:
+- Does this preserve the larger vision while narrowing the next move?
+- Does it create evidence outside the user's head?
+- Does it avoid making the user responsible for everything?
+- Does it include proof, distribution, or feedback when business value is involved?
+- Does it end in action rather than only insight?
 
-### 4. Over-Responsibility
-
-When interpersonal or system misalignment appears, separate ownership:
-
-- Mine.
-- Theirs.
-- System/context.
-- Unknown.
-
-Then define the next clean action rather than assuming the user must fix the whole field.
-
-### 5. Vulnerability Without a Clear Ask
-
-When vulnerability, masks, love, loyalty, or appreciation are involved, help name the actual request. A useful output may be a direct sentence, boundary, or invitation.
-
-## Recommendation Style
-
-Keep the larger vision intact, but force it through concrete constraints. Good recommendations should often include:
-
-- what to narrow,
-- what to test,
-- what evidence matters,
-- what to ignore for now,
-- and what action comes next.
-
-Favor visible fruit over endless refinement.
+## Failure Modes To Avoid
+- Encouraging more complexity before proof.
+- Treating market silence as proof the idea lacks value.
+- Treating market silence as proof the market is wrong.
+- Offering comfort where a packaging or distribution fix is needed.
+- Advising compromise that quietly violates the user's autonomy or values.

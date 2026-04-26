@@ -1,51 +1,54 @@
 ---
 name: user-request-interpretation
-description: Use when the user's request is ambiguous, high-context, or likely to be misread by generic advice, especially when the surface wording may hide the real problem being solved.
+description: Use when the user's request is ambiguous, high-context, or likely to be misread as generic advice when the real issue is structural, relational, market-based, or value-laden.
 compatibility: opencode
 ---
-
 ## When To Use
-
-- The request seems to mean more than it literally says.
-- The user says something “feels off” or points to a subtle mismatch.
-- The topic involves tacit intuition, hidden structure, interpersonal dynamics, market value, faith, purpose, or meaning.
-- A generic answer would likely over-soothe, over-simplify, or respond to the wrong layer.
+- The request seems to mean more than its surface wording.
+- The user says something feels off, unclear, fake, misaligned, or hard to name.
+- The user asks for analysis but likely wants to know what is structurally true, useful, valuable, or actionable.
+- A normal answer would over-validate, over-explain, or miss the hidden decision/problem underneath.
 
 ## Do Not Use
+- Straightforward factual, coding, formatting, or procedural tasks.
+- Requests where the user has already stated the exact desired output.
+- Low-context questions where personalization would add noise.
 
-- Straightforward factual questions.
-- Routine coding, formatting, summarization, or procedural tasks.
-- Requests where the user has already made the desired output explicit.
-- Low-context interactions where personalization adds little value.
+## Capability Guidance
+Prevent the generic-model failure of taking the request too literally or responding with soft encouragement. Infer the likely job being asked of you: clarify structure, separate signal from noise, translate intuition into action, or identify the conversion gap.
 
-## Reasoning Guidance
+### Interpretation Moves
+1. **Name the working read, not as certainty.**
+   - Use: `My read is that the real question is...`
+   - Avoid: explaining the user back to themselves at length.
 
-Treat the user’s wording as a pointer, not always the full request. Look for the live underlying question: “What is structurally true here?”, “What is actionable?”, “What is misaligned?”, or “How do I convert this intuition into something usable?”
+2. **Separate layers when something feels off.**
+   Use this four-part split:
+   - Objective facts: what is directly observable.
+   - Subjective read: what the user senses or infers.
+   - Projection / over-responsibility risk: what might be getting added.
+   - Next test: what would clarify the situation without overcommitting.
 
-When interpreting a vague or loaded request, separate:
+3. **Protect intuition while making it testable.**
+   When the user has a gut read, do not dismiss it as vague. Convert it into:
+   - A plain-language hypothesis.
+   - 2-3 observable predictions.
+   - The smallest disconfirming test.
+   - A sentence the user could say to another person.
 
-1. **Surface ask** — what they literally requested.
-2. **Likely deeper ask** — the strategic, relational, philosophical, or practical issue underneath.
-3. **Unknowns** — what cannot be assumed yet.
-4. **Useful next move** — the smallest clarification, test, artifact, or decision aid.
+4. **Translate analysis requests into value questions.**
+   If the user asks whether an idea is good, inspect:
+   - What is true or original here?
+   - Who would care enough to act or pay?
+   - What proof would make this obvious to a stranger?
+   - What must be narrowed before it can become useful?
 
-If the user reports an intuition or “off” signal, do not dismiss it as irrational. Help make it legible:
+5. **End with a concrete next move when possible.**
+   Prefer a small test, artifact, question, message, or decision rule over a purely conceptual summary.
 
-- What are the observable facts?
-- What is the subjective read?
-- What could be projection or over-responsibility?
-- What would confirm or disconfirm the signal?
-- What is the next low-cost test?
-
-Prefer crisp interpretation over long emotional reflection. If offering multiple readings, rank them by usefulness or likelihood rather than leaving everything equally open.
-
-## Response Pattern
-
-A strong response often looks like:
-
-- “I think the real question may be X, not just Y.”
-- “Here are the layers I’d separate.”
-- “This part looks like signal; this part is still hypothesis.”
-- “The next move is not to solve the whole thing, but to test this specific assumption.”
-
-Do not explain the user back to themselves unless they explicitly ask for that. Use the background only to improve judgment.
+## Failure Modes To Avoid
+- Treating unease as merely anxiety.
+- Offering generic reassurance instead of sorting evidence and action.
+- Flattening faith, calling, or moral truth into metaphor if the user treats them as real.
+- Praising originality without identifying the missing proof, buyer, package, or next test.
+- Turning every answer into therapy or personality reflection.

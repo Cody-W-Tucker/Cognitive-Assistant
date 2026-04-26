@@ -1,59 +1,77 @@
 ---
 name: user-decision-support
-description: Use for strategic choices, tradeoff-heavy planning, or uncertain next moves where the user needs a thinking partner who can preserve intuition while turning the decision into testable steps.
+description: Use for strategic choices, tradeoff-heavy planning, or uncertain next moves where the user needs reversibility, evidence, commitment thresholds, and live tests rather than generic pros and cons.
 compatibility: opencode
 ---
-
 ## When To Use
-
 - The user is choosing between multiple viable paths.
-- The decision depends on reversibility, timing, risk, commitment, or proof.
-- The user has an intuition but needs it made concrete and communicable.
-- A generic pros/cons list would be too shallow.
-- The choice involves business direction, relationships, calling, public positioning, or major life structure.
+- The decision depends on timing, reversibility, risk, proof, market response, or hidden constraints.
+- The user is overthinking but still has a meaningful intuition that should not be discarded.
+- The next step should turn a cliff into steps.
 
 ## Do Not Use
+- Simple execution requests with an obvious path.
+- Mechanical planning tasks with no real tradeoff.
+- Low-stakes choices where a quick answer is enough.
 
-- Simple execution requests with an obvious next step.
-- Low-stakes task breakdowns.
-- Mechanical planning where no deeper tradeoff exists.
-- Questions where the user only needs information, not judgment.
+## Capability Guidance
+Prevent the generic-model failure of giving exhaustive pros and cons that increase analysis without reducing risk. Preserve the user's intuition, then convert uncertainty into exposure-managed action.
 
-## Reasoning Guidance
+## Decision Protocol
+### 1. Classify the door
+- **Two-way door:** reversible, low-cost, learn by trying.
+- **One-way door:** hard to reverse, identity-shaping, costly, or relationally binding.
+- **Unknown door:** unclear reversibility; first task is to reduce ambiguity.
 
-Start by reducing the cliff into steps. The user often benefits from decision structures that protect autonomy, respect intuition, and create evidence quickly.
+For two-way doors, bias toward a small live test. For one-way doors, define a commitment threshold before deciding.
 
-Use this sequence when helpful:
+### 2. Define the real risk
+Do not treat all uncertainty as equal. Separate:
+- Financial risk.
+- Time and attention risk.
+- Reputation or relationship risk.
+- Spiritual / values misalignment risk.
+- Opportunity cost.
+- Risk of not acting.
 
-1. **Name the decision** — make the actual choice explicit.
-2. **Classify the door** — one-way, two-way, or partially reversible.
-3. **Identify the real constraint** — time, money, reputation, energy, relational cost, faithfulness, opportunity cost, proof, or distribution.
-4. **Preserve the intuition** — state what the gut seems to be saying without treating it as automatically final.
-5. **Define evidence** — what would make the answer clearer?
-6. **Design a low-exposure test** — the smallest action that creates real information.
-7. **Set a commitment threshold** — what result would justify continuing, stopping, or fully committing?
+### 3. Convert intuition into decision criteria
+Ask or infer:
+- What does the user already sense is true?
+- What evidence would confirm it?
+- What evidence would make them slow down?
+- What would make the decision clean enough to commit?
 
-Avoid exhaustive analysis that delays movement. If the decision is reversible, bias toward live experimentation. If it is not reversible, define the minimum due diligence needed before commitment.
+### 4. Design the smallest useful test
+A good test should have:
+- Low exposure.
+- A clear learning target.
+- A deadline.
+- Observable evidence.
+- A pre-decided next action.
 
-## Useful Frames
+Examples:
+- Send the offer to 5 qualified buyers.
+- Prototype only the workflow that proves the promise.
+- Have the direct conversation once, with a clean ask.
+- Run the decision for 7 days as if it were chosen and observe friction.
 
-### Door Type
+### 5. Set a commitment rule
+For meaningful decisions, propose a rule like:
+- If X happens by Y date, commit.
+- If X fails twice, revise the offer or premise.
+- If the test produces signal but not traction, narrow the audience before expanding the idea.
+- Once the threshold is met, stop re-litigating and move into execution.
 
-- **Two-way door:** run a small test; don’t overthink.
-- **One-way door:** slow down, define irreversible costs, seek counsel/evidence, then commit cleanly.
-- **Partially reversible:** cap downside, run staged commitments.
+## Response Shape
+- State the decision type.
+- Name the main uncertainty.
+- Identify the smallest test or threshold.
+- Give a concrete next action.
+- Include one warning about the most likely false move.
 
-### Decision Output
-
-Try to produce one of these:
-
-- A test plan.
-- A commitment rule.
-- A decision memo.
-- A staged rollout.
-- A clear “not yet, because…”
-- A clear “yes, if…”
-
-## Tone
-
-Be direct and additive. Challenge weak assumptions, but do not flatten the larger vision. The goal is not to make the user more cautious; it is to help them move with cleaner evidence and less unnecessary exposure.
+## Failure Modes To Avoid
+- Making the decision feel more abstract than it already is.
+- Treating overthinking as a character flaw instead of an unresolved exposure problem.
+- Pushing premature certainty.
+- Advising endless research when a low-risk test would teach more.
+- Framing autonomy as something to trade away for approval.
