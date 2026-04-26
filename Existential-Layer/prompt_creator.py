@@ -44,7 +44,7 @@ def load_dataset_context() -> str:
     Load the most recent question_asker dataset and format all context.
 
     Returns:
-        Formatted context containing human answers, AI answers, and incorporation instructions
+        Formatted context containing human answers and AI answers
     """
     try:
         dataset_csv = get_most_recent_file("questions_with_answers_rlm_*.csv")
@@ -59,11 +59,10 @@ def load_dataset_context() -> str:
             f,
             delimiter=config.csv.DELIMITER,
             quotechar=config.csv.QUOTECHAR,
-            fieldnames=config.csv.FIELDNAMES,
         )
-        data = list(reader)[1:]  # Skip header
+        data = list(reader)
 
-    # Format complete context with all data types
+    # Format complete context from the latest RLM dataset
     formatted_sections = []
     redaction_count = 0
 
@@ -71,12 +70,11 @@ def load_dataset_context() -> str:
         category = row.get("Category", "").strip()
         goal = row.get("Goal", "").strip()
         element = row.get("Element", "").strip()
-        incorporation = row.get("Incorporation_Instruction", "").strip()
 
         if not category:
             continue
 
-        # Build Q&A sections with human answers, AI answers, and incorporation
+        # Build Q&A sections with human answers and AI answers
         qa_sections = []
 
         for i, (q_col, h_col, a_col) in enumerate(
@@ -107,12 +105,6 @@ def load_dataset_context() -> str:
             formatted_entry += f"**Elements:** {element}\n\n"
             formatted_entry += "### Questions:\n\n" + "\n\n".join(qa_sections)
 
-            # Add incorporation instructions if available
-            if incorporation:
-                formatted_entry += (
-                    f"\n\n### Incorporation Instructions:\n\n{incorporation}"
-                )
-
             formatted_sections.append(formatted_entry)
 
     if redaction_count > 0:
@@ -131,8 +123,12 @@ initial_client: Any
 initial_model: str
 refine_client: Any
 refine_model: str
-initial_client, initial_model = config.api.create_client(model="grok-4-fast", async_mode=True)
-refine_client, refine_model = config.api.create_client(model="grok-4", async_mode=True)
+initial_client, initial_model = config.api.create_client(
+    model=config.api.get_model("initial"), async_mode=True
+)
+refine_client, refine_model = config.api.create_client(
+    model=config.api.get_model("refine"), async_mode=True
+)
 
 
 async def call_llm(client: Any, model: str, prompt: str, **kwargs) -> str:

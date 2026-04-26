@@ -3,8 +3,7 @@
 Human Interview Asker - Personalized question answering using RLM file review
 
 This script processes questions from a CSV file using the RLM CLI over configured
-filesystem review paths, while preserving human interview context for personalization
-and downstream incorporation analysis.
+filesystem review paths, while preserving human interview context for personalization.
 
 Features:
 - Automatically loads the most recent human interview data for personalization
@@ -29,8 +28,6 @@ from datetime import datetime
 from config import (
     config,
     get_most_recent_file,
-    accumulate_streaming_response,
-    clean_markdown,
     run_rlm_query,
 )
 
@@ -65,38 +62,6 @@ def ask_question(question: str, human_answer: str, include_human_answer: bool) -
     except Exception as e:
         print(f"⚠️ Error calling RLM: {e}")
         return f"Error: {str(e)}"
-
-
-def ask_incorporation(client, model_name: str, all_qa_data: str) -> str:
-    """Send incorporation analysis to the human model and get the response."""
-    try:
-        system_prompt = config.prompts.incorporation_prompt.format(
-            all_qa_data=all_qa_data
-        )
-
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": "Generate incorporation instructions based on the above analysis.",
-                },
-            ],
-            temperature=config.api.TEMPERATURE,
-            max_tokens=config.api.MAX_TOKENS,
-            stream=True,
-        )
-
-        # Use the shared streaming utility
-        full_content = accumulate_streaming_response(response)
-        return full_content.strip()
-
-    except Exception as e:
-        print(f"⚠️ Error calling human incorporation API: {e}")
-        return f"Error: {str(e)}"
-
-
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
@@ -118,16 +83,6 @@ def main():
         print("❌ Configuration issues found:")
         for issue in issues:
             print(f"   - {issue}")
-        sys.exit(1)
-
-    # Set up model client for incorporation analysis
-    try:
-        client, model_name = config.api.create_client()
-        print(
-            f"✅ Connected to incorporation model: {config.api.LLM_PROVIDER} (model: {model_name})"
-        )
-    except Exception as e:
-        print(f"❌ Failed to set up incorporation client: {e}")
         sys.exit(1)
 
     print("📚 RLM review paths:")
@@ -274,96 +229,6 @@ def main():
                         quotechar=config.csv.QUOTECHAR,
                         quoting=csv.QUOTE_MINIMAL,
                     )
-
-    # Check if all AI answers are complete for incorporation processing
-    def all_ai_answers_complete(row):
-        for answer_col in config.csv.ANSWER_COLUMNS:
-            if row.isna()[answer_col]:
-                return False
-        return True
-
-    # Process incorporation for rows with complete AI answers
-    incorporation_processed_count = 0
-    print(f"\n🤖 Starting incorporation analysis with human model...")
-
-    for idx, (index, row) in enumerate(df.iterrows()):
-        if all_ai_answers_complete(row):
-            category = str(row.get("Category", "")).strip()
-            goal = str(row.get("Goal", "")).strip()
-            element = str(row.get("Element", "")).strip()
-
-            # Format all Q&A data as report
-            qa_sections = []
-            for i, (q_col, h_col, a_col) in enumerate(
-                zip(
-                    config.csv.QUESTION_COLUMNS,
-                    config.csv.HUMAN_ANSWER_COLUMNS,
-                    config.csv.ANSWER_COLUMNS,
-                )
-            ):
-                question = str(row.get(q_col, "")).strip()
-                human_answer = str(row.get(h_col, "")).strip()
-                ai_answer = str(row.get(a_col, "")).strip()
-
-                if question and (human_answer or ai_answer):
-                    qa_sections.append(
-                        f"{i+1}. {question}\n\n   Human Answer: {human_answer}\n\n   AI Answer: {ai_answer}"
-                    )
-
-            if qa_sections:
-                # Create formatted report
-                all_qa_data = f"# Understanding: **{category}**\n\n"
-                all_qa_data += f"## Goal: **{goal}**\n\n"
-                all_qa_data += f"**Elements:** {element}\n\n"
-                all_qa_data += "### Questions:\n\n" + "\n\n".join(qa_sections)
-
-                print(f"🧠 Processing incorporation for row {idx+1}...")
-
-                # Retry logic for incorporation
-                max_retries = 3
-                base_delay = 1
-                incorporation_response = ""
-                for attempt in range(max_retries):
-                    incorporation_response = ask_incorporation(
-                        client, "human", all_qa_data
-                    )
-                    if not incorporation_response.startswith("Error:"):
-                        break
-                    if attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        print(
-                            f"⚠️ Incorporation failed, retrying in {delay}s... (attempt {attempt+1}/{max_retries})"
-                        )
-                        time.sleep(delay)
-
-                # If still error after retries, mark as failed
-                if incorporation_response.startswith("Error:"):
-                    incorporation_response = (
-                        f"Failed after {max_retries} retries: {incorporation_response}"
-                    )
-                else:
-                    # Clean markdown from successful responses
-                    incorporation_response = clean_markdown(incorporation_response)
-
-                df.at[index, "Incorporation_Instruction"] = incorporation_response
-
-                incorporation_processed_count += 1
-                print(f"✅ Processed incorporation {incorporation_processed_count}")
-
-                # Save after each incorporation
-                df.to_csv(
-                    str(output_file),
-                    index=False,
-                    sep=config.csv.DELIMITER,
-                    quotechar=config.csv.QUOTECHAR,
-                    quoting=csv.QUOTE_MINIMAL,
-                )
-        else:
-            print(f"⚠️ Skipping incorporation for row {idx+1}: Incomplete AI answers")
-
-    print(
-        f"\n✅ Completed incorporation analysis for {incorporation_processed_count} rows"
-    )
 
     # Final save
     df.to_csv(

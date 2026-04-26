@@ -314,16 +314,6 @@ Interaction guidelines:
 </output_structure>
 """
 
-# the human model is a finetuned (llama3.1) on human responses in AI turn conversations.
-INCORPORATION_SYSTEM_PROMPT = """
-You are reading how perspectives evolve through introspection.
-
-{all_qa_data}
-
-Generate concise, actionable incorporation instructions based on this analysis.
-"""
-
-
 @dataclass
 class APIConfig:
     """API and LLM configuration settings."""
@@ -336,7 +326,9 @@ class APIConfig:
     PROVIDERS = {
         "openai": {
             "api_key": os.getenv("OPENAI_API_KEY", ""),
-            "model": os.getenv("OPENAI_MODEL", "gpt-5"),
+            "initial_model": os.getenv("OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")),
+            "refine_model": os.getenv("OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")),
+            "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
             "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "400000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("OPENAI_MAX_OUTPUT", "128000")),
         },
@@ -351,11 +343,25 @@ class APIConfig:
         },
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
+            "initial_model": os.getenv("ANTHROPIC_INITIAL_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")),
+            "refine_model": os.getenv("ANTHROPIC_REFINE_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")),
             "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5"),
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")),
         },
     }
+
+    def get_model(self, purpose: str = "default", provider: Optional[str] = None) -> str:
+        """Return the configured model for the given provider and purpose."""
+        provider = provider or self.LLM_PROVIDER
+        provider_config = self.PROVIDERS.get(provider, {})
+
+        if purpose == "initial":
+            return str(provider_config.get("initial_model") or provider_config.get("model", "unknown"))
+        if purpose == "refine":
+            return str(provider_config.get("refine_model") or provider_config.get("model", "unknown"))
+
+        return str(provider_config.get("model", "unknown"))
 
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
@@ -403,7 +409,7 @@ class APIConfig:
                 from anthropic import Anthropic, AsyncAnthropic
 
                 client_cls = AsyncAnthropic if async_mode else Anthropic
-                return client_cls(api_key=config["api_key"]), str(config["model"])
+                return client_cls(api_key=config["api_key"]), str(model)
 
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -531,7 +537,6 @@ class CSVConfig:
             "AI_Answer 1",
             "AI_Answer 2",
             "AI_Answer 3",
-            "Incorporation_Instruction",
         ]
     )
     ANSWER_COLUMNS: List[str] = field(
@@ -542,9 +547,6 @@ class CSVConfig:
     )
     HUMAN_ANSWER_COLUMNS: List[str] = field(
         default_factory=lambda: ["Human_Answer 1", "Human_Answer 2", "Human_Answer 3"]
-    )
-    INCORPORATION_COLUMNS: List[str] = field(
-        default_factory=lambda: ["Incorporation_Instruction"]
     )
     # Columns used to create category keys for matching questions to answers
     CATEGORY_KEY_COLUMNS: List[str] = field(
@@ -598,7 +600,6 @@ class PromptsConfig:
     synthesis_prompt: str = SYNTHESIS_PROMPT
     initial_template: str = INITIAL_TEMPLATE
     refine_template: str = REFINE_TEMPLATE
-    incorporation_prompt: str = INCORPORATION_SYSTEM_PROMPT
 
     rlm_query_template: str = """{synthesis_prompt}
 
@@ -693,7 +694,12 @@ class Config:
 
     def validate_question_answering(self) -> List[str]:
         """Validate configuration needed specifically for the RLM-backed question flow."""
-        return self.validate() + self.rlm.validate_review_paths()
+        issues = []
+
+        if not self.paths.QUESTIONS_CSV.exists():
+            issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
+
+        return issues + self.rlm.validate_review_paths()
 
 
 # Create global config instance
