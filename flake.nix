@@ -1,5 +1,5 @@
 {
-  description = "A Nix-flake-based Python development environment";
+  description = "Cognitive Assistant flake outputs and development environment";
 
   inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.*.tar.gz";
   inputs.rlm.url = "github:Cody-W-Tucker/rlm";
@@ -21,8 +21,17 @@
             pkgs = import nixpkgs { inherit system; };
           }
         );
+      artifactsDir = ./Existential-Layer/artifacts;
+      skillsDir = ./Existential-Layer/artifacts/skills;
+      systemPromptFile = ./Existential-Layer/artifacts/system_prompt.md;
+      humanProfileFile = ./Existential-Layer/artifacts/human_profile.md;
     in
     {
+      lib = {
+        inherit artifactsDir skillsDir systemPromptFile humanProfileFile;
+        skillFile = name: skillsDir + "/${name}/SKILL.md";
+      };
+
       devShells = forEachSupportedSystem (
         { pkgs }:
         {

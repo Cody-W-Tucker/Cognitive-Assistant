@@ -10,3 +10,32 @@ These layers build on one another to create datasets to inform choices and scaff
 Basically, we run systems that will explain why you choose things to AI.
 
 This internal monologue annotates dataset with reasoning traces to introspect better and explain to AI models why/how it should do something.
+
+## Nix Flake Outputs
+
+This flake exposes stable paths to the generated artifacts so other Nix and NixOS systems can import and use them directly.
+
+- `lib.artifactsDir`
+- `lib.skillsDir`
+- `lib.systemPromptFile`
+- `lib.humanProfileFile`
+- `lib.skillFile name`
+
+Example upstream usage:
+
+```nix
+{ inputs, ... }:
+
+let
+  skill = name: builtins.readFile (inputs.cognitive-assistant.lib.skillFile name);
+  systemPrompt = builtins.readFile inputs.cognitive-assistant.lib.systemPromptFile;
+in
+{
+  programs.opencode.skills.user-context-model = skill "user-context-model";
+}
+```
+
+The committed source paths also remain available directly:
+
+- `${inputs.cognitive-assistant}/Existential-Layer/artifacts/system_prompt.md`
+- `${inputs.cognitive-assistant}/Existential-Layer/artifacts/skills/<name>/SKILL.md`

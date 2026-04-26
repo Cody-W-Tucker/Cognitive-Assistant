@@ -2,6 +2,9 @@
 .venv
 .env
 
+# Nix Builds
+result
+
 .ipynb_checkpoints/
 
 # Swarms
