@@ -13,12 +13,10 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-This flake exposes stable paths to the generated artifacts so other Nix and NixOS systems can import and use them directly.
+This flake exposes stable paths to the generated skills and system prompt so other Nix and NixOS systems can import and use them directly.
 
-- `lib.artifactsDir`
 - `lib.skillsDir`
 - `lib.systemPromptFile`
-- `lib.humanProfileFile`
 - `lib.skillFile name`
 
 Example upstream usage:

@@ -1,11 +1,19 @@
 {
   description = "Cognitive Assistant flake outputs and development environment";
 
-  inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.*.tar.gz";
-  inputs.rlm.url = "github:Cody-W-Tucker/rlm";
+  inputs = {
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.*.tar.gz";
+    rlm.url = "github:Cody-W-Tucker/rlm";
+    ai-data-extractor.url = "github:Cody-W-Tucker/ai-data-extraction";
+  };
 
   outputs =
-    { self, nixpkgs, rlm }:
+    {
+      self,
+      nixpkgs,
+      rlm,
+      ai-data-extractor,
+    }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -21,14 +29,12 @@
             pkgs = import nixpkgs { inherit system; };
           }
         );
-      artifactsDir = ./Existential-Layer/artifacts;
       skillsDir = ./Existential-Layer/artifacts/skills;
       systemPromptFile = ./Existential-Layer/artifacts/system_prompt.md;
-      humanProfileFile = ./Existential-Layer/artifacts/human_profile.md;
     in
     {
       lib = {
-        inherit artifactsDir skillsDir systemPromptFile humanProfileFile;
+        inherit skillsDir systemPromptFile;
         skillFile = name: skillsDir + "/${name}/SKILL.md";
       };
 
@@ -46,6 +52,7 @@
                 ]
               ))
               rlm.packages.${pkgs.system}.default
+              ai-data-extractor.packages.${pkgs.system}.default
             ];
           };
         }
