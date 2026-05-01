@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Project health checks for configuration, prompts, imports, and provider readiness."""
 
-import importlib
-import os
-import shutil
+import sys
 from pathlib import Path
 from typing import List
 
@@ -12,7 +10,19 @@ from llm import create_client
 from prompt_loader import PROMPT_FILES, load_prompt
 
 
-PROJECT_ROOT = Path(__file__).parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+
+from lib.health import (  # noqa: E402
+    check_prompt_files as shared_check_prompt_files,
+    check_provider_setup,
+    check_rlm_command,
+    check_script_imports,
+)
+
+
 SCRIPT_MODULES = [
     "baselines.baseline_question_asker",
     "config",
@@ -23,22 +33,6 @@ SCRIPT_MODULES = [
     "question_asker",
     "skills_creator",
 ]
-
-
-def check_prompt_files() -> List[str]:
-    """Verify runtime prompt files exist and load."""
-    issues: List[str] = []
-    for name, filename in PROMPT_FILES.items():
-        prompt_path = config.paths.PROMPT_RUNTIME_DIR / filename
-        if not prompt_path.exists():
-            issues.append(f"Missing prompt file: {prompt_path}")
-            continue
-
-        content = load_prompt(name)
-        if not content:
-            issues.append(f"Prompt file is empty: {prompt_path}")
-
-    return issues
 
 
 def check_prompt_rendering() -> List[str]:
@@ -96,66 +90,21 @@ def check_required_paths() -> List[str]:
     if not config.paths.PROMPT_RUNTIME_DIR.exists():
         issues.append(f"Prompt runtime directory not found: {config.paths.PROMPT_RUNTIME_DIR}")
     return issues
-
-
-def check_script_imports() -> List[str]:
-    """Verify the main modules import successfully."""
-    issues: List[str] = []
-    for module_name in SCRIPT_MODULES:
-        try:
-            importlib.import_module(module_name)
-        except Exception as exc:
-            issues.append(f"Failed to import {module_name}: {exc}")
-    return issues
-
-
-def check_provider_setup() -> List[str]:
-    """Verify provider environment variables, package availability, and client creation."""
-    issues: List[str] = []
-    provider = config.api.LLM_PROVIDER
-    provider_config = config.api.PROVIDERS.get(provider)
-
-    if not provider_config:
-        return [f"Unsupported provider configured: {provider}"]
-
-    env_key = f"{provider.upper()}_API_KEY"
-    if not os.getenv(env_key):
-        issues.append(f"Missing environment variable: {env_key}")
-
-    package_name = "anthropic" if provider == "anthropic" else "openai"
-    try:
-        importlib.import_module(package_name)
-    except ImportError as exc:
-        issues.append(f"Missing Python package '{package_name}': {exc}")
-        return issues
-
-    if os.getenv(env_key):
-        try:
-            create_client(config.api)
-        except Exception as exc:
-            issues.append(f"Failed to create {provider} client: {exc}")
-
-    return issues
-
-
-def check_rlm_command() -> List[str]:
-    """Verify the configured RLM command is available."""
-    issues: List[str] = []
-    command = config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm"
-    if shutil.which(command) is None:
-        issues.append(f"RLM command not found on PATH: {command}")
-    return issues
-
-
 def run_health_checks() -> List[str]:
     """Run all non-network health checks and return a list of issues."""
     issues: List[str] = []
-    issues.extend(check_prompt_files())
+    issues.extend(
+        shared_check_prompt_files(
+            prompt_files=PROMPT_FILES,
+            prompt_runtime_dir=config.paths.PROMPT_RUNTIME_DIR,
+            load_prompt=load_prompt,
+        )
+    )
     issues.extend(check_prompt_rendering())
     issues.extend(check_required_paths())
-    issues.extend(check_script_imports())
-    issues.extend(check_provider_setup())
-    issues.extend(check_rlm_command())
+    issues.extend(check_script_imports(SCRIPT_MODULES))
+    issues.extend(check_provider_setup(config=config, create_client=create_client))
+    issues.extend(check_rlm_command(config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm"))
     return issues
 
 
