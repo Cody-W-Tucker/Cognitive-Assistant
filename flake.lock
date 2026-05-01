@@ -65,11 +65,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1777648759,
-        "narHash": "sha256-f3xnxq+VOzFPa63+YgD8ZteroVyyq8STLzPgAN2Z4WI=",
+        "lastModified": 1777659107,
+        "narHash": "sha256-t+8t1+kOrmdGq7/cDPk1QbKGSBRqWFl1v84yXqYOAIU=",
         "owner": "Cody-W-Tucker",
         "repo": "rlm",
-        "rev": "6b781a43fbded06559482cbc2f808d7f03a13016",
+        "rev": "f56db807e0d44b9d96837d8e0060986d5c1aa771",
         "type": "github"
       },
       "original": {
