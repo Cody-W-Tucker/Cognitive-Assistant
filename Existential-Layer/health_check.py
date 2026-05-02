@@ -54,7 +54,6 @@ def check_prompt_rendering() -> List[str]:
     try:
         config.prompts.skills_creation_template.format(
             bio_content="sample bio",
-            skill_specs="sample specs",
         )
     except Exception as exc:
         issues.append(f"Failed to render skills_creation_template: {exc}")

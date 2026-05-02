@@ -29,13 +29,27 @@
             pkgs = import nixpkgs { inherit system; };
           }
         );
-      skillsDir = ./Existential-Layer/artifacts/skills;
-      systemPromptFile = ./Existential-Layer/artifacts/system_prompt.md;
+      mkLayerExports = layerDir:
+        let
+          skillsDir = layerDir + "/artifacts/skills";
+          systemPromptFile = layerDir + "/artifacts/system_prompt.md";
+          skillNames = builtins.attrNames (
+            nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
+          );
+        in
+        {
+          inherit skillsDir systemPromptFile skillNames;
+          skillFile = name: skillsDir + "/${name}/SKILL.md";
+        };
+      existential = mkLayerExports ./Existential-Layer;
+      operational = mkLayerExports ./Operational-Layer;
     in
     {
       lib = {
-        inherit skillsDir systemPromptFile;
-        skillFile = name: skillsDir + "/${name}/SKILL.md";
+        inherit existential operational;
+        layers = {
+          inherit existential operational;
+        };
       };
 
       devShells = forEachSupportedSystem (

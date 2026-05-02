@@ -13,11 +13,31 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-This flake exposes stable paths to the generated skills and system prompt so other Nix and NixOS systems can import and use them directly.
+This flake exposes both layers separately so downstream systems can load the generated system prompts and whatever skills currently exist for each layer.
 
-- `lib.skillsDir`
-- `lib.systemPromptFile`
-- `lib.skillFile name`
+- `lib.existential.skillsDir`
+- `lib.existential.systemPromptFile`
+- `lib.existential.skillNames`
+- `lib.existential.skillFile name`
+
+- `lib.operational.skillsDir`
+- `lib.operational.systemPromptFile`
+- `lib.operational.skillNames`
+- `lib.operational.skillFile name`
+
+## Downstream Usage
+
+Downstream systems should treat the system prompt as the base layer and the generated skills as conditional overlays.
+
+Suggested model:
+
+1. Load one layer's `systemPromptFile` as background operating guidance.
+2. Inspect that layer's `skillNames` to see which generated skills exist.
+3. Load only the few skills that match the current situation.
+
+The skill names are now dynamic.
+Do not hardcode assumptions like `user-context-model` or `user-workflow-sequencing` unless you are pinning to a specific commit that contains those names.
+Instead, consume `skillNames` from the flake and select from the generated set.
 
 Example upstream usage:
 
@@ -25,15 +45,80 @@ Example upstream usage:
 { inputs, ... }:
 
 let
-  skill = name: builtins.readFile (inputs.cognitive-assistant.lib.skillFile name);
-  systemPrompt = builtins.readFile inputs.cognitive-assistant.lib.systemPromptFile;
+  existential = inputs.cognitive-assistant.lib.existential;
+  skill = name: builtins.readFile (existential.skillFile name);
+  systemPrompt = builtins.readFile existential.systemPromptFile;
 in
 {
-  programs.opencode.skills.user-context-model = skill "user-context-model";
+  programs.opencode.instructions = systemPrompt;
+  programs.opencode.skills = builtins.listToAttrs (
+    map
+      (name: {
+        inherit name;
+        value = skill name;
+      })
+      existential.skillNames
+  );
 }
+```
+
+Operational layer example:
+
+```nix
+{ inputs, ... }:
+
+let
+  operational = inputs.cognitive-assistant.lib.operational;
+  skill = name: builtins.readFile (operational.skillFile name);
+  systemPrompt = builtins.readFile operational.systemPromptFile;
+in
+{
+  programs.opencode.instructions = systemPrompt;
+  programs.opencode.skills = builtins.listToAttrs (
+    map
+      (name: {
+        inherit name;
+        value = skill name;
+      })
+      operational.skillNames
+  );
+}
+```
+
+If you want to selectively expose only some skills, filter `skillNames` first.
+
+```nix
+let
+  operational = inputs.cognitive-assistant.lib.operational;
+  wanted = builtins.filter (name: builtins.elem name [
+    "artifact-proof-bounds"
+    "sequence-integrity-router"
+  ]) operational.skillNames;
+in
+  builtins.listToAttrs (map (name: {
+    inherit name;
+    value = builtins.readFile (operational.skillFile name);
+  }) wanted)
+```
+
+## Regeneration Workflow
+
+The flake exports the generated artifacts that are currently committed in the repo.
+If you regenerate prompts or skills, downstream consumers will see the new names and contents after that commit is updated.
+
+Typical regeneration commands:
+
+```bash
+python Existential-Layer/prompt_creator.py
+python Existential-Layer/skills_creator.py
+
+python Operational-Layer/prompt_creator.py
+python Operational-Layer/skills_creator.py
 ```
 
 The committed source paths also remain available directly:
 
 - `${inputs.cognitive-assistant}/Existential-Layer/artifacts/system_prompt.md`
 - `${inputs.cognitive-assistant}/Existential-Layer/artifacts/skills/<name>/SKILL.md`
+- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/system_prompt.md`
+- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/skills/<name>/SKILL.md`

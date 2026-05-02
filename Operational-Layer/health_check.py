@@ -54,7 +54,6 @@ def check_prompt_rendering() -> List[str]:
     try:
         config.prompts.skills_creation_template.format(
             bio_content="sample bio",
-            skill_specs="sample specs",
         )
     except Exception as exc:
         issues.append(f"Failed to render skills_creation_template: {exc}")
@@ -62,6 +61,9 @@ def check_prompt_rendering() -> List[str]:
     try:
         config.prompts.rlm_query_template.format(
             synthesis_prompt="sample synthesis",
+            category="sample category",
+            goal="sample goal",
+            element="sample element",
             question="sample question",
         )
     except Exception as exc:

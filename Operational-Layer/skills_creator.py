@@ -5,111 +5,13 @@ import argparse
 import asyncio
 import json
 import re
+import shutil
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from config import config
 from llm import LLMHandle, create_client, generate_text_async
-
-
-@dataclass(frozen=True)
-class SkillSpec:
-    """Specification for a generated skill."""
-
-    name: str
-    description: str
-    when_to_use: List[str]
-    avoid_for: List[str]
-
-
-SKILL_SPECS: List[SkillSpec] = [
-    SkillSpec(
-        name="user-planning-execution-calibration",
-        description=(
-            "Use when it is unclear whether the user wants planning, diagnosis, review, or direct implementation, "
-            "and a generic agent might choose the wrong mode."
-        ),
-        when_to_use=[
-            "The request mixes planning language with implementation language.",
-            "The user is asking for what to do next but may want action instead of a plan.",
-            "Choosing the wrong response mode would create obvious friction.",
-        ],
-        avoid_for=[
-            "Straightforward execution requests with explicit instructions.",
-            "Purely factual questions.",
-            "Simple formatting or retrieval tasks.",
-        ],
-    ),
-    SkillSpec(
-        name="user-review-and-quality-bar",
-        description=(
-            "Use when reviewing code, plans, content, or structure where the user has strong hidden standards that "
-            "a generic quality pass might miss."
-        ),
-        when_to_use=[
-            "The user asks for review, critique, or style matching.",
-            "The task depends on understanding what this user considers high quality.",
-            "A shallow best-practices answer would likely miss the real bar.",
-        ],
-        avoid_for=[
-            "Tasks with no meaningful quality judgment involved.",
-            "Routine mechanical edits.",
-            "Cases where default engineering standards are clearly sufficient.",
-        ],
-    ),
-    SkillSpec(
-        name="user-workflow-sequencing",
-        description=(
-            "Use when a task has multiple steps and the order of inspection, planning, implementation, and verification "
-            "matters to this user."
-        ),
-        when_to_use=[
-            "The task is non-trivial and could be approached in several valid orders.",
-            "The user seems to expect current-state inspection before action.",
-            "Choosing the wrong sequence would make the work feel careless or generic.",
-        ],
-        avoid_for=[
-            "One-step tasks with obvious sequencing.",
-            "Requests that are already fully specified and low-risk.",
-            "Pure conversation without execution decisions.",
-        ],
-    ),
-    SkillSpec(
-        name="user-tooling-context-expectations",
-        description=(
-            "Use when deciding how much repository, environment, or tool context should be gathered before answering or acting."
-        ),
-        when_to_use=[
-            "The request depends on local code, files, or tool availability.",
-            "The user is likely to expect file-grounded rather than generic advice.",
-            "You need to infer how much exploration is necessary before responding.",
-        ],
-        avoid_for=[
-            "Questions answerable without workspace context.",
-            "Simple commands with no ambiguity.",
-            "Situations where extra exploration would just add latency.",
-        ],
-    ),
-    SkillSpec(
-        name="user-automation-hotspot-detection",
-        description=(
-            "Use when repeated workflow sequences suggest the user would benefit from scripts, prompts, or reusable automation patterns."
-        ),
-        when_to_use=[
-            "The same request pattern is appearing across tasks or projects.",
-            "The user is doing repeated coordination, setup, review, or translation work.",
-            "A generic one-off answer would miss a chance to reduce future repetition.",
-        ],
-        avoid_for=[
-            "One-off tasks with no repetition signal.",
-            "Small requests where automation would be overkill.",
-            "Cases where the user explicitly wants manual exploration instead.",
-        ],
-    ),
-]
-
 
 class SkillsCreator:
     """Generate skills from an operational profile."""
@@ -149,10 +51,8 @@ class SkillsCreator:
         return bio_files[-1]
 
     async def _generate_skill_documents(self, bio_content: str) -> Dict[str, str]:
-        skill_specs = self._format_skill_specs()
         prompt = config.prompts.skills_creation_template.format(
             bio_content=bio_content,
-            skill_specs=skill_specs,
         )
 
         response = await generate_text_async(
@@ -164,19 +64,6 @@ class SkillsCreator:
         payload = self._parse_json_response(response)
         self._validate_payload(payload)
         return payload
-
-    def _format_skill_specs(self) -> str:
-        sections: List[str] = []
-        for spec in SKILL_SPECS:
-            sections.append(f"- Name: {spec.name}")
-            sections.append(f"  Description: {spec.description}")
-            sections.append("  When To Use:")
-            for item in spec.when_to_use:
-                sections.append(f"    - {item}")
-            sections.append("  Do Not Use:")
-            for item in spec.avoid_for:
-                sections.append(f"    - {item}")
-        return "\n".join(sections)
 
     def _parse_json_response(self, response: str) -> Dict[str, str]:
         match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", response)
@@ -191,31 +78,36 @@ class SkillsCreator:
         return {str(key): str(value) for key, value in parsed.items()}
 
     def _validate_payload(self, payload: Dict[str, str]) -> None:
-        expected_names = {spec.name for spec in SKILL_SPECS}
-        actual_names = set(payload.keys())
+        if not payload:
+            raise ValueError("Generated skills payload is empty")
 
-        if actual_names != expected_names:
-            missing = sorted(expected_names - actual_names)
-            extra = sorted(actual_names - expected_names)
-            parts: List[str] = []
-            if missing:
-                parts.append(f"missing {', '.join(missing)}")
-            if extra:
-                parts.append(f"extra {', '.join(extra)}")
+        if len(payload) > 6:
             raise ValueError(
-                f"Generated skills did not match expected set: {'; '.join(parts)}"
+                f"Generated too many skills ({len(payload)}); expected a small high-leverage set"
             )
 
         for skill_name, content in payload.items():
+            if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
+                raise ValueError(
+                    f"Skill name '{skill_name}' must be a lowercase hyphenated slug"
+                )
             if f"name: {skill_name}" not in content:
                 raise ValueError(f"Skill {skill_name} is missing matching frontmatter name")
             if "description:" not in content:
                 raise ValueError(f"Skill {skill_name} is missing required description frontmatter")
+            if "## When To Use" not in content:
+                raise ValueError(f"Skill {skill_name} is missing '## When To Use' section")
+            if "## Do Not Use" not in content:
+                raise ValueError(f"Skill {skill_name} is missing '## Do Not Use' section")
             if len(content.strip()) < 200:
                 raise ValueError(f"Skill {skill_name} is unexpectedly short")
 
     def _write_skills(self, payload: Dict[str, str], output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
+        for existing_dir in output_dir.iterdir():
+            if existing_dir.is_dir() and existing_dir.name not in payload:
+                shutil.rmtree(existing_dir)
+                print(f"Info: Removed stale skill directory {existing_dir}")
         for skill_name, content in payload.items():
             skill_dir = output_dir / skill_name
             skill_dir.mkdir(parents=True, exist_ok=True)
