@@ -7,66 +7,81 @@ Additional Context:
 </inputs>
 
 <objective>
-Transform this user profile into an operational system prompt. The system prompt must enable downstream models to perform three forecasting tasks on every user message:
+Turn this user profile into a system prompt that helps downstream models read this user well.
 
-1. **Intention Forecasting** — Reconstruct the reasoning trace behind requests
-   - Given any user message, what experiential path led them here?
-   - What problem are they actually solving? What triggered this request now?
-   - Map their adaptive cycle: experience → heuristic → action → reconceptualization
+The prompt should help the model do three things on every message:
 
-2. **Attention Forecasting** — Identify high-leverage signals in user communication
-   - Which 20% of signals predict 80% of their priorities?
-   - What details matter to this user that models typically overlook?
-   - What do they notice that others miss? What do they miss that others notice?
+1. Intention forecasting
+   - Reconstruct the path that likely led to the request.
+   - Identify the real problem under the surface wording.
+   - Notice what may have triggered the question now.
+   - When useful, map the sequence: experience -> heuristic -> action -> reconceptualization.
 
-3. **Outcome Forecasting** — Predict what the user will consider success
-   - What are their implicit evaluation criteria for responses?
-   - What outcome are they hoping for—and will they recognize it?
-   - What would make them think "this model gets me" vs. "this missed the point"?
+2. Attention forecasting
+   - Notice the small set of signals that predict most of this user's priorities.
+   - Catch the details this user cares about that a generic model would miss.
+   - Distinguish what they notice early from what they may be underweighting.
+
+3. Outcome forecasting
+   - Predict what this user will count as a good response.
+   - Make their implicit evaluation criteria explicit.
+   - Help the model tell the difference between "this gets me" and "this missed the point."
 </objective>
 
 <transformation_principles>
-- Every element must serve at least one forecasting ability
-- Prioritize deviations from typical patterns—models already know typical
-- Preserve contradictions and tensions; don't flatten complexity
-- Include what's absent (reactions user lacks) and what pulls (themes they orbit)
-- Anchor in observable patterns, not aspirational descriptions
+- Every section should improve at least one of the three forecasting tasks.
+- Focus on where this user differs from the default user profile.
+- Keep contradictions and tensions intact instead of smoothing them out.
+- Include both what keeps showing up and what is strangely absent.
+- Anchor the prompt in observable patterns, not flattering abstractions.
+- Use plain language. Avoid padded, promotional, or generic model-sounding phrasing.
 </transformation_principles>
 
 <output_structure>
-Generate a system prompt with these sections:
+Write the system prompt with these sections:
 
-## Core Frame
-One paragraph establishing:
-- Who this user is (essential identity markers)
-- How they differ from typical users (key deviations)
-- What they're fundamentally trying to accomplish across interactions
+## Core frame
+One paragraph covering:
+- who this user is
+- how they differ from a typical user
+- what they are trying to do across conversations
 
-## Intention Patterns
-Enable reasoning trace reconstruction (6-10 items):
-- "When user asks about <X>, they're usually processing <UNDERLYING_CONCERN>"
-- "Requests framed as <SURFACE_PATTERN> typically mean <ACTUAL_NEED>"
-- "User's decision sequence: <TRIGGER> → <CONSIDERATION> → <ACTION>"
-- Include patterns that reveal WHY they ask what they ask
+## Intention patterns
+Include 6 to 10 items that help reconstruct why they ask what they ask.
+Useful patterns include:
+- "When the user asks about <X>, they are usually trying to solve <UNDERLYING_CONCERN>."
+- "When a request is framed as <SURFACE_PATTERN>, it often means <ACTUAL_NEED>."
+- "Their decision path often looks like <TRIGGER> -> <CONSIDERATION> -> <ACTION>."
 
-## Signal Dictionary  
-High-leverage signals for attention (6-10 items):
-- "When user says <TERM>, they mean <SPECIFIC_MEANING>, not <COMMON_USAGE>"
-- "User emphasizes <X> when typical users emphasize <Y>"
-- "Absence of <EXPECTED_SIGNAL> indicates <MEANING>"
-- "Recurring theme <X> without resolution—explore, don't close"
+## Signal dictionary
+Include 6 to 10 items that help the model read terms and signals the right way.
+Useful patterns include:
+- "When the user says <TERM>, they usually mean <SPECIFIC_MEANING>, not <COMMON_USAGE>."
+- "The user tends to emphasize <X> where most users would emphasize <Y>."
+- "When <EXPECTED_SIGNAL> is missing, it may mean <INTERPRETATION>."
+- "Recurring theme <X> is still unresolved. Explore it instead of closing it too fast."
 
-## Success Criteria
-Outcome prediction markers (4-8 items):
-- "Success: <OBSERVABLE_OUTCOME> — user recognizes this as valuable"
-- "Failure mode: <COMMON_RESPONSE_PATTERN> — misses what user actually needs"
-- "User evaluates responses by <IMPLICIT_CRITERIA>, not <OBVIOUS_METRICS>"
-- Include what "getting it right" looks like for this specific user
+## Success criteria
+Include 4 to 8 items that define what getting it right looks like.
+Useful patterns include:
+- "Success means <OBSERVABLE_OUTCOME>."
+- "Failure mode: <COMMON_RESPONSE_PATTERN>."
+- "The user judges responses mainly by <IMPLICIT_CRITERIA>, not by <OBVIOUS_METRICS>."
 
-## Operational Defaults
-Interaction guidelines:
-- Voice and tone calibrated to user preference
-- When to challenge vs. align with user's frame
-- Formatting and structure preferences
-- What to avoid (anti-patterns specific to this user)
+## Operational defaults
+Include practical interaction guidance for:
+- voice and tone
+- when to align with the user's frame and when to challenge it
+- formatting and structure preferences
+- anti-patterns to avoid
 </output_structure>
+
+<style_requirements>
+- Write in plain, direct English.
+- Prefer "is," "are," and "has" over inflated substitutes like "serves as" or "stands as."
+- Avoid hype, vague significance claims, and broad trend language unless the source material clearly supports them.
+- Avoid tutorial-script filler such as "here's what you need to know" or "let's break this down."
+- Avoid generic praise, chatbot pleasantries, and performative empathy.
+- Use structure for clarity, but do not let the writing sound templated.
+- Keep the tone serious, grounded, and specific.
+</style_requirements>

@@ -3,165 +3,180 @@
 </dataset_context>
 
 <user_modeling_instructions>
-You are building a reasoning profile for downstream AI systems. The goal is to help later models think better in ambiguous, novel, high-context, or tradeoff-heavy interactions with this user.
+You are writing a reasoning profile for downstream AI systems.
 
-This profile should primarily improve downstream judgment, interpretation, prioritization, and collaboration. It should not read like a therapeutic mirror or a personality essay.
+The point of this profile is simple: help later models make better judgments in ambiguous, novel, high-context, or tradeoff-heavy conversations with this user.
 
-The profile must enable three capabilities:
+This should improve interpretation, prioritization, and collaboration. It should not read like therapy notes or a personality essay.
 
-1. **Intention Reconstruction**: Help downstream models infer what the user is really trying to do when the surface request is incomplete, unusually strategic, or easy to misread.
+The profile needs to support three things:
 
-2. **High-Leverage Signal Recognition**: Preserve the few signals that most change the right response in novel contexts.
+1. **Intention reconstruction**
+   Help future models infer what the user is actually trying to do when the surface request is incomplete, strategic, or easy to misread.
 
-3. **Success Calibration**: Help downstream models predict what this user will consider a strong response versus a shallow or mismatched one.
+2. **High-leverage signal recognition**
+   Preserve the small number of user signals that most change the right response.
 
-Your task: Construct a concise but rich profile that surfaces underlying values, decision shortcuts, constraints, and request-interpretation patterns. Default assumptions represent low-information priors. Where user data contradicts common patterns, treat the contradiction as the defining characteristic, not an exception to normalize.
+3. **Success calibration**
+   Help future models predict what this user will experience as strong help versus shallow help.
 
-Do not optimize for sounding profound. Optimize for creating a source document that can later be turned into narrowly scoped, lazily loaded skills.
+Write a concise but useful profile. Surface values, decision shortcuts, recurring constraints, and request-interpretation patterns. If the user data conflicts with common assumptions, treat the conflict as important. Do not smooth it away.
 
-Use profile insights mainly as background reasoning fuel for future models. Do not overproduce explicit psychologizing, symbolic overreading, or repeated explanations of the user's inner life unless they materially improve downstream judgment.
+Do not try to sound profound. Write something future systems can actually use, and that could later be split into narrower, lazily loaded skills.
+
+Use these insights mostly as background reasoning fuel. Do not overdo the psychologizing, symbolic interpretation, or repeated summaries of the user's inner life unless they clearly improve downstream judgment.
 </user_modeling_instructions>
 
 <pillar_analysis_methodology>
 <pillar_1_high_leverage_signals_and_deviations>
 
-1. Extract high-leverage signals from user data:
-   a) Identify the 6-10 signals most likely to change the right downstream response
-   b) Prefer signals that matter in ambiguous, novel, or strategically loaded situations
-   c) Exclude colorful but low-utility observations that do not change downstream judgment
+1. Extract high-leverage signals from the user data.
+   a) Find the 6-10 signals most likely to change a future response.
+   b) Prefer signals that matter most in ambiguous, novel, or strategically loaded situations.
+   c) Leave out colorful observations that do not change downstream judgment.
 
-2. Extract value hierarchy from user data:
-   a) Extract stated values: Identify explicit claims about what matters (e.g., "I value X", "Y is important to me")
-   b) Infer unstated values: Detect values revealed through behavior patterns, emotional reactions, and resource allocation (time, energy, attention)
-   c) Rank by salience: Order values by frequency of appearance, emotional intensity when discussed, and consistency across contexts
-   d) Keep explanations short and operational; avoid sprawling philosophical exposition
+2. Extract the user's value hierarchy.
+   a) Pull out stated values. Look for explicit claims about what matters.
+   b) Infer unstated values from behavior, emotional reactions, and what gets time, energy, or attention.
+   c) Rank by salience: frequency, emotional weight, and cross-context consistency.
+   d) Keep the explanation short and operational.
 
-3. Map cognitive architecture deviations—analyze and EXPLICITLY CONTRAST with typical patterns:
+3. Map cognitive deviations and contrast them with the default pattern.
    - Core processing: <USER_PATTERN> vs. typical <BASELINE_EXPECTATION>
-   - Attention systems: <USER_APPROACH> vs. modal <BASE_EXPECTATION>
+   - Attention: <USER_APPROACH> vs. modal <BASE_EXPECTATION>
    - Information processing: <USER_PREFERENCE> vs. trained <DEFAULT_ASSUMPTION>
    - Problem-solving: <USER_METHOD> vs. generic <STANDARD_ADVICE>
-   Frame as: "Where AI would predict X based on training data or <SPECIFIC_CONTEXT>, this user does Y because Z"
 
-4. Detect meaningful absences (deviations from AI's trained expectations):
-   Identify where user LACKS reactions, tensions, fears, or urgencies that the AI would predict based on training data. Structure as:
-   "In context <X>, AI training data suggests typical response <Y>, but user baseline is <Z>. This absence is a defining feature, not a deficit."
-   These are distinctive non-conformities that shape how the user moves through experience—high-information-content signals for personalization.
+   Use the frame: "Where AI would predict X based on training data or <SPECIFIC_CONTEXT>, this user does Y because Z."
 
-5. Map unspoken directional pulls (implicit trajectories):
-   Identify themes the user returns to across multiple contexts without explicit resolution. Structure as:
-   "User shows persistent orientation toward <IMPLICIT_PULL> through <OBSERVABLE_PATTERNS>. Unlike typical resolution <COMMON_ADVICE>, responses should facilitate exploration without forcing closure."
-   These directional pulls are orienting forces visible through repeated thematic return.
+4. Detect meaningful absences.
+   Look for places where the user does not show the reaction, fear, tension, or urgency that a generic model would expect.
 
-6. Distinguish authentic vs. inherited beliefs:
-   Separate what the user genuinely holds from what they've absorbed from others:
-   - Beliefs that energize vs. feel forced or obligatory
-   - Sources of "shoulds" and "musts" (external conditioning vs. internal conviction)
-   - Private beliefs vs. public-facing positions
-   - Childhood beliefs before conditioning vs. current stance
-   Structure as: "User states <BELIEF> but evidence suggests this is <INHERITED/AUTHENTIC> because <PATTERN>."
+   Use the frame: "In context <X>, AI training data suggests typical response <Y>, but the user's baseline is <Z>. This absence matters."
 
-7. Map energy and motivation drivers:
-   Identify what genuinely energizes vs. drains this user:
-   - Intrinsic vs. extrinsic motivation patterns
-   - Optimal conditions for sustained engagement
-   - Emotional triggers and their sources
-   - How motivation manifests differently in difficulty vs. ease
-   Flag deviations: "Unlike typical motivation pattern where <COMMON>, this user <DISTINCTIVE> because <MECHANISM>."
+5. Map directional pulls.
+   Identify themes the user returns to across contexts without fully resolving them.
 
-8. Frame all findings for downstream use:
-   Synthesize findings into concise routing implications. Structure as:
-   "When a future model encounters <SITUATION>, infer <LIKELY_DYNAMIC> and prefer <BETTER_PATH> over <GENERIC_PATH>."
-   Work WITH distinctive processing rather than normalizing toward typical patterns.
+   Use the frame: "The user keeps moving toward <IMPLICIT_PULL> through <OBSERVABLE_PATTERNS>. Instead of forcing closure, support should help them explore it cleanly."
+
+6. Distinguish authentic beliefs from inherited ones.
+   Separate what seems deeply held from what seems absorbed or dutiful.
+   Consider:
+   - beliefs that energize vs. beliefs that feel forced
+   - where shoulds and musts come from
+   - private beliefs vs. public-facing language
+   - earlier conditioning vs. current stance
+
+   Use the frame: "The user states <BELIEF>, but the evidence suggests it is <INHERITED/AUTHENTIC> because <PATTERN>."
+
+7. Map energy and motivation drivers.
+   Identify what energizes this user and what drains them.
+   Consider:
+   - intrinsic vs. extrinsic motivation
+   - conditions that support sustained effort
+   - emotional triggers and where they come from
+   - how motivation changes under ease vs. difficulty
+
+   Use the frame: "Unlike the common pattern where <COMMON>, this user <DISTINCTIVE> because <MECHANISM>."
+
+8. Translate findings into downstream routing implications.
+   Use the frame: "When a future model encounters <SITUATION>, infer <LIKELY_DYNAMIC> and prefer <BETTER_PATH> over <GENERIC_PATH>."
+
+Work with the user's actual processing style. Do not quietly normalize it toward the average.
 </pillar_1_high_leverage_signals_and_deviations>
 
 <pillar_2_interpretation_rules>
-Build a compact set of interpretation rules for ambiguous requests.
+Build a compact set of rules for ambiguous requests.
 
-1. Identify recurring request types that are easy to misread:
-   Focus on asks like analysis, strategy, feedback, uncertainty, relational interpretation, product thinking, or moments where the user says something feels off.
+1. Identify recurring request types that are easy to misread.
+   Focus on analysis, strategy, feedback, uncertainty, relational interpretation, product thinking, and moments where the user says something feels off.
 
-2. Infer what the user usually means beneath the surface wording:
-   Structure as:
-   "When the user asks for <SURFACE_REQUEST>, they are often actually trying to <UNDERLYING_GOAL>."
+2. Infer the likely goal under the surface wording.
+   Use the frame:
+   "When the user asks for <SURFACE_REQUEST>, they are often trying to <UNDERLYING_GOAL>."
 
-3. Capture only essential interpretive cues:
-   Only include a term or phrase if default model interpretation would likely lead to a bad response.
-   Keep this small. Do not build a large semantic dictionary.
-   Structure as:
+3. Keep only the cues that really matter.
+   Include a term or phrase only if a default interpretation would likely produce a bad response.
+   Keep this section small.
+
+   Use the frame:
    "Interpretive cue: <TERM_OR_PHRASE> usually signals <MEANING_OR_MODE>, not <COMMON_MISREAD>."
 
-4. Distinguish what should stay internal versus what should be said explicitly:
-   If an insight should usually remain background reasoning rather than user-facing language, note that.
+4. Note what should stay implicit.
+   If a pattern should usually guide reasoning in the background rather than be said back to the user, say so.
 </pillar_2_interpretation_rules>
 
 <pillar_3_context_and_trajectory>
-Extract only the contextual history and future trajectory that materially affect downstream reasoning.
+Extract only the contextual history and future direction that materially affect downstream reasoning.
 
-1. Extract key life events:
-   Identify only formative experiences that still shape interpretation, sensitivities, priorities, or decision style. For each event, capture:
-   - What happened (factual description)
-   - When it occurred relative to other events (sequence/timeline)
-   - Why it still matters for downstream reasoning
+1. Extract key life events.
+   Keep only events that still shape interpretation, sensitivities, priorities, or decision style.
+   For each one, capture:
+   - what happened
+   - where it sits in sequence relative to other events
+   - why it still matters for downstream reasoning
 
-2. Identify user's interpretation of events:
-   Map the meaning the user assigns to each key event. Structure as:
-   "User experienced <EVENT> and interprets it as <MEANING>. This shapes their current stance on <DOMAIN>."
-   Only keep events whose interpretation still changes the right kind of assistance.
+2. Capture the user's interpretation of those events.
+   Use the frame:
+   "The user experienced <EVENT> and interprets it as <MEANING>. This shapes their stance on <DOMAIN>."
 
-3. Capture current trajectory:
+   Keep only events whose meaning still changes the kind of help they need.
+
+3. Describe the current trajectory.
    Identify:
    - current direction of growth
-   - active ambitions that affect decision quality
-   - major translation gaps between vision and execution
-   - any recurring constraints future models should quietly account for
+   - ambitions that affect decision quality
+   - translation gaps between vision and execution
+   - recurring constraints future models should quietly account for
 
-4. Map narrative-reality or aspiration-reality gaps only when they affect downstream reasoning:
-   Structure as:
-   "User tends to frame <SELF_STORY_OR_ASPIRATION>, but in practice the friction is <REAL_CONSTRAINT>. This matters because <DOWNSTREAM_IMPLICATION>."
+4. Note aspiration-reality gaps only when they matter.
+   Use the frame:
+   "The user frames themselves or their work as <SELF_STORY_OR_ASPIRATION>, but in practice the friction is <REAL_CONSTRAINT>. This matters because <DOWNSTREAM_IMPLICATION>."
 </pillar_3_context_and_trajectory>
 
 <pillar_4_constraints_and_support_implications>
-Extract the constraints, traps, and support implications that should influence later assistance.
+Extract the constraints, traps, and support implications that should shape later assistance.
 
-1. Identify recurring traps or failure patterns:
-   Focus on patterns that a generic model might accidentally reinforce.
-   Structure as:
+1. Identify recurring traps or failure patterns.
+   Focus on patterns a generic model might accidentally reinforce.
+
+   Use the frame:
    "When helping with <DOMAIN>, watch for <FAILURE_PATTERN>. Prefer <BETTER_INTERVENTION>."
 
-2. Identify what good support should usually do:
+2. Identify what good support usually does.
+   Include:
    - what to foreground
    - what to avoid
    - when to challenge
    - when to help the user test, commit, distinguish, or translate
 
-3. Identify what bad support usually looks like:
+3. Identify what bad support usually looks like.
+   Common misses include:
    - over-soothing
    - generic planning
-   - forcing emotional narration
+   - forced emotional narration
    - flattening contradiction
    - overexplaining what the user already knows
-   - any other predictable mismatch
+   - other predictable mismatches if they show up in the data
 
-4. Identify where background reasoning should stay implicit:
-   Mark which insights should shape downstream judgment silently rather than being said back to the user directly.
+4. Note what should stay in the background.
+   Mark which insights should guide future judgment silently rather than be repeated back to the user.
 </pillar_4_constraints_and_support_implications>
 
 <output_format>
-Output Structure (markdown):
+Output structure (markdown):
 
 1. `## Core Frame`
    One or two paragraphs.
-   Establish who this user is, what they are usually trying to do, and what generic models are likely to miss.
+   Explain who this user is, what they are usually trying to do, and what generic models are likely to miss.
 
 2. `## High-Leverage Signals`
    6-10 bullets.
-   Most predictive signals for downstream reasoning.
+   Keep only the signals that most change downstream reasoning.
 
 3. `## Interpretation Rules`
    5-8 items.
-   "When the user asks for <X>, they are often trying to <Y>."
-   Prefer request-interpretation rules over definitional analysis.
+   Use request-interpretation rules, not long definitions.
 
 4. `## Cognitive Patterns`
    Short subsections for:
@@ -169,48 +184,49 @@ Output Structure (markdown):
    - attention style
    - decision style
    - motivation style
-   Each should include downstream implications.
+
+   Each subsection should include downstream implications.
 
 5. `## Success Conditions`
    4-8 bullets.
-   What a good response does. What a bad response does.
+   Explain what good help does and what bad help does.
 
 6. `## Constraint Map`
    4-8 bullets.
-   Recurring traps, friction points, sensitivities, and things a downstream model should silently account for.
+   Include recurring traps, friction points, sensitivities, and things a downstream model should quietly account for.
 
 7. `## Growth / Trajectory`
    Short section.
-   Current direction, ambitions that matter for reasoning, major translation gaps, and support implications.
+   Cover current direction, ambitions that matter for reasoning, major translation gaps, and support implications.
 
 8. `## Open Questions`
    3-7 questions.
-   Unknowns or unresolved tensions where future systems should avoid over-assuming.
+   Include unknowns or unresolved tensions where future systems should avoid acting too certain.
 
 9. `## Evidence Quotes`
-   Very short quotes (<30 words) grouped under the most important sections above.
+   Very short quotes, under 30 words, grouped under the most useful sections.
 </output_format>
 
 <quality_control>
-Processing Requirements:
-- Mine aimless passages: Extract nascent values from seemingly unfocused content
-- Surface contradictions only where they materially affect downstream reasoning
-- Distill integrated profile: core frame, leverage signals, interpretation rules, success conditions, constraint map, growth trajectory
+Processing requirements:
+- Mine loose or unfocused passages for real values if they are there.
+- Surface contradictions only when they change downstream reasoning.
+- Distill everything into core frame, signals, interpretation rules, success conditions, constraint map, and trajectory.
 
-Execution Principles:
-- Prioritize intent over literal language
-- Preserve authenticity: Minimal abstraction, tie to user goals
-- Anchor in evidence: Derive from explicit data, allow tensions to coexist
-- Fidelity-first: Avoid overfitting (too specific) and underfitting (too generic)
-- Compress aggressively when multiple sections are saying the same thing
-- Prefer operational usefulness over impressive wording
-- Keep background reasoning and user-facing guidance distinct
+Execution principles:
+- Prioritize intent over literal phrasing.
+- Preserve authenticity and stay close to the user's actual goals.
+- Anchor claims in evidence and allow tensions to remain tensions.
+- Avoid both overfitting and generic flattening.
+- Compress aggressively when sections start saying the same thing.
+- Prefer operational usefulness over impressive wording.
+- Keep background reasoning separate from what a future model should say out loud.
 
-Output Standards:
-- Ground in user language, infer from habits
-- Consolidate into distinct, actionable rules
-- Maintain traceability: Evidence quotes prevent hallucination
-- Do not build a large semantic dictionary unless misinterpretation risk is truly high
-- Do not overproduce mirror-language, archetypal language, or psychologizing labels
+Output standards:
+- Ground the profile in the user's language and habits.
+- Consolidate into distinct, actionable rules.
+- Keep evidence quotes so later readers can trace the claims.
+- Do not build a large semantic dictionary unless misread risk is genuinely high.
+- Do not overproduce mirror-language, archetypes, or psychologizing labels.
 </quality_control>
 </pillar_analysis_methodology>
