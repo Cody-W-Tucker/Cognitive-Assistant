@@ -139,7 +139,7 @@ async def _async_main(args: argparse.Namespace) -> int:
 
 def main() -> int:
     """CLI entrypoint for skill generation."""
-    issues = config.validate()
+    issues = config.validate_llm_access()
     if issues:
         print("Error: Configuration issues found")
         for issue in issues:

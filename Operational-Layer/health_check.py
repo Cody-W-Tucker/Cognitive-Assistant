@@ -31,6 +31,7 @@ SCRIPT_MODULES = [
     "prompt_loader",
     "question_asker",
     "skills_creator",
+    "tool_specs_creator",
 ]
 
 
@@ -57,6 +58,15 @@ def check_prompt_rendering() -> List[str]:
         )
     except Exception as exc:
         issues.append(f"Failed to render skills_creation_template: {exc}")
+
+    try:
+        config.prompts.tool_specs_creation_template.format(
+            bio_content="sample bio",
+            supported_tools="- `memory.md`: Memory agent",
+            seed_documents="sample seeds",
+        )
+    except Exception as exc:
+        issues.append(f"Failed to render tool_specs_creation_template: {exc}")
 
     try:
         config.prompts.rlm_query_template.format(

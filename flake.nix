@@ -42,7 +42,12 @@
           skillFile = name: skillsDir + "/${name}/SKILL.md";
         };
       existential = mkLayerExports ./Existential-Layer;
-      operational = mkLayerExports ./Operational-Layer;
+      operational = (mkLayerExports ./Operational-Layer) // {
+        toolSpecs = {
+          memory = ./Operational-Layer/artifacts/tool_specs/memory.md;
+          tasks = ./Operational-Layer/artifacts/tool_specs/tasks.md;
+        };
+      };
     in
     {
       lib = {

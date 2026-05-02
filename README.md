@@ -13,7 +13,7 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-This flake exposes both layers separately so downstream systems can load the generated system prompts and whatever skills currently exist for each layer.
+This flake exposes both layers separately so downstream systems can load the generated system prompts, whatever skills currently exist for each layer, and the operational tool specs.
 
 - `lib.existential.skillsDir`
 - `lib.existential.systemPromptFile`
@@ -24,6 +24,8 @@ This flake exposes both layers separately so downstream systems can load the gen
 - `lib.operational.systemPromptFile`
 - `lib.operational.skillNames`
 - `lib.operational.skillFile name`
+- `lib.operational.toolSpecs.memory`
+- `lib.operational.toolSpecs.tasks`
 
 ## Downstream Usage
 
@@ -33,11 +35,12 @@ Suggested model:
 
 1. Load one layer's `systemPromptFile` as background operating guidance.
 2. Inspect that layer's `skillNames` to see which generated skills exist.
-3. Load only the few skills that match the current situation.
+3. Load only the few skills and tool specs that match the current situation.
 
 The skill names are now dynamic.
 Do not hardcode assumptions like `user-context-model` or `user-workflow-sequencing` unless you are pinning to a specific commit that contains those names.
 Instead, consume `skillNames` from the flake and select from the generated set.
+The operational tool specs are exported explicitly as `memory` and `tasks`.
 
 Example upstream usage:
 
@@ -50,7 +53,7 @@ let
   systemPrompt = builtins.readFile existential.systemPromptFile;
 in
 {
-  programs.opencode.instructions = systemPrompt;
+  programs.opencode.context = systemPrompt;
   programs.opencode.skills = builtins.listToAttrs (
     map
       (name: {
@@ -73,7 +76,7 @@ let
   systemPrompt = builtins.readFile operational.systemPromptFile;
 in
 {
-  programs.opencode.instructions = systemPrompt;
+  programs.opencode.context = systemPrompt;
   programs.opencode.skills = builtins.listToAttrs (
     map
       (name: {
@@ -82,6 +85,22 @@ in
       })
       operational.skillNames
   );
+}
+```
+
+Operational tool spec example:
+
+```nix
+{ inputs, ... }:
+
+let
+  operational = inputs.cognitive-assistant.lib.operational;
+in
+{
+  programs.opencode.tools = {
+    memory = builtins.readFile operational.toolSpecs.memory;
+    tasks = builtins.readFile operational.toolSpecs.tasks;
+  };
 }
 ```
 
@@ -122,3 +141,4 @@ The committed source paths also remain available directly:
 - `${inputs.cognitive-assistant}/Existential-Layer/artifacts/skills/<name>/SKILL.md`
 - `${inputs.cognitive-assistant}/Operational-Layer/artifacts/system_prompt.md`
 - `${inputs.cognitive-assistant}/Operational-Layer/artifacts/skills/<name>/SKILL.md`
+- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/tool_specs/<name>.md`

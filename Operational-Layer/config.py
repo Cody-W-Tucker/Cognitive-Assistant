@@ -34,6 +34,7 @@ class OperationalPathConfig(PathConfig):
             "INTAKE_DIR": "data/intake",
             "READY_DIR": "data/ready",
             "ARTIFACTS_DIR": "artifacts",
+            "TOOL_SPECS_DIR": "artifacts/tool_specs",
             "SKILLS_DIR": "artifacts/skills",
             "PROMPTS_DIR": "prompts",
             "PROMPT_RUNTIME_DIR": "prompts/runtime",
@@ -97,6 +98,9 @@ class PromptsConfig:
     skills_creation_template: str = field(
         default_factory=lambda: load_prompt("skills_creation_template")
     )
+    tool_specs_creation_template: str = field(
+        default_factory=lambda: load_prompt("tool_specs_creation_template")
+    )
     rlm_query_template: str = field(
         default_factory=lambda: load_prompt("rlm_query_template")
     )
@@ -134,6 +138,10 @@ class Config:
             issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
 
         return issues
+
+    def validate_llm_access(self) -> List[str]:
+        """Validate configuration for scripts that only need LLM access."""
+        return validate_provider_config(self.api)
 
     def validate_question_answering(self) -> List[str]:
         """Validate configuration needed specifically for the RLM-backed question flow."""
