@@ -24,7 +24,6 @@ from lib.health import (  # noqa: E402
 
 
 SCRIPT_MODULES = [
-    "baselines.baseline_question_asker",
     "config",
     "human_interview",
     "llm",
@@ -75,11 +74,6 @@ def check_prompt_rendering() -> List[str]:
     except Exception as exc:
         issues.append(f"Failed to render rlm_query_template_filesystem_only: {exc}")
 
-    try:
-        load_prompt("baseline_system_prompt").format(question="sample question")
-    except Exception as exc:
-        issues.append(f"Failed to render baseline_system_prompt: {exc}")
-
     return issues
 
 
@@ -87,8 +81,12 @@ def check_required_paths() -> List[str]:
     """Verify required project files and directories exist."""
     issues = config.validate_question_answering()
     if not config.paths.PROMPT_RUNTIME_DIR.exists():
-        issues.append(f"Prompt runtime directory not found: {config.paths.PROMPT_RUNTIME_DIR}")
+        issues.append(
+            f"Prompt runtime directory not found: {config.paths.PROMPT_RUNTIME_DIR}"
+        )
     return issues
+
+
 def run_health_checks() -> List[str]:
     """Run all non-network health checks and return a list of issues."""
     issues: List[str] = []
@@ -103,7 +101,9 @@ def run_health_checks() -> List[str]:
     issues.extend(check_required_paths())
     issues.extend(check_script_imports(SCRIPT_MODULES))
     issues.extend(check_provider_setup(config=config, create_client=create_client))
-    issues.extend(check_rlm_command(config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm"))
+    issues.extend(
+        check_rlm_command(config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm")
+    )
     return issues
 
 

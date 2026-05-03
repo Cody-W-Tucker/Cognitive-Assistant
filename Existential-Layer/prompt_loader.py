@@ -23,8 +23,9 @@ PROMPT_FILES = {
     "skills_creation_template": "skills_creation_template.md",
     "rlm_query_template": "rlm_query_template.md",
     "rlm_query_template_filesystem_only": "rlm_query_template_filesystem_only.md",
-    "baseline_system_prompt": "baseline_system_prompt.md",
 }
+
+
 def load_prompt(name: str) -> str:
     """Load a named prompt template from the runtime prompts directory."""
     return shared_load_prompt(str(PROMPTS_DIR), prompt_mapping_key(PROMPT_FILES), name)
