@@ -1,44 +1,67 @@
 # Agent Guidelines for Cognitive-Assistant
 
-## Build/Lint/Test Commands
+## Layout
 
-**Run full pipeline:**
+The repo is one unified pipeline parameterized by a layer profile.
 
-```bash
-python prompt_creator.py
+```
+core/                 unified pipeline (one set of scripts)
+profiles/<name>/      profile-specific inputs (questions.csv, prompts/runtime/)
+workspaces/<name>/    runtime data (data/, artifacts/) per profile
+lib/                  shared infrastructure (config, llm, prompts, health)
+tests/                profile-aware health tests
 ```
 
-**Run single test (no tests configured):**
+Two profiles are registered: `existential` and `operational`.
+
+## CLI
+
+All commands take `--profile existential|operational`.
 
 ```bash
-# Add pytest configuration to pyproject.toml when tests are added
-pytest tests/ -v
+python -m core list-profiles
+python -m core --profile <name> health-check
+
+# Existential profile workflow
+python -m core --profile existential ingest-interview              # interactive
+python -m core --profile existential ask-questions                 # human-seeded
+python -m core --profile existential ask-questions --filesystem-only
+python -m core --profile existential build-prompts
+python -m core --profile existential build-skills
+
+# Operational profile workflow
+python -m core --profile operational ingest-corpus                 # batch
+python -m core --profile operational ask-questions
+python -m core --profile operational build-prompts
+python -m core --profile operational build-skills
+python -m core --profile operational build-tool-specs
 ```
 
-**Lint code:**
+Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)
+fail with a clear error rather than silently no-op.
+
+## Tests
 
 ```bash
-# Add black + isort + flake8 to requirements-dev.txt when configured
-black .
-isort .
-flake8 .
+nix develop --command python -m unittest tests.test_health -v
 ```
 
-## Code Style Guidelines
+The health test runs `check_prompt_files` and `check_prompt_rendering` against
+every registered profile.
 
-**Imports:** Standard library → third-party → local modules. Use absolute imports.
+## Code Style
 
-**Type hints:** Required for all function parameters and return values. Use `typing` module extensively.
+**Imports:** Standard library -> third-party -> local. Use absolute imports.
 
-**Naming:** snake_case for functions/variables, PascalCase for classes, UPPER_CASE for constants.
+**Type hints:** Required for function parameters and return values.
 
-**Docstrings:** Google-style docstrings for all public functions and classes.
+**Naming:** snake_case for functions/variables, PascalCase for classes,
+UPPER_CASE for constants.
 
-**Error handling:** Use specific exceptions, log errors with context, avoid bare except clauses.
+**Configuration:** Environment variables for secrets (.env). All layer-specific
+behavior is declared once in `core/config.py` as a `LayerProfile` and looked up
+by name. Don't add new per-layer scripts; extend a profile.
 
-**Data structures:** Prefer dataclasses for simple data, Pydantic models for validated data.
-
-**Async:** Use async/await for I/O operations, proper error handling in async contexts.
-
-**Configuration:** Use environment variables for secrets, config.py for shared settings.
-
+**Adding a profile:** Add a `LayerProfile(...)` instance in `core/config.py`,
+register it via `register_profile`, create the matching `profiles/<name>/`
+(questions.csv, prompts/runtime/) and `workspaces/<name>/` directories.

@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Generate OpenCode-style operational skills from the latest profile."""
+"""Generate OpenCode-style skills from the latest profile bio.
 
-import argparse
+Profile-agnostic. Reads the most recent `human_profile*.md` from the active
+profile's artifacts directory, asks the LLM to produce a JSON map of
+{slug: SKILL.md content}, validates the payload, and writes one skill per
+directory. Stale skill directories not in the new payload are removed.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import json
 import re
@@ -10,13 +17,15 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from config import config
-from llm import LLMHandle, create_client, generate_text_async
+from core.config import Config
+from lib.llm import LLMHandle, create_client, generate_text_async
+
 
 class SkillsCreator:
-    """Generate skills from an operational profile."""
+    """Generate skills from a profile bio."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
+        self.config = config
         self.handle: LLMHandle = create_client(
             config.api,
             model=config.api.get_model("refine"),
@@ -28,11 +37,11 @@ class SkillsCreator:
         bio_path: Optional[Path] = None,
         output_dir: Optional[Path] = None,
     ) -> Path:
-        """Generate skill files from the selected profile."""
+        """Generate skill files from the selected bio."""
         resolved_bio_path = self._resolve_bio_path(bio_path)
         bio_content = resolved_bio_path.read_text(encoding="utf-8")
         skills_payload = await self._generate_skill_documents(bio_content)
-        resolved_output_dir = output_dir or config.paths.SKILLS_DIR
+        resolved_output_dir = output_dir or self.config.paths.SKILLS_DIR
         self._write_skills(skills_payload, resolved_output_dir)
         return resolved_output_dir
 
@@ -43,23 +52,23 @@ class SkillsCreator:
                 raise FileNotFoundError(f"Bio file not found: {resolved_path}")
             return resolved_path
 
-        bio_files = sorted(config.paths.ARTIFACTS_DIR.glob("human_profile*.md"))
+        bio_files = sorted(self.config.paths.ARTIFACTS_DIR.glob("human_profile*.md"))
         if not bio_files:
             raise FileNotFoundError(
-                "No human_profile*.md files found in artifacts/. Run prompt_creator.py first or pass --bio."
+                f"No human_profile*.md files found in {self.config.paths.ARTIFACTS_DIR}. "
+                "Run prompt_creator first or pass --bio."
             )
         return bio_files[-1]
 
     async def _generate_skill_documents(self, bio_content: str) -> Dict[str, str]:
-        prompt = config.prompts.skills_creation_template.format(
+        prompt = self.config.prompts.skills_creation_template.format(
             bio_content=bio_content,
         )
-
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,
-            temperature=config.api.TEMPERATURE,
-            max_output_tokens=config.api.MAX_COMPLETION_TOKENS,
+            temperature=self.config.api.TEMPERATURE,
+            max_output_tokens=self.config.api.MAX_COMPLETION_TOKENS,
         )
         payload = self._parse_json_response(response)
         self._validate_payload(payload)
@@ -92,13 +101,21 @@ class SkillsCreator:
                     f"Skill name '{skill_name}' must be a lowercase hyphenated slug"
                 )
             if f"name: {skill_name}" not in content:
-                raise ValueError(f"Skill {skill_name} is missing matching frontmatter name")
+                raise ValueError(
+                    f"Skill {skill_name} is missing matching frontmatter name"
+                )
             if "description:" not in content:
-                raise ValueError(f"Skill {skill_name} is missing required description frontmatter")
+                raise ValueError(
+                    f"Skill {skill_name} is missing required description frontmatter"
+                )
             if "## When To Use" not in content:
-                raise ValueError(f"Skill {skill_name} is missing '## When To Use' section")
+                raise ValueError(
+                    f"Skill {skill_name} is missing '## When To Use' section"
+                )
             if "## Do Not Use" not in content:
-                raise ValueError(f"Skill {skill_name} is missing '## Do Not Use' section")
+                raise ValueError(
+                    f"Skill {skill_name} is missing '## Do Not Use' section"
+                )
             if len(content.strip()) < 200:
                 raise ValueError(f"Skill {skill_name} is unexpectedly short")
 
@@ -116,29 +133,26 @@ class SkillsCreator:
             print(f"Info: Wrote {skill_path}")
 
 
-def create_argument_parser() -> argparse.ArgumentParser:
-    """Create the command-line interface parser."""
-    parser = argparse.ArgumentParser(
-        description="Generate OpenCode-style skills from human_profile.md",
+async def _async_run(
+    config: Config,
+    bio_path: Optional[Path],
+    output_dir: Optional[Path],
+) -> int:
+    creator = SkillsCreator(config)
+    result_dir = await creator.generate_skills(
+        bio_path=bio_path, output_dir=output_dir
     )
-    parser.add_argument("--bio", type=Path, help="Path to a specific human_profile.md file")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Directory where generated skill folders should be written",
-    )
-    return parser
-
-
-async def _async_main(args: argparse.Namespace) -> int:
-    creator = SkillsCreator()
-    result_dir = await creator.generate_skills(bio_path=args.bio, output_dir=args.output)
     print(f"Info: Skills generated in {result_dir}")
     return 0
 
 
-def main() -> int:
-    """CLI entrypoint for skill generation."""
+def run(
+    config: Config,
+    *,
+    bio_path: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
+) -> int:
+    """Synchronous entry point for CLI use."""
     issues = config.validate_llm_access()
     if issues:
         print("Error: Configuration issues found")
@@ -146,15 +160,11 @@ def main() -> int:
             print(f"- {issue}")
         return 1
 
-    parser = create_argument_parser()
-    args = parser.parse_args()
-
     try:
-        return asyncio.run(_async_main(args))
+        return asyncio.run(_async_run(config, bio_path, output_dir))
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+__all__ = ["SkillsCreator", "run"]
