@@ -29,10 +29,10 @@
             pkgs = import nixpkgs { inherit system; };
           }
         );
-      mkLayerExports = layerDir:
+      mkLayerExports = workspaceDir:
         let
-          skillsDir = layerDir + "/artifacts/skills";
-          systemPromptFile = layerDir + "/artifacts/system_prompt.md";
+          skillsDir = workspaceDir + "/artifacts/skills";
+          systemPromptFile = workspaceDir + "/artifacts/system_prompt.md";
           skillNames = builtins.attrNames (
             nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
           );
@@ -41,11 +41,11 @@
           inherit skillsDir systemPromptFile skillNames;
           skillFile = name: skillsDir + "/${name}/SKILL.md";
         };
-      existential = mkLayerExports ./Existential-Layer;
-      operational = (mkLayerExports ./Operational-Layer) // {
+      existential = mkLayerExports ./workspaces/existential;
+      operational = (mkLayerExports ./workspaces/operational) // {
         toolSpecs = {
-          memory = ./Operational-Layer/artifacts/tool_specs/memory.md;
-          tasks = ./Operational-Layer/artifacts/tool_specs/tasks.md;
+          memory = ./workspaces/operational/artifacts/tool_specs/memory.md;
+          tasks = ./workspaces/operational/artifacts/tool_specs/tasks.md;
         };
       };
     in

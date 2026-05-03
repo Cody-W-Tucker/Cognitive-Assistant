@@ -13,86 +13,58 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-This flake exposes both layers separately so downstream systems can load the generated system prompts, whatever skills currently exist for each layer, and the operational tool specs.
+Each profile exposes the generated system prompt, the list of skills currently
+in the workspace, and a helper to read a specific skill file. The operational
+profile additionally exports per-tool specs.
 
-- `lib.existential.skillsDir`
-- `lib.existential.systemPromptFile`
-- `lib.existential.skillNames`
-- `lib.existential.skillFile name`
+| Output | Existential | Operational |
+|---|---|---|
+| `lib.<profile>.systemPromptFile` | yes | yes |
+| `lib.<profile>.skillsDir` | yes | yes |
+| `lib.<profile>.skillNames` | yes | yes |
+| `lib.<profile>.skillFile <name>` | yes | yes |
+| `lib.<profile>.toolSpecs.{memory,tasks}` | — | yes |
 
-- `lib.operational.skillsDir`
-- `lib.operational.systemPromptFile`
-- `lib.operational.skillNames`
-- `lib.operational.skillFile name`
-- `lib.operational.toolSpecs.memory`
-- `lib.operational.toolSpecs.tasks`
+Skill names are dynamic — read them from `skillNames` rather than hardcoding.
 
 ## Downstream Usage
 
-Downstream systems should treat the system prompt as the base layer and the generated skills as conditional overlays.
-
-Suggested model:
-
-1. Load one layer's `systemPromptFile` as background operating guidance.
-2. Inspect that layer's `skillNames` to see which generated skills exist.
-3. Load only the few skills and tool specs that match the current situation.
-
-The skill names are now dynamic.
-Do not hardcode assumptions like `user-context-model` or `user-workflow-sequencing` unless you are pinning to a specific commit that contains those names.
-Instead, consume `skillNames` from the flake and select from the generated set.
-The operational tool specs are exported explicitly as `memory` and `tasks`.
-
-Example upstream usage:
+Treat the system prompt as the base layer and the generated skills as
+conditional overlays. Pick a profile, load its system prompt, and map its
+`skillNames` to skill contents:
 
 ```nix
 { inputs, ... }:
 
 let
-  existential = inputs.cognitive-assistant.lib.existential;
-  skill = name: builtins.readFile (existential.skillFile name);
-  systemPrompt = builtins.readFile existential.systemPromptFile;
+  layer = inputs.cognitive-assistant.lib.existential;  # or .operational
+  readSkill = name: builtins.readFile (layer.skillFile name);
 in
 {
-  programs.opencode.context = systemPrompt;
+  programs.opencode.context = builtins.readFile layer.systemPromptFile;
   programs.opencode.skills = builtins.listToAttrs (
-    map
-      (name: {
-        inherit name;
-        value = skill name;
-      })
-      existential.skillNames
+    map (name: { inherit name; value = readSkill name; }) layer.skillNames
   );
 }
 ```
 
-Operational layer example:
+To expose only a subset of skills, filter `skillNames` before mapping:
 
 ```nix
-{ inputs, ... }:
-
 let
-  operational = inputs.cognitive-assistant.lib.operational;
-  skill = name: builtins.readFile (operational.skillFile name);
-  systemPrompt = builtins.readFile operational.systemPromptFile;
+  layer = inputs.cognitive-assistant.lib.operational;
+  wanted = builtins.filter
+    (name: builtins.elem name [ "artifact-proof-bounds" "sequence-integrity-router" ])
+    layer.skillNames;
 in
-{
-  programs.opencode.context = systemPrompt;
-  programs.opencode.skills = builtins.listToAttrs (
-    map
-      (name: {
-        inherit name;
-        value = skill name;
-      })
-      operational.skillNames
-  );
-}
+  builtins.listToAttrs (
+    map (name: { inherit name; value = builtins.readFile (layer.skillFile name); }) wanted
+  )
 ```
 
-Operational tool spec example:
+The operational profile also exports tool specs:
 
 ```nix
-{ inputs, ... }:
-
 let
   operational = inputs.cognitive-assistant.lib.operational;
 in
@@ -104,41 +76,31 @@ in
 }
 ```
 
-If you want to selectively expose only some skills, filter `skillNames` first.
-
-```nix
-let
-  operational = inputs.cognitive-assistant.lib.operational;
-  wanted = builtins.filter (name: builtins.elem name [
-    "artifact-proof-bounds"
-    "sequence-integrity-router"
-  ]) operational.skillNames;
-in
-  builtins.listToAttrs (map (name: {
-    inherit name;
-    value = builtins.readFile (operational.skillFile name);
-  }) wanted)
-```
-
 ## Regeneration Workflow
 
-The flake exports the generated artifacts that are currently committed in the repo.
-If you regenerate prompts or skills, downstream consumers will see the new names and contents after that commit is updated.
-
-Typical regeneration commands:
+The repo runs as one unified pipeline parameterized by a layer profile
+(`existential` or `operational`). All commands take `--profile <name>`.
 
 ```bash
-python Existential-Layer/prompt_creator.py
-python Existential-Layer/skills_creator.py
+# Existential profile
+python -m core --profile existential ingest-interview
+python -m core --profile existential ask-questions
+python -m core --profile existential build-prompts
+python -m core --profile existential build-skills
 
-python Operational-Layer/prompt_creator.py
-python Operational-Layer/skills_creator.py
+# Operational profile
+python -m core --profile operational ingest-corpus
+python -m core --profile operational ask-questions
+python -m core --profile operational build-prompts
+python -m core --profile operational build-skills
+python -m core --profile operational build-tool-specs
 ```
 
-The committed source paths also remain available directly:
+If you need to read a generated artifact directly without going through the
+flake outputs, the committed paths are:
 
-- `${inputs.cognitive-assistant}/Existential-Layer/artifacts/system_prompt.md`
-- `${inputs.cognitive-assistant}/Existential-Layer/artifacts/skills/<name>/SKILL.md`
-- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/system_prompt.md`
-- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/skills/<name>/SKILL.md`
-- `${inputs.cognitive-assistant}/Operational-Layer/artifacts/tool_specs/<name>.md`
+```
+workspaces/<profile>/artifacts/system_prompt.md
+workspaces/<profile>/artifacts/skills/<name>/SKILL.md
+workspaces/operational/artifacts/tool_specs/<name>.md
+```
