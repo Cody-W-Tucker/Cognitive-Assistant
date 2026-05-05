@@ -1,168 +1,151 @@
-## Core frame
+# Field Guide: How This User Actually Works
 
-This user tries to get the real object and the real constraints in view before spending much effort. In practice that means they keep asking some version of the same questions: What are we actually working on? What has to stay true? Who has to use this? What would count as enough proof? Can we make it simpler without making it worse? They are mostly guarding against fake progress: work that sounds competent, looks complete, or follows familiar patterns, but is hard to inspect, awkward to use, or expensive to maintain.
+## Core Frame
 
-It is easy to misread the structure in their prompts as a love of neatness. That misses the point. The structure is there to keep the work honest. It narrows the surface area, forces contact with the artifact, and makes it easier to tell whether a claim has earned trust. They are fine with speed, abstraction, and experimentation once the object is clear enough to inspect. They push back when those show up too early.
+This user works as an inspector-simplifier. Before doing anything consequential, he forces the work into contact with the actual object — the codebase, the schema, the real operator who will use the thing, the buyer's actual pain — and refuses to act until that contact has occurred. His default move is to convert vague requests into bounded inspection jobs, then collapse the result into the simplest legible structure that still does the job. What he is implicitly protecting against is *false progress*: output that is plausible, elegant, or technically complete but operationally useless, hard to verify, or misaligned with the real user.
 
-## High-leverage signals
+A generic reader will likely overweight his "thoroughness" and underweight what that thoroughness is for. He is not careful for its own sake. He front-loads structure so he can move fast later without paying for it in cleanup, drift, or commitments to the wrong abstraction. The simplification habit is not minimalism — it is a control mechanism for keeping work inspectable, reversible, and tied to a real operator.
 
-- Inspection comes before recommendation. When the stakes go up or the task gets fuzzy, the user wants to see the files, schema, component, build setup, tests, copy, or actual behavior first. Advice does not count until it touches the thing itself.
-- Complexity has to pay rent. Extra layers, split files, factories, generalized architecture, and dense copy all get questioned unless they clearly buy clarity, usability, maintainability, or proof.
-- The real operator matters early. The user checks whether a nontechnical person can use it, whether a maintainer can reason about it, or whether a buyer can recognize the pain point. Technical correctness alone does not settle it.
-- Scope control is part of verification. Lists, headings, explicit variables, and fixed output shapes are there to stop drift and make the work checkable.
-- Breakdowns usually look like loss of grounding. Generic output, speculative claims, broad framing, or polished language without evidence all register as warning signs.
-- Once ambiguity is bounded, the user wants execution. If the object, action, and acceptance criteria are already clear, more planning starts to look like stalling.
-- Repeated judgment is a candidate for compression. The user often tries to turn messy decisions into scripts, schemas, configs, task records, or other reusable surfaces.
-- Corrections usually arrive as tighter constraints. When something misses, the user narrows scope, limits evidence, fixes the output shape, or removes room for guessing.
-- Proof is local, not ceremonial. Citations, process chatter, and formal rigor do not help much unless the answer also shows contact with the actual artifact and stays within its evidence.
+## High-Leverage Signals
 
-## Salience structure
+- **Inspection precedes prescription.** Substantive tasks open with "look at this, decide and plan" rather than "do this." He treats the right to act as something earned by first mapping structure, constraints, and intended user.
+- **Aggressive consolidation toward config.** When implementations grow factories, branches, and indirection, he reframes them as "treat this like a hardcoded config file." Abstraction has to earn its complexity against a simpler explicit alternative.
+- **Audience binding.** He almost never evaluates a pattern in the abstract. He binds it to a specific operator — a non-technical person filling schemas, a coding agent, a buyer who must recognize their own pain — and judges fit there.
+- **Correction by concretization, not by complaint.** When work misses, he does not negotiate. He restates the task with tighter constraints, named exclusions, and explicit output shape. "Try again" almost never appears alone.
+- **Reversible exploration, irreversible-only-after-proof.** He moves fast in reconnaissance and probes ("for now," "later"), and slows down sharply when a choice would become structural.
+- **Sequence protection over speed protection.** He resists the assistant getting ahead of the work — answering question two before question one, coding before inspecting, solving before scoping. The objection is to ungrounded speed, not speed itself.
+- **Tightening as recovery.** Under load, drift, or disappointment, he reduces scope and demands concrete evidence rather than expanding effort.
+- **Standards he will not relax under pressure:** usefulness, verifiability, fit to operator. Standards he relaxes early: completeness, generality, architectural elegance.
 
-- The first thing they look for is the actual object of work: the repo, file, command, schema, draft, UI, lead list, or failure case.
-- The next question is whether the current form is usable. Can someone operate it, change it, review it, or hand it off without hidden context?
-- Complexity becomes noticeable when it costs more than the job is worth.
-- Local conventions matter more than imported best practice. Existing build commands, style rules, tests, structure, and surrounding code shape what a good change looks like.
-- Bounded uncertainty is acceptable. Open-ended uncertainty usually triggers inspection, not speculation.
-- Polished summaries do not carry much weight if they do not help with the next decision.
-- Evidence gaps often matter before outright errors do. Unsupported confidence gets noticed fast.
+## Salience Structure
 
-## Lived thresholds
+- **First salient: the operator.** Who has to use, maintain, or run this? Pattern goodness collapses to fit-for-this-person.
+- **Second salient: complexity that has not earned its keep.** Indirection, factories, configurable layers, defensive scaffolding, and dense wording register quickly as drag.
+- **Third salient: gap between described behavior and actual behavior.** A fix that "should work" is not signal. A fix tied to a diagnosed cause and a verification step is signal.
+- **Background until it breaks: existing project conventions.** He does not impose taste on unfamiliar codebases; he asks for build, test, lint, and style first, then matches.
+- **Underweighted by generic readers:** how much of his "thoroughness" is actually scope-narrowing in disguise. The checklists are reductive, not exhaustive.
+- **Overweighted by generic readers:** the appearance of process-heaviness. He uses lightweight scaffolding, not ritual; he drops it instantly for narrow factual queries.
 
-- Planning is useful while the object or constraints are still unclear.
-- Planning becomes drag once the prompt already names the object, action, output, and acceptance criteria.
-- Rough work is fine during reconnaissance if it reduces uncertainty and stays reversible.
-- Rough work stops being fine near commitment. Before something gets used, the user wants the cause understood, the wording cleaned up, and the moving parts cut back.
-- Evidence is sufficient when it supports a defensible next move. The user does not need the whole space exhausted.
-- If a change could create rework in architecture, UX, or maintainability, direct inspection becomes mandatory.
-- Polish matters more when another human has to read, use, or trust the artifact.
-- Confidence drops fast when the answer runs ahead of what the artifact can support.
+## Lived Thresholds
 
-## Breakdown and repair
+- **Planning becomes avoidance** when the next move is already obvious — a named target, a concrete object, a clear deliverable. At that point further analysis reads as overhead and he switches to imperative phrasing.
+- **Roughness is acceptable** during reconnaissance, probes, scouting passes, and "for now" wrappers — anything reversible.
+- **Roughness stops being acceptable** once the work would lock in structure, ship to a non-technical user, or compound across future tasks.
+- **Evidence is sufficient** when a small candidate set is targeted, the strongest passages have been read directly, and a challenge pass has not weakened the claim. He stops there rather than expanding the search.
+- **Polish matters** when an artifact must survive contact with a specific operator: copy a buyer must immediately understand, code an agent must execute, a summary that must drive a next action.
+- **Uncertainty forces inspection** when the task has architectural, usability, or repository-wide implications, or when the abstraction level of the request feels off.
+- **Confidence drops** when output is fluent but the proof base is thin — broad pattern claims from few examples, generalization that outruns the inspected material.
 
-- A common failure mode is acting out of order. If inspection or framing was requested first, jumping ahead to implementation damages trust.
-- Another failure mode is sounding plausible without showing the basis. The repair is to go back to the file, text, behavior, or trace and narrow the claim.
-- The user also reacts when structure gets heavier than the task. The fix is usually to collapse the control surface: fewer files, fewer layers, more direct defaults.
-- Dense or indirect language reads as unfinished. The repair is to rewrite for sequence and obvious next action.
-- A fix that is asserted instead of diagnosed is not enough. The user wants the cause, the smallest relevant change, and some check against the original failure.
-- Wide exploration can become its own problem. When that happens, the user narrows the candidate set and stops once the decision is supported.
-- Best practice loses force when it turns into ceremony. The user tends to ask what a layer is actually doing and whether the existing system already covers it.
+## Breakdown and Repair
 
-## Quality detection
+- **Breakdown signal: ungrounded fluency.** Output sounds clean while leaning on broad matches or speculative inference. Repair: narrow scope, demand directly supported passages, cut the answer back rather than embellishing.
+- **Breakdown signal: complexity exceeding need.** Setup "seems overly complex." Repair: collapse toward config, remove a file boundary, delete redundant defensive code, name a simpler model ("treat this like X, not Y").
+- **Breakdown signal: inverted sequence.** Assistant produces output before inspecting, or answers part two before part one. Repair: re-issue the prompt with explicit ordering and "first / then" structure.
+- **Breakdown signal: misfit to operator.** A pattern that works for the engineer but not for the schema-editor. Repair: reframe judgment criterion as the specific user's experience, not the code's elegance.
+- **Breakdown signal: scope creep on synthesis.** Conclusions extend beyond the evidence. Repair: remove interpretive slack — "do not guess," "read that," "grounded in," "just answer."
+- **Breakdown signal: fix without diagnosis.** A patch that might work. Repair: require the cause, the smallest change addressing that cause, and a concrete before/after check.
+- **Recovery is constraint-based, not encouragement-based.** He restores momentum by reducing surface area, not by adding effort.
 
-- Good work makes the next move clear.
-- Good work is simple, but not thin. It keeps the detail needed to act.
-- Proof comes from contact with the real environment: files, commands, tests, behavior, buyer pain, user fit, or wording that actually works.
-- Weak work sounds acceptable but creates extra interpretation, maintenance, or downstream cleanup.
-- The user distrusts abstraction that does not clarify the live task.
-- They also distrust long answers that miss the practical facts that matter, like build commands, style rules, current behavior, or operator fit.
-- A useful test for quality is whether a nontechnical user, maintainer, coding agent, or buyer could do the next thing without guesswork.
+## Quality Detection
 
-## Artifact relation
+- **Strong:** decision-ready clarity. The artifact can be acted on by the named operator without further interpretation.
+- **Strong:** the result names what was inspected, what the rule is, what it does operationally, and where it doesn't apply. Observation and inference are separated.
+- **Weak:** technically correct but operationally heavy — extra abstraction, hidden behavior, dense wording, unnecessary files.
+- **Weak:** comprehensive in form but disconnected from the real use case or the actual repository conventions.
+- **Distrusts:** plausibility, elegance, polish, "best practice by convention," and any output containing performative scaffolding (citations, tooling chatter, invented frameworks, meta-commentary).
+- **Trusts:** concrete artifact + plain interpretation + explicit limits. Bounded coverage organized by decision use, not by topic.
+- **A repository summary is not done** until it lists build, test, lint, style, and existing rules — the things needed to actually work in the codebase.
+- **Copy is not done** when it is correct; it is done when the next action is obvious.
 
-- Artifacts are the main source of truth. Code, schemas, logs, commands, drafts, lead records, and current UI behavior beat abstract guesses.
-- Artifacts are also thinking surfaces. The user reasons through concrete drafts, configs, summaries, and patterns rather than detached discussion.
-- In debugging work, the artifact defines the failure: where it happens, what the symptom is, and what would falsify the diagnosis.
-- In coordination work, the artifact carries the handoff. A task record, repo map, config file, or structured summary should reduce dependence on hidden conversation context.
-- Artifacts also test whether abstraction has drifted too far. If the idea cannot live in a small editable surface, trust drops.
-- Direct contact matters more than reassurance. The user wants to see that the answer touched the thing in question.
-- They often prefer one obvious control point: explicit defaults, direct entry points, concise lead fields, or a single structured record.
+## Artifact Relation
 
-## Mode shifts
+- **Artifact as source of truth.** Before judging a pattern, he wants to look at the actual component and schema together. Abstraction without artifact contact is treated as guessing.
+- **Artifact as thinking surface.** He uses checklists (project type, structure, build, tests, lint, style, rules) as structured probes that force coverage and prevent omission, not as documentation.
+- **Artifact as drift detector.** When an explanation feels too clean, he goes back to the file, the failing command, the actual log output. If the artifact does not support the claim, the claim is wrong.
+- **Artifact as operator stand-in.** He simulates the non-technical user moving through the schema, or the coding agent reading the spec, and judges the work by what they encounter.
+- **Artifact preferred over rationale.** A working config someone can edit beats a flexible system that requires explanation. The thing-in-hand is the standard.
+- **Code, schema, and config sit higher than commentary.** Process talk, citations, and tool references are stripped from outputs because they crowd out the artifact.
+- **Crisp intermediate artifacts restore traction** when energy drops — a smaller summary, a scoped plan, a config sketch — because they make progress visibly inspectable.
 
-- Exploration starts when the environment is unfamiliar or the task is still blurry. The user asks for mapping: project type, structure, build, tests, lint, style, rules, candidate files, or workflow.
-- Planning starts when the object is known but the right path is still open. The standard there is fit, not just possibility.
-- Implementation starts when the next action is already constrained. Direct imperatives usually mean the framing work is done.
-- Diagnosis starts when behavior and expectation split apart. The focus shifts to state, preconditions, fallbacks, reproduction, and verification.
-- Review starts when something could pass on the surface but still be too vague, too complex, or poorly matched to the operator.
-- Refinement starts when the artifact is mostly right but still too expensive to use or hand off.
-- If assumptions change midstream, execution falls back to orientation. The user re-establishes current state, intended state, gates, and missing pieces.
+## Mode Shifts
 
-## Success conditions
+- **Exploration → planning** triggers on "decide and plan," "is this a good pattern," "summarize." Verbs change from imperatives to inspection verbs.
+- **Planning → implementation** triggers when the object, the action, and the deliverable are all named in the prompt. Imperative verbs return; explanation requests disappear.
+- **Implementation → diagnosis** triggers when behavior contradicts expectation. He stops optimizing the old plan and rewrites the task as observable conditions: what should happen first, what only after a status exists, what the fallback is.
+- **Diagnosis → repair** requires a named cause before a change is allowed. Speculative patches are rejected.
+- **Repair → verification** is non-optional in technical work. Some direct proof is required — a test, a reproduction, a log, a behavior check.
+- **Any mode → re-baselining** triggers when assumptions shift mid-task. Momentum stops; current behavior, intended behavior, and gating rules are restated before continuing.
+- **Across all modes:** standards of usefulness and verifiability are constant. Standards of breadth, completeness, and elegance vary by mode.
 
-- Good execution makes the next step obvious instead of opening new abstract branches.
-- Good execution stays tied to the actual codebase, user, failure mode, buyer pain, or wording problem.
-- Good execution removes moving parts that are not pulling their weight.
-- Good execution is narrow enough to verify. The user can tell what changed, why, and what evidence supports it.
-- Good execution supports handoff without requiring someone else to reconstruct the hidden logic.
-- Weak execution creates momentum on paper while increasing ambiguity or rework.
-- Weak execution answers the wrong level of abstraction.
-- Weak execution reopens scope after the user already closed it.
+## Success Conditions
 
-## Tensions and tradeoffs
+- **Good execution:** produces a small, inspectable artifact that survives contact with the named operator and removes ambiguity for the next move.
+- **Good execution:** stays inside the constraint surface he set; does not import unrequested frameworks, polish, or scope.
+- **Good execution:** when uncertain, narrows and stops. When confident, names limits explicitly.
+- **Good execution:** matches existing project conventions before introducing new ones.
+- **Weak execution:** elaborates, generalizes, or polishes when narrowing was needed.
+- **Weak execution:** answers from probability rather than from the artifact.
+- **Weak execution:** completes the form of the task (sounds like a summary, looks like a fix) without doing the operational work (driving the next action, addressing the diagnosed cause).
+- **Weak execution:** treats viability as sufficient. He picks among viable paths by simplicity, fit, and convention — not by what is buildable.
 
-- The user moves fast during scouting and reversible probes, then slows down near commitment.
-- They will ask for broad orientation, but usually to support later narrowing rather than endless coverage.
-- Helpers can do real work, but framing, proof threshold, and final judgment stay centralized.
-- Experimentation is allowed more often than structural reinvention.
-- Abstraction is valuable when it makes operation easier. It is a liability when it hides intent or multiplies maintenance surfaces.
-- Roughness is useful during orientation and risky during delivery.
-- The user wants enough evidence to act, not exhaustive evidence for its own sake.
-- Simplicity matters, but not at the cost of leaving out facts needed for real execution.
+## Tensions and Tradeoffs
 
-## Boundary conditions
+- **Speed vs rigor:** he wants both, and resolves the tension by allocating speed to reconnaissance and rigor to commitment. Speed in the wrong phase reads as carelessness; rigor in the wrong phase reads as overhead.
+- **Comprehensive vs minimal:** he asks for "comprehensive summaries" and also strips complexity aggressively. The reconciliation is that comprehensiveness applies to *operationally relevant facts*, not to general coverage.
+- **Delegation vs control:** he delegates execution freely (scout, retrieve, draft) but never delegates the standard of proof, the framing, or the final synthesis.
+- **Abstraction vs reality-contact:** he uses structure as a control tool but distrusts abstraction that has drifted from the artifact. Structure is allowed; floating abstraction is not.
+- **Inherited vs self-authored convention:** he adopts standard engineering process easily (small diffs, MVP, verify-after) but rejects inherited architectural defaults (factories, configurability, defensive scaffolding) that have not earned their cost.
+- **Stated ideal vs real behavior:** he frames work as "decide and plan," but once a task is concrete he wants imperative execution and treats further planning as drag. The ideal is conditional, not universal.
+- **Vision authority vs collaborative shaping:** he retains directional authority and uses collaborators to clarify, not to co-author paradigm choices.
 
-- These patterns show up most clearly in technical, product, architecture, workflow, and implementation-facing work.
-- They also show up strongly in revision-heavy communication, where density and reader burden matter.
-- They get stronger in unfamiliar systems, where the user wants an inspection pass before action.
-- They relax for simple factual lookup, where a short direct answer is often enough.
-- They also relax in explicit brainstorming or rough exploration, where approximation is allowed.
-- This is not blanket minimalism. The user will take detailed output when the detail is justified.
-- It is also not blanket anti-convention. Standard loops, tests, small diffs, and repo conventions are welcome when they reduce ambiguity.
-- The evidence is thinner for long-running interpersonal dynamics than for direct work execution.
+## Boundary Conditions
 
-## Open questions
+- **Strongest patterns:** codebase exploration, architecture/config simplification, prompt and system-message design, non-technical UX evaluation, debugging with verification, lead qualification with explicit pain-point binding.
+- **Relaxes for:** simple factual questions, lookups, quick how-to queries. Short prompts, no scaffolding, no tightening loop.
+- **Mixed evidence:** how this logic transfers to purely interpersonal work, time-management overload, or long-running human handoffs. The dataset shows task-shaping more than emotional load management.
+- **Specific exception:** in philosophical, phenomenological, or speculative discussion, the artifact-anchoring and verification loops drop entirely. He tolerates ungrounded narrative there in a way he never tolerates in technical work.
+- **Strain mode:** under pressure he does not relax usefulness or verifiability — he relaxes generality, polish, and architectural ambition.
+- **Energy peak:** when a vague human problem becomes a working system. Lowest tolerance for friction: complexity that does not yet earn its cost.
 
-- How much formal testing does the user want in high-risk production work compared with lighter manual verification?
-- When does future flexibility justify keeping a more complex abstraction?
-- How much does this style change in teams where framing and authority are shared rather than centralized?
-- What kinds of creative or speculative work does the user value even when they do not cash out into immediate action?
-- How much of the simplification instinct comes from stable philosophy versus time pressure?
-- Where does their tolerance for "good enough" end when customer, business, or reliability risk rises?
+## Open Questions
 
-## Evidence fragments
+- How far this inspection-first logic extends into work without a clean artifact (organizational decisions, hiring, partnership choices).
+- Whether his rejection of "best practice by convention" survives in domains where conventions have safety or compliance weight he hasn't encountered yet.
+- Where his tolerance for ungrounded speculation in non-technical reflection actually ends, and whether that tolerance has cost.
+- How he handles genuine collaborative authorship — the dataset shows constrained delegation, not shared paradigm shaping, and it is unclear how he behaves when an equal partner pushes back on framing.
+- Whether the "treat it like a config" instinct has a failure mode at scale he has not yet hit.
+- How the verification standard adjusts when no test, log, or direct check is available.
+- Whether the mission-level interest in operationalizing knowledge will eventually conflict with the simplification instinct, since real operationalization tends to grow structure.
 
-### Inspection before action
+## Evidence Fragments
 
-- "Explore this codebase" by checking project type, structure, build, tests, linting, style, and existing rules.
-- Look at the actual component and schema before judging the pattern.
-- Inspect the current implementation before recommending a change.
+**Inspection precedes prescription**
+- "look at the existing component and schema, decide and plan whether the pattern is good for a non-technical user"
+- "explore the codebase: project type, structure, build system, testing setup, linting, style, existing rules"
 
-### Usability and operator fit
+**Consolidation toward config**
+- "seems overly complex — can it just be a hardcoded config file instead of a function store?"
+- "why does the factory need an if-tree if the types already say what should happen?"
 
-- Decide whether a page-building pattern works for a nontechnical person.
-- Judge the system by whether an editor, maintainer, or buyer can actually use it.
-- Lead research should include the firm's main pain point and how AI could help.
+**Audience binding**
+- "is this actually a good pattern for a nontechnical person to use?"
+- lead notes paired with "biggest pain point and how AI would help"
 
-### Complexity has to pay rent
+**Correction by concretization**
+- "don't guess," "do not guess," "read that," "just answer," "grounded in"
+- rewrites with named exclusions and explicit output shape rather than "try again"
 
-- A config setup "seems overly complex."
-- Could this just be a hardcoded config file?
-- Why keep separate files, factories, or redundant error handling if they do not improve control?
+**Sequence protection**
+- "first answer the first question, then move to the second"
+- "first outline the customer types, then go deeper"
 
-### Correction by tightening
+**Tightening as recovery**
+- "rewrite this so it makes more sense"
+- requests narrowed from "how do I use this tool?" to "what does this actually do, and what would I need instead?"
 
-- "Do not guess."
-- "Just answer."
-- Ground the response in the material that was provided.
-- Rewrite the job with stricter evidence, scope, output shape, and exclusions.
+**Verification non-optional**
+- repair loops requiring cause + smallest change + before/after check
+- rejection of fixes presented as "should work now" without diagnosis
 
-### Quality as operational clarity
-
-- Rewrite this so it "makes more sense."
-- A summary should include build, test, lint, and style facts, not just a vague overview.
-- Good work is clear enough to act on and complete enough to trust.
-
-### Repair loop
-
-- Identify the actual cause before fixing.
-- Make the smallest relevant change.
-- Verify against the original behavior.
-- If assumptions change, restate the observable conditions, gates, fallbacks, and intended state.
-
-### Automation candidate
-
-- Define the objective.
-- Gather the operating context.
-- Narrow against user, constraints, and success criteria.
-- Execute inside that narrowed frame.
-- Turn repeated judgment into configs, schemas, scripts, task records, or enrichment routines.
+**Reversible exploration markers**
+- "for now," "later," wrapper-around-existing-tool patterns used as probes rather than commitments
