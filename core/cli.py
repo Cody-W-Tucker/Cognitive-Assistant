@@ -3,15 +3,16 @@
 
 Subcommands:
   ingest-interview   Interactive human interview (existential-style profiles)
-  ingest-corpus      Normalize raw exports into ready/*.jsonl (operational)
+  ingest-corpus      Normalize intake exports into ready/*.jsonl (operational)
   ask-questions      Run RLM against questions.csv -> answers CSV
   build-prompts      2-call refinement -> human_profile.md + system_prompt.md
   build-skills       Generate skills/ from latest human_profile.md
   build-tool-specs   Generate tool_specs/ from latest system_prompt.md (gated)
+  update             Run build-prompts, build-skills, and build-tool-specs
   health-check       Validate prompts, paths, provider access, RLM availability
 
 Common flags:
-  --profile <name>   Required. One of the registered profiles.
+  --profile <name>   Required for most commands. Optional for 'update' (all profiles).
 """
 
 from __future__ import annotations
@@ -101,6 +102,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output directory for tool spec files",
     )
 
+    update_parser = subparsers.add_parser(
+        "update",
+        help="Chain build-prompts, build-skills, and build-tool-specs for one or all profiles.",
+    )
+    update_parser.add_argument(
+        "--skip-tool-specs",
+        action="store_true",
+        help="Skip tool-specs generation even if profile supports it.",
+    )
+
     subparsers.add_parser(
         "health-check",
         help="Validate prompts, paths, provider access, RLM availability.",
@@ -132,7 +143,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(name)
         return 0
 
-    config = _resolve_config(args)
+    # update command handles profile resolution internally (supports "all profiles" mode)
+    if args.command == "update":
+        config = None  # type: ignore[assignment]
+    else:
+        config = _resolve_config(args)
 
     if args.command == "ingest-interview":
         from core import ingest_interview
@@ -175,6 +190,61 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed_dir=args.seed_dir,
             output_dir=args.output_dir,
         )
+
+    if args.command == "update":
+        from core import prompt_creator, skills_creator, tool_specs_creator
+
+        def _update_single_profile(cfg: Config, skip_tool_specs: bool) -> int:
+            print(f"\n{'=' * 50}")
+            print(f"Updating profile: {cfg.profile.name}")
+            print(f"{'=' * 50}")
+
+            print("\n>>> Running build-prompts...")
+            exit_code = prompt_creator.run(cfg)
+            if exit_code != 0:
+                print(f"Error: build-prompts failed for profile '{cfg.profile.name}'")
+                return exit_code
+
+            print("\n>>> Running build-skills...")
+            exit_code = skills_creator.run(cfg, bio_path=None, output_dir=None)
+            if exit_code != 0:
+                print(f"Error: build-skills failed for profile '{cfg.profile.name}'")
+                return exit_code
+
+            if not skip_tool_specs and cfg.profile.has_tool_specs:
+                print("\n>>> Running build-tool-specs...")
+                exit_code = tool_specs_creator.run(
+                    cfg, bio_path=None, seed_dir=None, output_dir=None
+                )
+                if exit_code != 0:
+                    print(f"Error: build-tool-specs failed for profile '{cfg.profile.name}'")
+                    return exit_code
+            elif not skip_tool_specs:
+                print("\n>>> Skipping build-tool-specs (not enabled for this profile)")
+
+            return 0
+
+        if args.profile:
+            # Update single profile
+            cfg = Config.from_profile(args.profile)
+            exit_code = _update_single_profile(cfg, args.skip_tool_specs)
+            if exit_code != 0:
+                return exit_code
+        else:
+            # Update all profiles
+            profiles = list_profiles()
+            print(f"Updating all {len(profiles)} profiles: {', '.join(profiles)}")
+            for profile_name in profiles:
+                cfg = Config.from_profile(profile_name)
+                exit_code = _update_single_profile(cfg, args.skip_tool_specs)
+                if exit_code != 0:
+                    print(f"\nError: Update failed for profile '{profile_name}'")
+                    return exit_code
+
+        print(f"\n{'=' * 50}")
+        print("Update complete for all requested profiles")
+        print(f"{'=' * 50}")
+        return 0
 
     if args.command == "health-check":
         from core import health_check
