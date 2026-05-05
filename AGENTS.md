@@ -9,6 +9,7 @@ core/                 unified pipeline (one set of scripts)
 profiles/<name>/      profile-specific inputs (questions.csv, prompts/runtime/)
 workspaces/<name>/    runtime data (data/, artifacts/) per profile
 lib/                  shared infrastructure (config, llm, prompts, health)
+alignment/            artifact verification (sits above profiles, reads from both)
 tests/                profile-aware health tests
 ```
 
@@ -35,10 +36,18 @@ python -m core --profile operational ask-questions
 python -m core --profile operational build-prompts
 python -m core --profile operational build-skills
 python -m core --profile operational build-tool-specs
+
+# Alignment (cross-profile, no --profile flag)
+python -m core build-alignment-spec
+alignment/verify_alignment.sh --file path/to/artifact.md
 ```
 
 Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)
 fail with a clear error rather than silently no-op.
+
+`build-alignment-spec` reads from both profiles and writes
+`alignment/artifacts/alignment_spec.md`. Regenerate it after `build-skills`
+runs for either profile. See `alignment/README.md` for details.
 
 ## Tests
 

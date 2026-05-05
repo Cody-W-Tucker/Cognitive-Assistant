@@ -17,13 +17,16 @@ Each profile exposes the generated system prompt, the list of skills currently
 in the workspace, and a helper to read a specific skill file. The operational
 profile additionally exports per-tool specs.
 
-| Output | Existential | Operational |
-|---|---|---|
-| `lib.<profile>.systemPromptFile` | yes | yes |
-| `lib.<profile>.skillsDir` | yes | yes |
-| `lib.<profile>.skillNames` | yes | yes |
-| `lib.<profile>.skillFile <name>` | yes | yes |
-| `lib.<profile>.toolSpecs.{memory,tasks}` | — | yes |
+| Output | Existential | Operational | Alignment |
+|---|---|---|---|
+| `lib.<profile>.systemPromptFile` | yes | yes | — |
+| `lib.<profile>.skillsDir` | yes | yes | — |
+| `lib.<profile>.skillNames` | yes | yes | — |
+| `lib.<profile>.skillFile <name>` | yes | yes | — |
+| `lib.<profile>.toolSpecs.{memory,tasks}` | — | yes | — |
+| `packages.verify-alignment` | — | — | yes |
+| `lib.alignment.spec` | — | — | yes |
+| `lib.alignment.seed` | — | — | yes |
 
 Skill names are dynamic — read them from `skillNames` rather than hardcoding.
 
@@ -76,6 +79,24 @@ in
 }
 ```
 
+Install the `verify-alignment` package for artifact verification:
+
+```nix
+{ pkgs, inputs, ... }:
+{
+  environment.systemPackages = [
+    inputs.cognitive-assistant.packages.${pkgs.stdenv.hostPlatform.system}.verify-alignment
+  ];
+}
+```
+
+Then use it to verify any artifact against the alignment spec:
+
+```bash
+verify-alignment --file draft.md
+verify-alignment --stdin < output.md
+```
+
 ## Regeneration Workflow
 
 The repo runs as one unified pipeline parameterized by a layer profile
@@ -104,3 +125,23 @@ workspaces/<profile>/artifacts/system_prompt.md
 workspaces/<profile>/artifacts/skills/<name>/SKILL.md
 workspaces/operational/artifacts/tool_specs/<name>.md
 ```
+
+## Alignment Verification
+
+The `alignment/` module sits above both profiles. It reads skills from both
+layers and produces an artifact verification spec — a personalized
+production-readiness checklist that a downstream verifier (`rlm`) uses to
+score AI-generated artifacts.
+
+```bash
+# Build the spec (requires build-skills to have been run for at least one profile)
+python -m core build-alignment-spec
+
+# Verify an artifact against the spec
+alignment/verify_alignment.sh --file path/to/artifact.md
+alignment/verify_alignment.sh --stdin < artifact.md
+```
+
+The verifier returns `VERDICT: SHIP | TIGHTEN | REWORK` with per-item scores
+and corrections. Regenerate the spec whenever skills change. See
+[`alignment/README.md`](alignment/README.md) for architecture and details.

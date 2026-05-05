@@ -122,6 +122,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print the registered profile names.",
     )
 
+    alignment_parser = subparsers.add_parser(
+        "build-alignment-spec",
+        help="Generate alignment verification spec from both profile layers.",
+    )
+    alignment_parser.add_argument(
+        "--output",
+        type=Path,
+        dest="output_path",
+        help="Output path for the alignment spec (default: alignment/artifacts/alignment_spec.md)",
+    )
+
     return parser
 
 
@@ -142,6 +153,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         for name in list_profiles():
             print(name)
         return 0
+
+    if args.command == "build-alignment-spec":
+        from alignment import build_spec
+
+        return build_spec.run(output_path=args.output_path)
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":

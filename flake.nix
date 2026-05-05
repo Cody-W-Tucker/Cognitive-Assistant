@@ -55,7 +55,26 @@
         layers = {
           inherit existential operational;
         };
+        alignment = {
+          spec = ./alignment/artifacts/alignment_spec.md;
+          seed = ./alignment/seed.md;
+        };
       };
+
+      packages = forEachSupportedSystem (
+        { pkgs }:
+        {
+          verify-alignment = pkgs.writeShellApplication {
+            name = "verify-alignment";
+            runtimeInputs = [ rlm.packages.${pkgs.system}.default ];
+            text = ''
+              ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./alignment/artifacts/alignment_spec.md}}"
+              export ALIGNMENT_SPEC
+              exec ${./alignment/verify_alignment.sh} "$@"
+            '';
+          };
+        }
+      );
 
       devShells = forEachSupportedSystem (
         { pkgs }:
