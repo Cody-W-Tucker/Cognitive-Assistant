@@ -41,12 +41,16 @@ def generate_text(
         raise ValueError("Synchronous generation requires async_mode=False")
 
     if handle.provider == "anthropic":
+        kwargs: dict[str, Any] = {
+            "model": handle.model,
+            "max_tokens": max_output_tokens,
+            "temperature": temperature,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
         response = handle.client.messages.create(
-            model=handle.model,
-            max_tokens=max_output_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            **kwargs,
         )
         return _extract_anthropic_text(response)
 
@@ -72,13 +76,15 @@ async def generate_text_async(
         raise ValueError("Asynchronous generation requires async_mode=True")
 
     if handle.provider == "anthropic":
-        response = await handle.client.messages.create(
-            model=handle.model,
-            max_tokens=max_output_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+        kwargs: dict[str, Any] = {
+            "model": handle.model,
+            "max_tokens": max_output_tokens,
+            "temperature": temperature,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        if system_prompt:
+            kwargs["system"] = system_prompt
+        response = await handle.client.messages.create(**kwargs)
         return _extract_anthropic_text(response)
 
     response = await handle.client.chat.completions.create(
