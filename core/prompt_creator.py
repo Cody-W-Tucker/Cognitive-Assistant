@@ -18,7 +18,7 @@ import sys
 from typing import List
 
 from core.config import Config
-from lib.llm import LLMHandle, create_client, generate_text_async
+from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
 def load_dataset_context(config: Config) -> str:
@@ -169,35 +169,39 @@ async def _process_dataset(config: Config) -> int:
         config.api, model=config.api.get_model("refine"), async_mode=True
     )
 
-    initial_summary = await _call_llm(
-        config,
-        initial_client,
-        config.prompts.initial_template.format(context=context),
-    )
-    if not initial_summary:
-        print("Error: Failed to generate initial summary")
-        return 1
+    try:
+        initial_summary = await _call_llm(
+            config,
+            initial_client,
+            config.prompts.initial_template.format(context=context),
+        )
+        if not initial_summary:
+            print("Error: Failed to generate initial summary")
+            return 1
 
-    profile_path = config.paths.ARTIFACTS_DIR / "human_profile.md"
-    print(f"Info: Saving initial summary to {profile_path}")
-    profile_path.write_text(initial_summary.strip() + "\n", encoding="utf-8")
+        profile_path = config.paths.ARTIFACTS_DIR / "human_profile.md"
+        print(f"Info: Saving initial summary to {profile_path}")
+        profile_path.write_text(initial_summary.strip() + "\n", encoding="utf-8")
 
-    refine_prompt = config.prompts.refine_template.format(
-        existing_answer=initial_summary, context=""
-    )
-    final_summary = await _call_llm(config, refine_client, refine_prompt)
-    if not final_summary:
-        print("Error: Failed to generate final refined summary")
-        return 1
+        refine_prompt = config.prompts.refine_template.format(
+            existing_answer=initial_summary, context=""
+        )
+        final_summary = await _call_llm(config, refine_client, refine_prompt)
+        if not final_summary:
+            print("Error: Failed to generate final refined summary")
+            return 1
 
-    system_prompt_path = config.paths.ARTIFACTS_DIR / "system_prompt.md"
-    print(f"Info: Saving refined summary to {system_prompt_path}")
-    system_prompt_path.write_text(final_summary.strip() + "\n", encoding="utf-8")
+        system_prompt_path = config.paths.ARTIFACTS_DIR / "system_prompt.md"
+        print(f"Info: Saving refined summary to {system_prompt_path}")
+        system_prompt_path.write_text(final_summary.strip() + "\n", encoding="utf-8")
 
-    print("Info: Artifacts created")
-    print(f"- Initial summary: {profile_path}")
-    print(f"- Refined summary: {system_prompt_path}")
-    return 0
+        print("Info: Artifacts created")
+        print(f"- Initial summary: {profile_path}")
+        print(f"- Refined summary: {system_prompt_path}")
+        return 0
+    finally:
+        await close_client_async(initial_client)
+        await close_client_async(refine_client)
 
 
 def run(config: Config) -> int:

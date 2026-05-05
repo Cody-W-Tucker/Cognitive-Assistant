@@ -7,7 +7,7 @@ import unittest
 from types import SimpleNamespace
 from typing import Any
 
-from lib.llm import LLMHandle, generate_text
+from lib.llm import LLMHandle, close_client_async, generate_text
 
 
 class FakeMessages:
@@ -17,6 +17,14 @@ class FakeMessages:
     def create(self, **kwargs: Any) -> SimpleNamespace:
         self.kwargs = kwargs
         return SimpleNamespace(content=[SimpleNamespace(text="ok")])
+
+
+class FakeAsyncClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 class LLMHelperTests(unittest.TestCase):
@@ -59,6 +67,21 @@ class LLMHelperTests(unittest.TestCase):
         )
 
         self.assertEqual(messages.kwargs["system"], "system instructions")
+
+    def test_close_client_async_closes_async_client(self) -> None:
+        client = FakeAsyncClient()
+        handle = LLMHandle(
+            client=client,
+            model="claude-test",
+            provider="anthropic",
+            async_mode=True,
+        )
+
+        import asyncio
+
+        asyncio.run(close_client_async(handle))
+
+        self.assertTrue(client.closed)
 
 
 if __name__ == "__main__":

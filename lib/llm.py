@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared LLM client creation and text generation helpers."""
 
+import inspect
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -26,6 +27,20 @@ def create_client(
         provider=api_config.LLM_PROVIDER,
         async_mode=async_mode,
     )
+
+
+async def close_client_async(handle: LLMHandle) -> None:
+    """Close an async LLM client if the provider exposes a close method."""
+    if not handle.async_mode:
+        return
+
+    close = getattr(handle.client, "aclose", None) or getattr(handle.client, "close", None)
+    if close is None:
+        return
+
+    result = close()
+    if inspect.isawaitable(result):
+        await result
 
 
 def generate_text(

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from core.config import Config
-from lib.llm import LLMHandle, create_client, generate_text_async
+from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
 class SkillsCreator:
@@ -139,11 +139,14 @@ async def _async_run(
     output_dir: Optional[Path],
 ) -> int:
     creator = SkillsCreator(config)
-    result_dir = await creator.generate_skills(
-        bio_path=bio_path, output_dir=output_dir
-    )
-    print(f"Info: Skills generated in {result_dir}")
-    return 0
+    try:
+        result_dir = await creator.generate_skills(
+            bio_path=bio_path, output_dir=output_dir
+        )
+        print(f"Info: Skills generated in {result_dir}")
+        return 0
+    finally:
+        await close_client_async(creator.handle)
 
 
 def run(
