@@ -24,47 +24,67 @@ class APIConfig:
     PROVIDERS = {
         "openai": {
             "api_key": os.getenv("OPENAI_API_KEY", ""),
-            "initial_model": os.getenv("OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")),
-            "refine_model": os.getenv("OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")),
+            "initial_model": os.getenv(
+                "OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")
+            ),
+            "refine_model": os.getenv(
+                "OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")
+            ),
             "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
-            "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "400000")),
-            "MAX_COMPLETION_TOKENS": int(os.getenv("OPENAI_MAX_OUTPUT", "128000")),
+            "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "1_050_000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("OPENAI_MAX_OUTPUT", "128_000")),
         },
         "xai": {
             "api_key": os.getenv("XAI_API_KEY", ""),
-            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4-fast"),
-            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4"),
-            "model": os.getenv("XAI_MODEL", "grok-4"),
-            "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2000000")),
-            "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "30000")),
+            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4.3"),
+            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4.3"),
+            "model": os.getenv("XAI_MODEL", "grok-4.3"),
+            "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2_000_000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "128_000")),
             "base_url": "https://api.x.ai/v1",
         },
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
-            "initial_model": os.getenv("ANTHROPIC_INITIAL_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")),
-            "refine_model": os.getenv("ANTHROPIC_REFINE_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5")),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-5"),
-            "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "200000")),
-            "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "64000")),
+            "initial_model": os.getenv(
+                "ANTHROPIC_INITIAL_MODEL",
+                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+            ),
+            "refine_model": os.getenv(
+                "ANTHROPIC_REFINE_MODEL",
+                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+            ),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+            "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "1_000_000")),
+            "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "128_000")),
         },
     }
 
-    def get_model(self, purpose: str = "default", provider: Optional[str] = None) -> str:
+    def get_model(
+        self, purpose: str = "default", provider: Optional[str] = None
+    ) -> str:
         """Return the configured model for the given provider and purpose."""
         provider = provider or self.LLM_PROVIDER
         provider_config = self.PROVIDERS.get(provider, {})
 
         if purpose == "initial":
-            return str(provider_config.get("initial_model") or provider_config.get("model", "unknown"))
+            return str(
+                provider_config.get("initial_model")
+                or provider_config.get("model", "unknown")
+            )
         if purpose == "refine":
-            return str(provider_config.get("refine_model") or provider_config.get("model", "unknown"))
+            return str(
+                provider_config.get("refine_model")
+                or provider_config.get("model", "unknown")
+            )
 
         return str(provider_config.get("model", "unknown"))
 
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
         """Get max output tokens for the current LLM provider."""
-        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_COMPLETION_TOKENS", 3000)
+        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get(
+            "MAX_COMPLETION_TOKENS", 3000
+        )
 
     @property
     def MAX_TOKENS(self) -> int:
