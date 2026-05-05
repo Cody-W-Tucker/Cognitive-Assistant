@@ -66,7 +66,7 @@
         {
           verify-alignment = pkgs.writeShellApplication {
             name = "verify-alignment";
-            runtimeInputs = [ rlm.packages.${pkgs.system}.default ];
+            runtimeInputs = [ rlm.packages.${pkgs.stdenv.hostPlatform.system}.default ];
             text = ''
               ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./alignment/artifacts/alignment_spec.md}}"
               export ALIGNMENT_SPEC
@@ -89,8 +89,8 @@
                   openai
                 ]
               ))
-              rlm.packages.${pkgs.system}.default
-              ai-data-extractor.packages.${pkgs.system}.default
+              rlm.packages.${pkgs.stdenv.hostPlatform.system}.default
+              ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
             ];
           };
         }
