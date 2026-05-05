@@ -40,7 +40,7 @@ if ! command -v rlm &>/dev/null; then
 fi
 
 # Parse arguments
-FILE_ARGS=()
+INPUT_FILE=""
 USE_STDIN=false
 VERBOSE=false
 
@@ -51,10 +51,18 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --file requires a path argument" >&2
                 exit 1
             fi
-            FILE_ARGS+=("--file" "$2")
+            if [[ -n "$INPUT_FILE" ]]; then
+                echo "Error: verify-alignment accepts only one --file input" >&2
+                exit 1
+            fi
+            INPUT_FILE="$2"
             shift 2
             ;;
         --stdin)
+            if [[ -n "$INPUT_FILE" ]]; then
+                echo "Error: Use either --file or --stdin, not both" >&2
+                exit 1
+            fi
             USE_STDIN=true
             shift
             ;;
@@ -69,10 +77,9 @@ verify-alignment — Check output alignment against user values and process stan
 Usage:
   verify-alignment --file output.md
   verify-alignment --stdin < output.md
-  verify-alignment --file draft.md --file context.md
 
 Options:
-  --file PATH    File(s) to evaluate
+  --file PATH    File to evaluate
   --stdin        Read output to evaluate from stdin
   --verbose      Print progress to stderr
   --help         Show this help
@@ -95,20 +102,22 @@ EOF
 done
 
 # Validate we have something to evaluate
-if [[ ${#FILE_ARGS[@]} -eq 0 ]] && [[ "$USE_STDIN" == "false" ]]; then
+if [[ -z "$INPUT_FILE" ]] && [[ "$USE_STDIN" == "false" ]]; then
     echo "Error: Provide --file or --stdin to specify what to evaluate" >&2
+    exit 1
+fi
+
+if [[ -n "$INPUT_FILE" ]] && [[ "$USE_STDIN" == "true" ]]; then
+    echo "Error: Use either --file or --stdin, not both" >&2
     exit 1
 fi
 
 # Build the RLM command
 RLM_CMD=(rlm)
 
-# Add the alignment spec as context
-RLM_CMD+=("--file" "$SPEC_PATH")
-
-# Add user-provided files
-if [[ ${#FILE_ARGS[@]} -gt 0 ]]; then
-    RLM_CMD+=("${FILE_ARGS[@]}")
+# Add the user-provided file as the evaluation target context
+if [[ -n "$INPUT_FILE" ]]; then
+    RLM_CMD+=("--file" "$INPUT_FILE")
 fi
 
 # Add stdin flag if needed
@@ -121,8 +130,16 @@ if [[ "$VERBOSE" == "true" ]]; then
     RLM_CMD+=("--verbose")
 fi
 
-# The evaluation query
-QUERY="Evaluate the provided output against the alignment verification spec. Follow the evaluation procedure exactly: decompose into decisions, check each against value alignment and process alignment criteria, then produce the structured output with VERDICT, DECISION MAP, TIGHTEN INSTRUCTIONS or REWORK REASON, and CONFIDENCE."
+# The evaluation query: pass the rubric as prompt text, not as a second file-backed source.
+SPEC_TEXT="$(<"$SPEC_PATH")"
+QUERY=$(cat <<EOF
+Use the following alignment verification spec as the rubric for this evaluation:
+
+$SPEC_TEXT
+
+Evaluate the provided output against that spec. Follow the evaluation procedure exactly and return the required structured result.
+EOF
+)
 
 RLM_CMD+=("$QUERY")
 
