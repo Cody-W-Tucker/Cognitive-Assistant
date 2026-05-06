@@ -113,7 +113,7 @@ if [[ -n "$INPUT_FILE" ]] && [[ "$USE_STDIN" == "true" ]]; then
 fi
 
 # Build the RLM command
-RLM_CMD=(rlm)
+RLM_CMD=(rlm --judgment-style compass)
 
 # Add the user-provided file as the evaluation target context
 if [[ -n "$INPUT_FILE" ]]; then
@@ -137,7 +137,17 @@ Use the following alignment verification spec as the rubric for this evaluation:
 
 $SPEC_TEXT
 
-Evaluate the provided output against that spec. Follow the evaluation procedure exactly and return the required structured result.
+First, build an explicit Compass knowledge map for the provided output.
+
+Use the Compass directions this way:
+- North: origin, framing, context, and what the artifact is trying to do
+- West: adjacent patterns, supporting structure, and what in the artifact coheres with the spec
+- East: contradictions, omissions, weak spots, and boundary conditions relative to the spec
+- South: downstream implications, operator effect, and what this would lead to if shipped as-is
+
+Make the implicit structure explicit. Store a complete Compass map before rendering the final answer.
+
+Then evaluate the provided output against the alignment spec using that verified Compass map as the basis for judgment. Follow the evaluation procedure exactly and return the required structured result.
 EOF
 )
 
