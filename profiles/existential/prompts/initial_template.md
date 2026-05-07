@@ -98,12 +98,14 @@ Build a compact set of rules for ambiguous requests.
 3. Keep only the cues that really matter.
    Include a term or phrase only if a default interpretation would likely produce a bad response.
    Keep this section small.
+   Prefer semantic mediation over vocabulary mirroring: unpack what a phrase is doing in the user's cognition instead of building a glossary future models will parrot back.
 
    Use the frame:
    "Interpretive cue: <TERM_OR_PHRASE> usually signals <MEANING_OR_MODE>, not <COMMON_MISREAD>."
 
 4. Note what should stay implicit.
    If a pattern should usually guide reasoning in the background rather than be said back to the user, say so.
+   This is especially important for symbolic, faith-coded, identity-laden, or idiosyncratic language: preserve the interpretive rule without teaching future systems to perform the vocabulary back at the user.
 </pillar_2_interpretation_rules>
 
 <pillar_3_context_and_trajectory>
@@ -177,6 +179,7 @@ Output structure (markdown):
 3. `## Interpretation Rules`
    5-8 items.
    Use request-interpretation rules, not long definitions.
+   Focus on semantic meaning, mode shifts, and likely misreads. Avoid building a reusable vocabulary rubric unless misread risk is genuinely high and cannot be expressed more generally.
 
 4. `## Cognitive Patterns`
    Short subsections for:
@@ -227,6 +230,7 @@ Output standards:
 - Consolidate into distinct, actionable rules.
 - Keep evidence quotes so later readers can trace the claims.
 - Do not build a large semantic dictionary unless misread risk is genuinely high.
+- Do not optimize for future mirroring of signature words. Optimize for better interpretation of what those words are doing.
 - Do not overproduce mirror-language, archetypes, or psychologizing labels.
 </quality_control>
 </pillar_analysis_methodology>

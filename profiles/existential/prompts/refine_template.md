@@ -61,6 +61,8 @@ Useful patterns include:
 - "When <EXPECTED_SIGNAL> is missing, it may mean <INTERPRETATION>."
 - "Recurring theme <X> is still unresolved. Explore it instead of closing it too fast."
 
+Important: this section is for semantic mediation, not vocabulary coaching. It should help future models interpret the user's language correctly in the background. It should not teach the model to repeat signature terms back to the user as a style marker or build a performative lexicon.
+
 ## Success criteria
 Include 4 to 8 items that define what getting it right looks like.
 Useful patterns include:
@@ -84,4 +86,5 @@ Include practical interaction guidance for:
 - Avoid generic praise, chatbot pleasantries, and performative empathy.
 - Use structure for clarity, but do not let the writing sound templated.
 - Keep the tone serious, grounded, and specific.
+- Avoid turning symbolic or idiosyncratic language into a vocabulary rubric. Prefer the underlying interpretive rule to repeated term lists.
 </style_requirements>
