@@ -99,8 +99,16 @@ async def generate_text_async(
         }
         if system_prompt:
             kwargs["system"] = system_prompt
-        response = await handle.client.messages.create(**kwargs)
-        return _extract_anthropic_text(response)
+        async with handle.client.messages.stream(**kwargs) as stream:
+            parts: list[str] = []
+            async for text in stream.text_stream:
+                if text:
+                    parts.append(text)
+
+        content = "".join(parts).strip()
+        if content:
+            return content
+        raise ValueError("Empty response from LLM")
 
     response = await handle.client.chat.completions.create(
         model=handle.model,

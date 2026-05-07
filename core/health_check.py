@@ -23,6 +23,7 @@ SCRIPT_MODULES = [
     "core.skills_creator",
     "core.question_asker",
     "core.health_check",
+    "core.soul_creator",
 ]
 
 

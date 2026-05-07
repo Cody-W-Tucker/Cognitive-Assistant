@@ -27,6 +27,7 @@ SCRIPT_MODULES = [
     "core.question_asker",
     "core.health_check",
     "core.cli",
+    "core.soul_creator",
 ]
 
 

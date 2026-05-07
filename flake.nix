@@ -58,6 +58,7 @@
         };
         alignment = {
           spec = ./workspaces/alignment/artifacts/alignment_spec.md;
+          soulFile = ./workspaces/alignment/artifacts/SOUL.md;
           toolSpecs = {
             verifyAlignment = ./workspaces/alignment/artifacts/tool_specs/verify_alignment.md;
           };

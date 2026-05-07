@@ -2,7 +2,7 @@
 
 Artifact verification — checks whether an AI-generated artifact (spec, plan, document, code change, copy, summary) is production-ready against this user's personalized standards.
 
-Alignment sits **above** the layer profile system. The builder lives in `core`, reads skills from both the existential and operational profiles, and produces a single artifact verification spec. It is invoked without `--profile`.
+Alignment sits **above** the layer profile system. The builders live in `core`, read artifacts from both the existential and operational profiles, and produce cross-profile outputs. They are invoked without `--profile`.
 
 ## Architecture
 
@@ -11,16 +11,25 @@ The verification spec has two layers:
 1. **Generic artifact-readiness checklist** (universal SOP) — 10 fixed items that apply to any artifact: purpose stated, scope bounded, claims grounded, gaps surfaced, acceptance defined, structure earns its keep, internally consistent, form matches request, language precise, self-contained.
 2. **Personalization** — skills from both profiles overlay onto each checklist item as user-specific cues for what "satisfied" and "failed" look like in practice.
 
-The checklist skeleton lives in `profiles/alignment/runtime/seed.md`. The verifier role and response format live in `core/alignment_spec.py` (preamble + postamble). The LLM only generates the personalized middle.
+The checklist skeleton lives in `profiles/alignment/prompts/seed.md`. The verifier role and response format live in `core/alignment_spec.py` (preamble + postamble). The LLM only generates the personalized middle.
+
+The SOUL artifact works differently:
+
+1. The existential and operational `system_prompt.md` files act as source material.
+2. `profiles/alignment/prompts/soul_seed.md` defines the SOUL.md target shape and compression rules.
+3. `core/soul_creator.py` asks the LLM to merge both prompts into one durable identity document for Hermes/OpenClaw-style agents.
 
 ## Files
 
 | File                                               | Purpose                                                                                                                                         |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles/alignment/runtime/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
+| `profiles/alignment/prompts/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
+| `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating a durable SOUL.md from both profile system prompts.                                                        |
 | `core/alignment_spec.py`                           | Loads skills from both profiles, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
+| `core/soul_creator.py`                             | Loads both profile system prompts, calls the LLM with the soul seed, writes the final SOUL.md artifact.                                        |
 | `scripts/verify_alignment.sh`                      | Runtime tool. Passes the spec + an artifact to `rlm` for evaluation.                                                                            |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
+| `workspaces/alignment/artifacts/SOUL.md`           | The generated, committed durable identity document for Hermes/OpenClaw-style agents.                                                            |
 
 ## Build the spec
 
@@ -32,6 +41,18 @@ python -m core build-alignment-spec --output /path/to/alt-spec.md
 ```
 
 The default output path is `workspaces/alignment/artifacts/alignment_spec.md`.
+
+## Build the soul
+
+Requires `build-prompts` to have been run for both profiles so the source
+`system_prompt.md` files exist.
+
+```bash
+python -m core build-soul
+python -m core build-soul --output /path/to/SOUL.md
+```
+
+The default output path is `workspaces/alignment/artifacts/SOUL.md`.
 
 ## Verify an artifact
 

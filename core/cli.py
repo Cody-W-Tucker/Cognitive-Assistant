@@ -8,6 +8,7 @@ Subcommands:
   build-prompts      2-call refinement -> human_profile.md + system_prompt.md
   build-skills       Generate skills/ from latest human_profile.md
   build-tool-specs   Generate tool_specs/ from latest system_prompt.md (gated)
+  build-soul         Generate SOUL.md from both profile system prompts
   update             Run build-prompts, build-skills, and build-tool-specs
   health-check       Validate prompts, paths, provider access, RLM availability
 
@@ -133,6 +134,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output path for the alignment spec (default: workspaces/alignment/artifacts/alignment_spec.md)",
     )
 
+    soul_parser = subparsers.add_parser(
+        "build-soul",
+        help="Generate SOUL.md from both profile system prompts.",
+    )
+    soul_parser.add_argument(
+        "--output",
+        type=Path,
+        dest="output_path",
+        help="Output path for SOUL.md (default: workspaces/alignment/artifacts/SOUL.md)",
+    )
+
     return parser
 
 
@@ -158,6 +170,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from core import alignment_spec
 
         return alignment_spec.run(output_path=args.output_path)
+
+    if args.command == "build-soul":
+        from core import soul_creator
+
+        return soul_creator.run(output_path=args.output_path)
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":
