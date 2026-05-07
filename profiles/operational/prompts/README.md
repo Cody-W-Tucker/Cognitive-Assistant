@@ -1,6 +1,6 @@
 # Prompts
 
-Runtime prompt templates for the Operational Layer pipeline live in `prompts/runtime/`.
+Runtime prompt templates for the Operational Layer pipeline live in `prompts/`.
 
 - `rlm_query_template.md`: asks RLM to evaluate artifact corpora against the operational taxonomy
 - `initial_template.md`: synthesizes the evaluated dataset into `artifacts/human_profile.md`

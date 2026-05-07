@@ -29,7 +29,8 @@
             pkgs = import nixpkgs { inherit system; };
           }
         );
-      mkLayerExports = workspaceDir:
+      mkLayerExports =
+        workspaceDir:
         let
           skillsDir = workspaceDir + "/artifacts/skills";
           systemPromptFile = workspaceDir + "/artifacts/system_prompt.md";
@@ -56,8 +57,7 @@
           inherit existential operational;
         };
         alignment = {
-          spec = ./alignment/artifacts/alignment_spec.md;
-          seed = ./alignment/seed.md;
+          spec = ./workspaces/alignment/artifacts/alignment_spec.md;
         };
       };
 
@@ -68,9 +68,9 @@
             name = "verify-alignment";
             runtimeInputs = [ rlm.packages.${pkgs.stdenv.hostPlatform.system}.default ];
             text = ''
-              ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./alignment/artifacts/alignment_spec.md}}"
+              ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./workspaces/alignment/artifacts/alignment_spec.md}}"
               export ALIGNMENT_SPEC
-              exec ${./alignment/verify_alignment.sh} "$@"
+              exec ${./scripts/verify_alignment.sh} "$@"
             '';
           };
         }

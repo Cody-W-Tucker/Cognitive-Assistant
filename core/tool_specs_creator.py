@@ -3,7 +3,7 @@
 
 Gated on `profile.has_tool_specs`. Reads the latest `system_prompt*.md` from the
 profile's artifacts directory, combines it with the profile's seed exemplar
-documents (e.g. memory.md, tasks.md from prompts/runtime), and asks the LLM to
+documents (e.g. memory.md, tasks.md from prompts/), and asks the LLM to
 produce a JSON map of {filename: SKILL.md content}, one entry per supported tool.
 """
 
@@ -58,9 +58,7 @@ class ToolSpecsCreator:
                 raise FileNotFoundError(f"Bio file not found: {resolved_path}")
             return resolved_path
 
-        bio_files = sorted(
-            self.config.paths.ARTIFACTS_DIR.glob("system_prompt*.md")
-        )
+        bio_files = sorted(self.config.paths.ARTIFACTS_DIR.glob("system_prompt*.md"))
         if not bio_files:
             raise FileNotFoundError(
                 f"No system_prompt*.md files found in {self.config.paths.ARTIFACTS_DIR}. "
@@ -70,7 +68,9 @@ class ToolSpecsCreator:
 
     def _load_seed_documents(self, seed_dir: Optional[Path]) -> Dict[str, str]:
         resolved_seed_dir = (
-            Path(seed_dir) if seed_dir is not None else self.config.paths.PROMPT_RUNTIME_DIR
+            Path(seed_dir)
+            if seed_dir is not None
+            else self.config.paths.PROMPT_RUNTIME_DIR
         )
         if not resolved_seed_dir.exists():
             raise FileNotFoundError(f"Seed directory not found: {resolved_seed_dir}")
@@ -212,9 +212,7 @@ def run(
 ) -> int:
     """Synchronous entry point for CLI use."""
     if not config.profile.has_tool_specs:
-        print(
-            f"Error: profile '{config.profile.name}' does not enable tool specs"
-        )
+        print(f"Error: profile '{config.profile.name}' does not enable tool specs")
         return 1
 
     issues = config.validate_llm_access()

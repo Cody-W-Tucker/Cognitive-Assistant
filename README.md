@@ -124,12 +124,13 @@ flake outputs, the committed paths are:
 workspaces/<profile>/artifacts/system_prompt.md
 workspaces/<profile>/artifacts/skills/<name>/SKILL.md
 workspaces/operational/artifacts/tool_specs/<name>.md
+workspaces/alignment/artifacts/alignment_spec.md
 ```
 
 ## Alignment Verification
 
-The `alignment/` module sits above both profiles. It reads skills from both
-layers and produces an artifact verification spec — a personalized
+The alignment command sits above both profiles. It reads skills from both
+layers and writes a workspace artifact verification spec — a personalized
 production-readiness checklist that a downstream verifier (`rlm`) uses to
 score AI-generated artifacts.
 
@@ -138,10 +139,11 @@ score AI-generated artifacts.
 python -m core build-alignment-spec
 
 # Verify an artifact against the spec
-alignment/verify_alignment.sh --file path/to/artifact.md
-alignment/verify_alignment.sh --stdin < artifact.md
+scripts/verify_alignment.sh --file path/to/artifact.md
+scripts/verify_alignment.sh --stdin < artifact.md
 ```
 
 The verifier returns `VERDICT: SHIP | TIGHTEN | REWORK` with per-item scores
 and corrections. Regenerate the spec whenever skills change. See
-[`alignment/README.md`](alignment/README.md) for architecture and details.
+[`profiles/alignment/README.md`](profiles/alignment/README.md) for architecture
+and details.

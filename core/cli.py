@@ -130,7 +130,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         dest="output_path",
-        help="Output path for the alignment spec (default: alignment/artifacts/alignment_spec.md)",
+        help="Output path for the alignment spec (default: workspaces/alignment/artifacts/alignment_spec.md)",
     )
 
     return parser
@@ -155,9 +155,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "build-alignment-spec":
-        from alignment import build_spec
+        from core import alignment_spec
 
-        return build_spec.run(output_path=args.output_path)
+        return alignment_spec.run(output_path=args.output_path)
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":

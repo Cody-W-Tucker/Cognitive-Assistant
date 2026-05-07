@@ -5,8 +5,8 @@ Reads skills from both existential and operational workspaces, combines them wit
 the alignment seed template, and produces a single alignment spec that downstream
 tools (verify-alignment) can use to evaluate any output.
 
-This module sits above the profile system — it reads from both profiles but does
-not belong to either. It is invoked without --profile.
+This command sits above the profile system: it reads from both registered
+profiles but does not belong to either. It is invoked without --profile.
 
 Usage:
     python -m core build-alignment-spec
@@ -26,8 +26,8 @@ from lib.llm import LLMHandle, close_client_async, create_client, generate_text_
 
 
 # Paths relative to repo root
-SEED_PATH = ROOT_DIR / "alignment" / "seed.md"
-OUTPUT_DIR = ROOT_DIR / "alignment" / "artifacts"
+SEED_PATH = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
+OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
 OUTPUT_FILE = OUTPUT_DIR / "alignment_spec.md"
 
 EXISTENTIAL_SKILLS_DIR = EXISTENTIAL_PROFILE.workspace_dir / "artifacts" / "skills"
@@ -37,11 +37,7 @@ OPERATIONAL_SKILLS_DIR = OPERATIONAL_PROFILE.workspace_dir / "artifacts" / "skil
 SPEC_PREAMBLE = """\
 # Personalized Artifact Verification Spec
 
-You are an artifact verifier. You receive an AI-generated artifact (a spec, plan,
-document, code change, copy, summary, or other deliverable) and assess whether
-it is production-ready against the personalized checklist below. Run the
-artifact through each checklist item, score each item, and return a structured
-verdict.
+You are an artifact verifier. You receive an AI-generated artifact (a spec, plan, document, code change, copy, summary, or other deliverable) and assess whether it is production-ready against the personalized checklist below. Run the artifact through each checklist item, score each item, and return a structured verdict.
 
 """
 
@@ -49,8 +45,7 @@ SPEC_POSTAMBLE = """\
 
 ## Instructions
 
-1. Read the artifact in full before scoring. Note its stated purpose, consumer,
-   and form.
+1. Read the artifact in full before scoring. Note its stated purpose, consumer, and form.
 
 2. Run the artifact through each checklist item above. For each item, score:
    - PASS — the artifact satisfies the item's "Satisfied when" cues
@@ -160,9 +155,7 @@ class AlignmentSpecCreator:
             if skill_file.exists():
                 content = skill_file.read_text(encoding="utf-8").strip()
                 skills.append(
-                    f'<skill name="{skill_dir.name}">\n'
-                    f"{content}\n"
-                    f"</skill>"
+                    f'<skill name="{skill_dir.name}">\n' f"{content}\n" f"</skill>"
                 )
 
         if skills:
@@ -181,9 +174,9 @@ class AlignmentSpecCreator:
         text = response.strip()
         # Remove markdown code fences if present
         if text.startswith("```markdown"):
-            text = text[len("```markdown"):].strip()
+            text = text[len("```markdown") :].strip()
         elif text.startswith("```md"):
-            text = text[len("```md"):].strip()
+            text = text[len("```md") :].strip()
         elif text.startswith("```"):
             text = text[3:].strip()
 

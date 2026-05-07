@@ -34,7 +34,10 @@ from lib.config import (  # noqa: E402
     run_rlm_query as shared_run_rlm_query,
     validate_provider_config,
 )
-from lib.prompts import load_prompt as shared_load_prompt, prompt_mapping_key  # noqa: E402
+from lib.prompts import (
+    load_prompt as shared_load_prompt,
+    prompt_mapping_key,
+)  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -51,10 +54,10 @@ class LayerProfile:
     display_name: str
 
     # On-disk locations
-    profile_dir: Path                        # profiles/<name>/
-    workspace_dir: Path                      # workspaces/<name>/
-    questions_csv: Path                      # profiles/<name>/questions.csv
-    prompts_dir: Path                        # profiles/<name>/prompts/runtime
+    profile_dir: Path  # profiles/<name>/
+    workspace_dir: Path  # workspaces/<name>/
+    questions_csv: Path  # profiles/<name>/questions.csv
+    prompts_dir: Path  # profiles/<name>/prompts/runtime
 
     # Evidence source (exactly one is populated)
     rlm_review_paths: Optional[List[Path]] = None
@@ -119,7 +122,7 @@ EXISTENTIAL_PROFILE = LayerProfile(
     profile_dir=ROOT_DIR / "profiles" / "existential",
     workspace_dir=ROOT_DIR / "workspaces" / "existential",
     questions_csv=ROOT_DIR / "profiles" / "existential" / "questions.csv",
-    prompts_dir=ROOT_DIR / "profiles" / "existential" / "prompts" / "runtime",
+    prompts_dir=ROOT_DIR / "profiles" / "existential" / "prompts",
     rlm_review_paths=[
         Path("/home/codyt/Knowledge/Personal/Journal"),
         Path("/home/codyt/Knowledge/Personal/Knowledge"),
@@ -148,7 +151,7 @@ OPERATIONAL_PROFILE = LayerProfile(
     profile_dir=ROOT_DIR / "profiles" / "operational",
     workspace_dir=ROOT_DIR / "workspaces" / "operational",
     questions_csv=ROOT_DIR / "profiles" / "operational" / "questions.csv",
-    prompts_dir=ROOT_DIR / "profiles" / "operational" / "prompts" / "runtime",
+    prompts_dir=ROOT_DIR / "profiles" / "operational" / "prompts",
     rlm_review_paths=None,
     rlm_review_globs=["ready/**/*.jsonl"],
     prompt_files={
@@ -259,8 +262,7 @@ class RLMConfig:
                 return issues
             if not _resolve_globs(data_dir, self.profile.rlm_review_globs):
                 issues.append(
-                    "No files matched the configured REVIEW_GLOBS under "
-                    f"{data_dir}"
+                    "No files matched the configured REVIEW_GLOBS under " f"{data_dir}"
                 )
         else:
             issues.append("Profile has neither rlm_review_paths nor rlm_review_globs")
@@ -458,7 +460,9 @@ class Config:
             self.paths.DATA_DIR, patterns or self.profile.rlm_review_globs
         )
 
-    def run_rlm_query(self, query: str, review_paths: Optional[List[Path]] = None) -> str:
+    def run_rlm_query(
+        self, query: str, review_paths: Optional[List[Path]] = None
+    ) -> str:
         """Run the RLM CLI against the configured evidence source."""
         if review_paths is not None:
             paths = review_paths

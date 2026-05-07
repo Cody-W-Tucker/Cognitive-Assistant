@@ -8,7 +8,7 @@
 #
 # The alignment spec is resolved from:
 #   1. $ALIGNMENT_SPEC environment variable (if set)
-#   2. The co-located artifacts/alignment_spec.md (relative to this script)
+#   2. workspaces/alignment/artifacts/alignment_spec.md
 #
 # Requires: rlm binary in PATH
 
@@ -19,8 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Resolve alignment spec path
 if [[ -n "${ALIGNMENT_SPEC:-}" ]]; then
     SPEC_PATH="$ALIGNMENT_SPEC"
-elif [[ -f "$SCRIPT_DIR/artifacts/alignment_spec.md" ]]; then
-    SPEC_PATH="$SCRIPT_DIR/artifacts/alignment_spec.md"
+elif [[ -f "$SCRIPT_DIR/../workspaces/alignment/artifacts/alignment_spec.md" ]]; then
+    SPEC_PATH="$SCRIPT_DIR/../workspaces/alignment/artifacts/alignment_spec.md"
 else
     echo "Error: Alignment spec not found." >&2
     echo "Run 'python -m core build-alignment-spec' first, or set ALIGNMENT_SPEC." >&2
