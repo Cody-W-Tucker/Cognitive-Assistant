@@ -26,6 +26,7 @@ profile additionally exports per-tool specs.
 | `lib.<profile>.toolSpecs.{memory,tasks}` | — | yes | — |
 | `packages.verify-alignment` | — | — | yes |
 | `lib.alignment.spec` | — | — | yes |
+| `lib.alignment.toolSpecs.verifyAlignment` | — | — | yes |
 | `lib.alignment.seed` | — | — | yes |
 
 Skill names are dynamic — read them from `skillNames` rather than hardcoding.
@@ -76,6 +77,17 @@ in
     memory = builtins.readFile operational.toolSpecs.memory;
     tasks = builtins.readFile operational.toolSpecs.tasks;
   };
+}
+```
+
+The alignment layer exports the `verify-alignment` tool spec:
+
+```nix
+let
+  alignment = inputs.cognitive-assistant.lib.alignment;
+in
+{
+  programs.opencode.tools.verifyAlignment = builtins.readFile alignment.toolSpecs.verifyAlignment;
 }
 ```
 
