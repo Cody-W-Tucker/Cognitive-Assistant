@@ -17,6 +17,7 @@ from lib.llm import create_client
 
 
 SCRIPT_MODULES = [
+    "core.adaptation_rules",
     "core.config",
     "core.prompt_loader",
     "core.prompt_creator",
@@ -40,6 +41,7 @@ _PLACEHOLDER_FIXTURES = {
     "bio_content": "sample bio",
     "supported_tools": "- `memory.md`: Memory agent",
     "seed_documents": "sample seed",
+    "adaptation_rules": "sample adaptation rules",
 }
 
 

@@ -17,6 +17,7 @@ import os
 import sys
 from typing import List
 
+from core import adaptation_rules
 from core.config import Config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
@@ -161,6 +162,17 @@ async def _process_dataset(config: Config) -> int:
     print("Info: Step 2 refines the profile into a system prompt")
 
     context = load_dataset_context(config)
+    active_adaptations = adaptation_rules.active_adaptations(config)
+    overlay = adaptation_rules.render_rule_overlay(active_adaptations)
+    skill_adaptations_path = adaptation_rules.write_skill_adaptations(
+        config, active_adaptations
+    )
+    print(f"Info: Wrote skill adaptations to {skill_adaptations_path}")
+    if overlay:
+        context = f"{context}\n\n{overlay}"
+        rules_path = adaptation_rules.write_rules_overlay(config, active_adaptations)
+        if rules_path is not None:
+            print(f"Info: Wrote adaptation rules overlay to {rules_path}")
 
     initial_client = create_client(
         config.api, model=config.api.get_model("initial"), async_mode=True
@@ -184,7 +196,7 @@ async def _process_dataset(config: Config) -> int:
         profile_path.write_text(initial_summary.strip() + "\n", encoding="utf-8")
 
         refine_prompt = config.prompts.refine_template.format(
-            existing_answer=initial_summary, context=""
+            existing_answer=initial_summary, context=overlay
         )
         final_summary = await _call_llm(config, refine_client, refine_prompt)
         if not final_summary:
@@ -198,6 +210,13 @@ async def _process_dataset(config: Config) -> int:
         print("Info: Artifacts created")
         print(f"- Initial summary: {profile_path}")
         print(f"- Refined summary: {system_prompt_path}")
+        captured_path = adaptation_rules.mark_adaptations_captured(
+            config,
+            [str(item.get("id")) for item in active_adaptations if item.get("id")],
+            captured_in="build-prompts",
+        )
+        if captured_path is not None:
+            print(f"Info: Updated crystallization artifact {captured_path}")
         return 0
     finally:
         await close_client_async(initial_client)

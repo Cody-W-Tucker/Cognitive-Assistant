@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
+from core import adaptation_rules
 from core.config import Config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
@@ -43,12 +44,30 @@ class ToolSpecsCreator:
     ) -> Path:
         resolved_bio_path = self._resolve_bio_path(bio_path)
         bio_content = resolved_bio_path.read_text(encoding="utf-8")
+        active = adaptation_rules.active_adaptations(self.config)
+        overlay = adaptation_rules.render_rule_overlay(active)
+        skill_adaptations_path = adaptation_rules.write_skill_adaptations(
+            self.config, active
+        )
+        print(f"Info: Wrote skill adaptations to {skill_adaptations_path}")
+        if overlay:
+            bio_content = f"{bio_content.rstrip()}\n\n{overlay}\n"
+            rules_path = adaptation_rules.write_rules_overlay(self.config, active)
+            if rules_path is not None:
+                print(f"Info: Wrote adaptation rules overlay to {rules_path}")
         seed_documents = self._load_seed_documents(seed_dir)
         tool_specs_payload = await self._generate_tool_spec_documents(
             bio_content, seed_documents
         )
         resolved_output_dir = output_dir or self.config.paths.TOOL_SPECS_DIR
         self._write_tool_specs(tool_specs_payload, resolved_output_dir)
+        captured_path = adaptation_rules.mark_adaptations_captured(
+            self.config,
+            [str(item.get("id")) for item in active if item.get("id")],
+            captured_in="build-tool-specs",
+        )
+        if captured_path is not None:
+            print(f"Info: Updated crystallization artifact {captured_path}")
         return resolved_output_dir
 
     def _resolve_bio_path(self, bio_path: Optional[Path]) -> Path:

@@ -8,6 +8,7 @@ Subcommands:
   build-prompts      2-call refinement -> human_profile.md + system_prompt.md
   build-skills       Generate skills/ from latest human_profile.md
   build-tool-specs   Generate tool_specs/ from latest system_prompt.md (gated)
+  crystallize        Merge Hermes-produced adaptations into crystallization.json
   build-soul         Generate SOUL.md from both profile system prompts
   update             Run build-prompts, build-skills, and build-tool-specs
   health-check       Validate prompts, paths, provider access, RLM availability
@@ -123,6 +124,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print the registered profile names.",
     )
 
+    crystallize_parser = subparsers.add_parser(
+        "crystallize",
+        help="Merge Hermes-produced adaptations into the managed crystallization artifact.",
+    )
+    crystallize_parser.add_argument(
+        "--output",
+        type=Path,
+        dest="output_path",
+        help="Optional explicit output path for the crystallization artifact",
+    )
+    crystallize_parser.add_argument(
+        "--input",
+        type=Path,
+        dest="input_path",
+        help="Optional Hermes-produced JSON payload to merge into the crystallization artifact",
+    )
+
     alignment_parser = subparsers.add_parser(
         "build-alignment-spec",
         help="Generate alignment verification spec from both profile layers.",
@@ -222,6 +240,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             bio_path=args.bio,
             seed_dir=args.seed_dir,
             output_dir=args.output_dir,
+        )
+
+    if args.command == "crystallize":
+        from core import crystallize
+
+        return crystallize.run(
+            config.profile.name,
+            output_path=args.output_path,
+            input_path=args.input_path,
         )
 
     if args.command == "update":
