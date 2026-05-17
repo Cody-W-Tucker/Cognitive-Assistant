@@ -20,7 +20,6 @@ from lib.health import check_prompt_files, check_script_imports
 
 
 SCRIPT_MODULES = [
-    "core.adaptation_rules",
     "core.config",
     "core.prompt_loader",
     "core.prompt_creator",

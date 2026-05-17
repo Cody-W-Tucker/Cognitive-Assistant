@@ -41,7 +41,6 @@
         {
           inherit skillsDir systemPromptFile skillNames;
           skillFile = name: skillsDir + "/${name}/SKILL.md";
-          skillAdaptationsFile = workspaceDir + "/artifacts/skill_adaptations.json";
         };
       existential = mkLayerExports ./workspaces/existential;
       operational = (mkLayerExports ./workspaces/operational) // {
@@ -68,16 +67,6 @@
 
       packages = forEachSupportedSystem (
         { pkgs }:
-        let
-          pythonEnv = pkgs.python312.withPackages (
-            python-pkgs: with python-pkgs; [
-              python-dotenv
-              anthropic
-              pandas
-              openai
-            ]
-          );
-        in
         {
           verify-alignment = pkgs.writeShellApplication {
             name = "verify-alignment";
@@ -86,15 +75,6 @@
               ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./workspaces/alignment/artifacts/alignment_spec.md}}"
               export ALIGNMENT_SPEC
               exec ${./scripts/verify_alignment.sh} "$@"
-            '';
-          };
-
-          crystallize = pkgs.writeShellApplication {
-            name = "crystallize";
-            runtimeInputs = [ pythonEnv ];
-            text = ''
-              export PYTHONPATH="${self}:''${PYTHONPATH:-}"
-              exec ${pythonEnv}/bin/python -m core.crystallize "$@"
             '';
           };
         }
