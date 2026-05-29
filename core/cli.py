@@ -5,9 +5,9 @@ Subcommands:
   ingest-corpus      Normalize intake exports into ready/*.jsonl (operational)
   ingest-substrate   Project schema graph/focus exports into ready/*.jsonl packets
   ask-questions      Run RLM against questions.csv -> answers CSV
-  build-prompts      Generate profile artifacts (human_profile.md, plus system_prompt.md when enabled)
+  build-prompts      Generate profile artifacts declared by the active profile
   build-skills       Generate skills/ from latest human_profile.md
-  build-tool-specs   Generate tool_specs/ from latest system_prompt.md (gated)
+  build-tool-specs   Generate tool_specs/ from latest human_profile.md (gated)
   build-soul         Generate SOUL.md from existential and operational profile artifacts
   update             Run build-prompts, build-skills, and build-tool-specs
   health-check       Validate prompts, paths, provider access, RLM availability
@@ -89,9 +89,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     tool_parser = subparsers.add_parser(
         "build-tool-specs",
-        help="Generate tool_specs/ from the latest system_prompt.md (gated).",
+        help="Generate tool_specs/ from the latest human_profile.md (gated).",
     )
-    tool_parser.add_argument("--bio", type=Path, help="Path to a specific system_prompt.md")
+    tool_parser.add_argument("--bio", type=Path, help="Path to a specific human_profile.md")
     tool_parser.add_argument(
         "--seed-dir",
         type=Path,
@@ -137,7 +137,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     soul_parser = subparsers.add_parser(
         "build-soul",
-        help="Generate SOUL.md from the existential profile and operational system prompt.",
+        help="Generate SOUL.md from the existential and operational human profiles.",
     )
     soul_parser.add_argument(
         "--output",

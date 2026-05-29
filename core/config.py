@@ -72,7 +72,6 @@ class LayerProfile:
     # Pipeline gates
     has_corpus_ingest: bool = False
     has_tool_specs: bool = False
-    builds_system_prompt: bool = True
     supported_tools: dict[str, str] = field(default_factory=dict)
 
     # Redaction patterns (regex strings)
@@ -134,7 +133,6 @@ EXISTENTIAL_PROFILE = LayerProfile(
     rlm_prompt_placeholders=["synthesis_prompt", "question"],
     has_corpus_ingest=False,
     has_tool_specs=False,
-    builds_system_prompt=False,
     section_header_template="# Understanding: **{category}**",
     answer_label="AI Answer",
 )
@@ -151,7 +149,6 @@ OPERATIONAL_PROFILE = LayerProfile(
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
-        "refine_template": "refine_template.md",
         "skills_creation_template": "skills_creation_template.md",
         "tool_specs_creation_template": "tool_specs_creation_template.md",
         "rlm_query_template": "rlm_query_template.md",
@@ -165,7 +162,6 @@ OPERATIONAL_PROFILE = LayerProfile(
     ],
     has_corpus_ingest=True,
     has_tool_specs=True,
-    builds_system_prompt=True,
     supported_tools={
         "memory.md": "Memory agent for durable continuity and retrieval.",
         "tasks.md": "Task agent for capturing, shaping, and retrieving commitments.",
@@ -335,10 +331,6 @@ class PromptsConfig:
     @property
     def initial_template(self) -> str:
         return self._load("initial_template")
-
-    @property
-    def refine_template(self) -> str:
-        return self._load("refine_template")
 
     @property
     def skills_creation_template(self) -> str:

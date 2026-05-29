@@ -33,18 +33,16 @@
         workspaceDir:
         let
           skillsDir = workspaceDir + "/artifacts/skills";
-          systemPromptFile = workspaceDir + "/artifacts/system_prompt.md";
+          contextFile = workspaceDir + "/artifacts/human_profile.md";
           skillNames = builtins.attrNames (
             nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
           );
         in
         {
-          inherit skillsDir systemPromptFile skillNames;
+          inherit skillsDir contextFile skillNames;
           skillFile = name: skillsDir + "/${name}/SKILL.md";
         };
-      existential = (mkLayerExports ./workspaces/existential) // {
-        systemPromptFile = ./workspaces/existential/artifacts/human_profile.md;
-      };
+      existential = mkLayerExports ./workspaces/existential;
       operational = (mkLayerExports ./workspaces/operational) // {
         toolSpecs = {
           memory = ./workspaces/operational/artifacts/tool_specs/memory.md;

@@ -28,7 +28,7 @@ These ideas laid the groundwork for integrating an existential layer into LLMs, 
 
 We ask these questions against the user's graph export and create a profile plus focused skills that allow AI systems to understand the user better in novel or high-context situations.
 
-The existential pipeline now stops at `human_profile.md` and generates skills directly from that profile instead of first compiling an existential `system_prompt.md`.
+The existential pipeline now generates skills directly from `human_profile.md`.
 
 | Category                        | Goal                              | Element                                                                                                                                    | Question                                                                                                                                                                                                                     |
 | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

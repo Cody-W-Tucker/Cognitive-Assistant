@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate a durable SOUL.md from both layer source artifacts.
 
-Reads the latest existential human profile and operational system prompt,
-combines them with the alignment soul seed template, and produces a single
-SOUL.md artifact for Hermes/OpenClaw-style agents.
+Reads the latest existential and operational human profiles, combines them with
+the alignment soul seed template, and produces a single SOUL.md artifact for
+Hermes/OpenClaw-style agents.
 
 Usage:
     python -m core build-soul
@@ -74,8 +74,8 @@ class SoulCreator:
         operational_prompt = self._load_latest_artifact(
             OPERATIONAL_PROFILE.workspace_dir / "artifacts",
             "operational",
-            artifact_pattern="system_prompt*.md",
-            artifact_label="system_prompt",
+            artifact_pattern="human_profile*.md",
+            artifact_label="human_profile",
         )
         return "\n\n".join([existential_prompt, operational_prompt])
 

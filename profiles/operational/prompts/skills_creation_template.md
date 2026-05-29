@@ -23,6 +23,44 @@ A good skill is not a topic bucket. It is a reusable reasoning or execution adva
 7. Straightforward factual, coding, formatting, or procedural requests should not require loading these skills.
 </core_principles>
 
+<forecasting_objective>
+Use the profile to preserve the highest-value reasoning advantages that the old refine step was trying to capture. The final skill set should collectively improve three forecasting tasks in work contexts:
+
+1. Work stance and sequence forecasting
+   - Infer whether the user is operating from orientation, fit judgment, execution, diagnosis, refinement, or handoff preparation.
+   - Notice what stage of sequence integrity matters here.
+   - Identify what move would be premature and what move is now warranted.
+   - Notice what likely triggered the request now.
+   - Infer the help actually wanted beneath the surface ask.
+
+2. Salience forecasting
+   - Infer what is likely salient right now.
+   - Catch the detail, risk, ambiguity, artifact, or friction point that matters more than it first appears.
+   - Distinguish what is backgrounded unless something breaks.
+   - Notice signs of truth-contact, false progress, performative rigor, or operator burden that a generic model would underweight or overweight.
+
+3. Threshold and outcome forecasting
+   - Infer what threshold has likely been crossed.
+   - Predict what would make a response feel grounded, strong, premature, shallow, overprocessed, or off.
+   - Notice what kind of response would restore contact, confidence, clarity, or momentum.
+   - Preserve what makes resulting artifacts easier to hand off, verify, or reuse.
+</forecasting_objective>
+
+<transformation_principles>
+- Every skill should improve at least one of the three forecasting abilities.
+- Translate the profile into usable inference rules, not descriptive restatement.
+- Preserve repeated deviations from generic workflow expectations.
+- Preserve tensions, meaningful absences, and boundary conditions rather than flattening them.
+- Carry forward the lived-work structure: salience, thresholds, breakdowns, quality detection, artifact relation, work stances, and sequence integrity.
+- Preserve strongest-in and relaxed-in distinctions when they materially change the right response.
+- Preserve evidence-thin zones and uncertainty; do not universalize a pattern beyond what the profile supports.
+- Prefer truth-contact over procedural correctness.
+- Guard against anti-performative failures: polished language, proper-looking process, or elaborate structure that does not reduce uncertainty or improve usability.
+- Preserve compression logic: reduce cognitive and maintenance burden without losing decisive structure.
+- Preserve handoff quality: leave behind artifacts another human or agent can actually use without reconstructing hidden reasoning.
+- Use plain, natural prose. Avoid hype, fake significance, generic uplift, tutorial signposting, and polished-but-vague language.
+</transformation_principles>
+
 <capability_synthesis_method>
 First decide whether a skill should exist at all. A pattern deserves a skill only if it meets most of these tests:
 
@@ -37,8 +75,9 @@ Then, for each skill, think through:
 2. **Misread risk**: What generic agent failure does that create risk for?
 3. **Capability gain**: What concrete reasoning or execution advantage should the skill provide?
 4. **Activation condition**: In what situations should this skill actually be loaded?
+5. **Forecasting win**: Does this skill mainly improve work-stance forecasting, salience forecasting, threshold/outcome forecasting, or a real combination?
 
-Write the skill from steps 3 and 4, not from step 1.
+Write the skill from steps 3-5, not from step 1.
 
 Examples:
 - Bad: "A skill about simplification."
@@ -87,6 +126,8 @@ Inside each skill:
 - keep the guidance operational and specific
 - avoid duplicating the entire profile
 - avoid creating a generic assistant style guide
+- preserve interpretive rules more than signature phrasing
+- include strongest-zone or boundary-condition guidance when overapplying the pattern would create worse work
 
 Each skill should usually contain some combination of:
 - decision heuristics
@@ -104,6 +145,17 @@ Each skill should answer these questions implicitly or explicitly:
 3. What better action, framing, or intervention can the agent now produce?
 4. When should the skill stay unloaded?
 </content_rules>
+
+<set_composition_rules>
+Across the final set, try to preserve the highest-value material that would otherwise have gone into:
+
+- work stances: how to infer the user's current stance, stance shifts, and premature moves
+- salience and threshold signals: what cues indicate drift, insufficiency, false clarity, performative rigor, operator burden, or readiness to act
+- response criteria: what strong help and weak help look like, including when to inspect, challenge, narrow, verify, compress, resequence, or repair
+- operational defaults: truth-contact, sequence integrity, anti-performativity, compression, handoff quality, and how to behave when evidence is thin
+
+Do not turn these into four mandatory skill categories. Use them as compression targets. Some may merge into one skill. Some may not deserve a skill at all.
+</set_composition_rules>
 
 <output_format>
 Return a JSON object and nothing else.
@@ -124,5 +176,6 @@ Before producing the final JSON, verify:
 4. Straightforward requests should not require loading any of these skills.
 5. After reading a skill, a downstream agent should know what it can do better, not just know more about the user.
 6. The set reflects what is most relevant in this specific profile, even if that produces an unusual mix of skills.
+7. The set preserves the strongest work-stance, salience, threshold, anti-performativity, compression, and handoff gains from the removed refine step without recreating a universal baseline prompt.
 </quality_bar>
 </task>

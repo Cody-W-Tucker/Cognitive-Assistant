@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate personalized single-tool agent specs from the latest profile output.
 
-Gated on `profile.has_tool_specs`. Reads the latest `system_prompt*.md` from the
+Gated on `profile.has_tool_specs`. Reads the latest `human_profile*.md` from the
 profile's artifacts directory, combines it with the profile's seed exemplar
 documents (e.g. memory.md, tasks.md from prompts/), and asks the LLM to
 produce a JSON map of {filename: SKILL.md content}, one entry per supported tool.
@@ -58,10 +58,10 @@ class ToolSpecsCreator:
                 raise FileNotFoundError(f"Bio file not found: {resolved_path}")
             return resolved_path
 
-        bio_files = sorted(self.config.paths.ARTIFACTS_DIR.glob("system_prompt*.md"))
+        bio_files = sorted(self.config.paths.ARTIFACTS_DIR.glob("human_profile*.md"))
         if not bio_files:
             raise FileNotFoundError(
-                f"No system_prompt*.md files found in {self.config.paths.ARTIFACTS_DIR}. "
+                f"No human_profile*.md files found in {self.config.paths.ARTIFACTS_DIR}. "
                 "Run prompt_creator first or pass --bio."
             )
         return bio_files[-1]

@@ -19,7 +19,7 @@ operational profile additionally exports per-tool specs.
 
 | Output | Existential | Operational | Alignment |
 |---|---|---|---|
-| `lib.<profile>.systemPromptFile` | yes | yes | — |
+| `lib.<profile>.contextFile` | yes | yes | — |
 | `lib.<profile>.skillsDir` | yes | yes | — |
 | `lib.<profile>.skillNames` | yes | yes | — |
 | `lib.<profile>.skillFile <name>` | yes | yes | — |
@@ -34,10 +34,8 @@ Skill names are dynamic — read them from `skillNames` rather than hardcoding.
 ## Downstream Usage
 
 Treat the exported base context artifact as the base layer and the generated
-skills as conditional overlays. For the existential profile,
-`systemPromptFile` now points to `human_profile.md`. For the operational
-profile, it points to `system_prompt.md`. Then map `skillNames` to skill
-contents:
+skills as conditional overlays. For both profiles, `contextFile` points to
+`human_profile.md`. Then map `skillNames` to skill contents:
 
 ```nix
 { inputs, ... }:
@@ -47,7 +45,7 @@ let
   readSkill = name: builtins.readFile (layer.skillFile name);
 in
 {
-  programs.opencode.context = builtins.readFile layer.systemPromptFile;
+  programs.opencode.context = builtins.readFile layer.contextFile;
   programs.opencode.skills = builtins.listToAttrs (
     map (name: { inherit name; value = readSkill name; }) layer.skillNames
   );
@@ -136,7 +134,7 @@ flake outputs, the committed paths are:
 
 ```
 workspaces/existential/artifacts/human_profile.md
-workspaces/operational/artifacts/system_prompt.md
+workspaces/operational/artifacts/human_profile.md
 workspaces/<profile>/artifacts/skills/<name>/SKILL.md
 workspaces/operational/artifacts/tool_specs/<name>.md
 workspaces/alignment/artifacts/alignment_spec.md

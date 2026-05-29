@@ -55,7 +55,6 @@ def check_prompt_rendering(config: Config) -> List[str]:
 
     render_specs = {
         "initial_template": ["context"],
-        "refine_template": ["existing_answer", "context"],
         "skills_creation_template": ["bio_content"],
         "rlm_query_template": profile.rlm_prompt_placeholders,
         "tool_specs_creation_template": [
