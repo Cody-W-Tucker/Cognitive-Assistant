@@ -89,16 +89,42 @@ Before writing, perform this synthesis from the dataset:
    "In context <X>, a generic workflow would normally expect <Y>, but this user instead operates with <Z>. This absence is operationally meaningful because <WHY_IT_MATTERS>."
 
 10. Preserve tensions between stated ideals and actual traces.
-   Distinguish:
-   - what the user says good work should look like
+    Distinguish:
+    - what the user says good work should look like
    - what they actually optimize for under real constraints
    - where their workflow tightens, relaxes, or changes by task type
    Do not smooth over contradictions that change the meaning of the profile.
 
 11. Keep the profile phenomenologically grounded.
-   Describe how work is encountered and navigated, not just what actions occurred.
-   Stay concrete and evidence-bound.
-   Do not drift into literary introspection or abstract philosophy.
+    Describe how work is encountered and navigated, not just what actions occurred.
+    Stay concrete and evidence-bound.
+    Do not drift into literary introspection or abstract philosophy.
+
+12. Infer counterpart fit in real work.
+    Translate the operating patterns above into evidence about what kind of collaborator or agent would fit this user naturally.
+
+    Ask:
+    - What kind of initiative feels helpful rather than intrusive?
+    - What kind of structure feels clarifying rather than bureaucratic?
+    - What kind of pushback feels intelligent rather than managerial?
+    - What kind of pace, proof style, and artifact relation would feel like genuine partnership?
+    - What kind of presence would make real work feel lighter, sharper, and more alive without lowering standards?
+
+    Use the frame:
+    "Because this user works through <PATTERN>, a fitting counterpart would tend to <COMPLEMENTARY_BEHAVIOR>."
+
+13. Reverse-map work misfits into positive collaboration qualities.
+    Use recurring frustration, tightening, correction, and refusal as reverse-evidence.
+    Ask:
+    - What does this user keep rejecting in collaboration?
+    - What positive quality is implied by that rejection?
+    - What kind of collaborator would carry the needed discipline without sounding like process enforcement?
+
+14. Distinguish workflow guidance from persona implications.
+    Separate:
+    - tactical support moves
+    - enduring counterpart qualities that would make those moves feel natural
+    Do not write management advice alone.
 </analysis_method>
 
 <output_format>
@@ -161,12 +187,18 @@ Output Structure (markdown):
      4-8 bullets.
      Where the patterns above are strongest, where they relax, and where evidence is mixed.
 
-12. `## Open Questions`
-     3-7 bullets.
-     Unknowns an expert reader should avoid over-assuming.
+12. `## Counterpart Implications`
+      4-8 bullets.
+      Describe what kind of collaborator, working presence, or execution partner would naturally fit this user's real work logic.
+      Cover initiative, proof style, intervention timing, pacing, structure, and artifact use.
+      Prefer positive collaboration qualities over policy statements.
 
-13. `## Evidence Fragments`
-     Very short quotes or paraphrases grouped under the most important sections above.
+13. `## Open Questions`
+      3-7 bullets.
+      Unknowns an expert reader should avoid over-assuming.
+
+14. `## Evidence Fragments`
+      Very short quotes or paraphrases grouped under the most important sections above.
 </output_format>
 
 <quality_bar>
@@ -180,6 +212,10 @@ Output Structure (markdown):
 - Recover lived work structure, not just visible habits.
 - Prefer function, salience, thresholds, and repair logic over descriptive restatement.
 - Use breakdowns, corrections, and tightening moves as major evidence of tacit standards.
+- Translate recurrent work frustrations into positive collaborator-fit signals.
+- Distinguish management behaviors from genuine partnership qualities.
+- Recover what makes collaboration feel sharpening, relieving, or trust-building in practice.
+- Do not reduce counterpart fit to process preferences alone; capture the working presence those preferences imply.
 - Keep the profile compact, clear, and useful enough that an expert reader can use it without extra interpretation.
 - Avoid puffed-up language, generic significance claims, vague authority tropes, and empty "future outlook" conclusions.
 - Prefer plain verbs like `is`, `has`, and `does` when they say the thing more directly.

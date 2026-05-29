@@ -165,6 +165,41 @@ Extract the constraints, traps, and support implications that should shape later
    Mark which insights should guide future judgment silently rather than be repeated back to the user.
 </pillar_4_constraints_and_support_implications>
 
+<pillar_5_counterpart_implications>
+Translate the profile into evidence about counterpart fit.
+
+1. Infer desired relational atmosphere.
+   Ask:
+   - What kind of contact seems relieving, clarifying, or quietly energizing for this user?
+   - What kinds of responses reliably feel dead, flattening, managerial, invasive, or misattuned?
+   - What atmosphere would let this user stay in contact with truth without feeling handled?
+
+2. Reverse-map aversions into positive fit.
+   Use recurrent complaint, boredom, disappointment, or withdrawal as reverse-evidence.
+   Ask:
+   - If the user repeatedly resists <PATTERN>, what opposite quality would feel deeply right?
+   - What forms of steadiness, candor, warmth, play, or non-neediness are implied by repeated failures of fit?
+
+   Use the frame:
+   "The user's repeated aversion to <MISFIT> suggests a preference for <COUNTERPART_QUALITY> because <EVIDENCE>."
+
+3. Infer what kind of mind the user wants to think with.
+   Ask:
+   - What intellectual or emotional posture would feel companionable rather than corrective?
+   - What kind of presence could challenge this user without becoming managerial, soothing, or adversarial?
+   - What kind of person would naturally carry the standards this user needs without sounding like policy?
+
+4. Distinguish protective rules from hoped-for contact.
+   Separate:
+   - what support must avoid
+   - what the user is positively hoping to feel more of in live interaction
+   Do not stop at guardrails.
+
+5. Keep this evidence-bound and non-therapeutic.
+   Do not invent hidden wounds, unmet childhood needs, or idealized rescue figures.
+   Do not write a persona. Extract counterpart implications future synthesis can use.
+</pillar_5_counterpart_implications>
+
 <output_format>
 Output structure (markdown):
 
@@ -202,11 +237,17 @@ Output structure (markdown):
    Short section.
    Cover current direction, ambitions that matter for reasoning, major translation gaps, and support implications.
 
-8. `## Open Questions`
+8. `## Counterpart Implications`
+   4-8 bullets.
+   Describe the qualities, atmosphere, and relational posture that would make a future AI feel deeply right to this user over time.
+   Translate repeated misfits into positive fit signals.
+   Keep this analytical and evidence-bound, not aspirational or theatrical.
+
+9. `## Open Questions`
    3-7 questions.
    Include unknowns or unresolved tensions where future systems should avoid acting too certain.
 
-9. `## Evidence Quotes`
+10. `## Evidence Quotes`
    Very short quotes, under 30 words, grouped under the most useful sections.
 </output_format>
 
@@ -214,7 +255,7 @@ Output structure (markdown):
 Processing requirements:
 - Mine loose or unfocused passages for real values if they are there.
 - Surface contradictions only when they change downstream reasoning.
-- Distill everything into core frame, signals, interpretation rules, success conditions, constraint map, and trajectory.
+- Distill everything into core frame, signals, interpretation rules, success conditions, constraint map, trajectory, and counterpart implications.
 
 Execution principles:
 - Prioritize intent over literal phrasing.
@@ -229,6 +270,10 @@ Output standards:
 - Ground the profile in the user's language and habits.
 - Consolidate into distinct, actionable rules.
 - Keep evidence quotes so later readers can trace the claims.
+- Translate repeated aversions and disappointments into positive counterpart-fit signals.
+- Distinguish what the user needs protected from what the user quietly wants more of in contact.
+- Do not let support implications remain purely defensive; recover the hoped-for atmosphere where the evidence supports it.
+- Do not write a soulmate fantasy, therapeutic interpretation, or flattering mirror.
 - Do not build a large semantic dictionary unless misread risk is genuinely high.
 - Do not optimize for future mirroring of signature words. Optimize for better interpretation of what those words are doing.
 - Do not overproduce mirror-language, archetypes, or psychologizing labels.

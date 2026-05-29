@@ -1,29 +1,34 @@
 ---
 name: earn-every-layer
-description: Use when the response, design, or fix risks becoming structurally heavier than the job needs — extra files, abstraction, defensive scaffolding, frameworks, or polish. Not needed when the structure is already minimal or when entering an unfamiliar system that genuinely needs a full map.
+description: Use when the solution risks becoming structurally heavier than the job, or when inherited engineering defaults (config layers, factories, defensive scaffolding, branching) are creeping in. Helps you collapse to the smallest legible form that still does the work, judged against the real operator. Not needed when complexity is already minimal or the user explicitly asked for a robust system.
 compatibility: opencode
 ---
 ## When To Use
-Load this when you notice yourself adding structure: a config layer, a factory, a branching tree, redundant error handling, a new file, an option framework, citations, or tooling commentary. This user notices complexity that exceeds the task before he evaluates whether it works — overbuilt structure registers as drag almost immediately.
+- You're adding an abstraction, config layer, factory, or error-handling branch.
+- A pattern "seems overly complex" or you're reaching for ceremony because it's conventional.
+- The output has accreted moving parts that are harder to reason about than the original problem.
+- You're in review/refinement, where the standard is "legible, usable, minimal," not just "does it work."
 
 ## Do Not Use
-Do not use this to do less or to ship minimal-compliance fixes. He rejects half-fixes as hard as he rejects overbuilding. Also skip when first entering an unfamiliar codebase — there he wants a full structural map; breadth for orientation is correct. The target is convention-driven complexity, not structure itself.
+- A choice is still reversible and exploratory — roughness, wrappers, and "for now" scaffolding are fine there.
+- A standard scaffold genuinely keeps work small and testable (MVP, small diffs, post-change checks). Those earn their keep.
 
 ## The Test For Each Layer
-For every file, abstraction, safeguard, or indirection, ask: does this earn its complexity with visible operational payoff, or is it here by convention? If by convention, strip it.
-- A function store that could be a hardcoded config — collapse it.
-- Branching logic that type information already determines — let the types carry it.
-- Local error handling the library already covers — remove it.
-- Separate files where separation buys nothing — merge them.
+For every piece of structure, ask: why can't this collapse? A layer survives only if it materially improves clarity or control. Specifically challenge:
+- An if-tree the type system already makes unnecessary.
+- Local error handling the library already covers.
+- A function store where a flat config file would do.
+- Configurability or factories added before a second case actually exists.
+- Defensive checks that duplicate responsibility living upstream.
 
-## Prefer The Inspectable Form
-Push important behavior into one obvious, editable place — a config file, an explicit default — so intent cannot drift across indirection. The goal is legibility: a working surface small enough to judge directly and reverse without rediscovering its logic.
+## Operator Filter
+Before adopting a pattern, ask: is this a good pattern for the actual person who'll use it — a non-technical editor, a coding agent, a buyer reading copy? A clever pattern a non-technical user can't operate is a defect, not sophistication. Fit beats abstract correctness.
 
-## Watch For Overprocessing
-Comprehensiveness, polish, architectural elegance, and tooling chatter read as noise to this user unless they earn their place. "False sophistication that is harder to reason about than the problem" is a defect, not a strength. If a clever config or summary feels too clever, that gap is a signal the abstraction has overreached.
+## Repair When Overbuilt
+Don't add more to rescue it. Collapse: hardcode the config, remove the redundant handling, combine files, kill the unnecessary branching, point at the one obvious editable place. Recovery is reducing surface area, never expanding it.
 
-## Rigor At Commitment
-Simplify freely in reversible discovery and rough drafts. But once a change is structural or irreversible, raise the bar: the simplest form still has to be a proper fix, durable, and correct — not just the smallest.
+## What This Prevents
+Premature abstraction, defensive scaffolding that adds ceremony before value, and structure substituting for judgment. Standards survive on payoff, not convention.
 
-## Failure This Prevents
-Complexity overrun and overprocessing: producing technically complete but operationally heavy work that is correct, elaborate, and hard to run or hand off.
+## Boundary Note
+This user does ask for comprehensive coverage at times — that's not a contradiction. Completeness means "all the facts needed to act," never open-ended exhaustiveness or extra structure. Strip parts, not decision-relevant facts.
