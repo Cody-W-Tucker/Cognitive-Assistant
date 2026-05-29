@@ -2,11 +2,11 @@
 """Profile-aware prompt creator.
 
 Loads the most recent `questions_with_answers_rlm_*.csv` from the active
-profile's data directory, formats it into context, and runs the 2-call
-refinement pipeline:
+profile's data directory, formats it into context, and generates the profile
+artifacts declared by that profile:
 
   1. initial_template -> human_profile.md
-  2. refine_template  -> system_prompt.md
+  2. refine_template  -> system_prompt.md (if enabled)
 """
 
 from __future__ import annotations
@@ -122,19 +122,22 @@ async def _call_llm(
 
 
 async def _process_dataset(config: Config) -> int:
-    """Run the 2-call refinement pipeline."""
-    print("Info: Processing dataset with refinement")
+    """Run the profile-specific prompt generation pipeline."""
+    print("Info: Processing dataset into profile artifacts")
     print("Info: Step 1 generates the initial profile")
-    print("Info: Step 2 refines the profile into a system prompt")
+    if config.profile.builds_system_prompt:
+        print("Info: Step 2 refines the profile into a system prompt")
 
     context = load_dataset_context(config)
 
     initial_client = create_client(
         config.api, model=config.api.get_model("initial"), async_mode=True
     )
-    refine_client = create_client(
-        config.api, model=config.api.get_model("refine"), async_mode=True
-    )
+    refine_client = None
+    if config.profile.builds_system_prompt:
+        refine_client = create_client(
+            config.api, model=config.api.get_model("refine"), async_mode=True
+        )
 
     try:
         initial_summary = await _call_llm(
@@ -150,6 +153,12 @@ async def _process_dataset(config: Config) -> int:
         print(f"Info: Saving initial summary to {profile_path}")
         profile_path.write_text(initial_summary.strip() + "\n", encoding="utf-8")
 
+        if not config.profile.builds_system_prompt:
+            print("Info: Artifacts created")
+            print(f"- Human profile: {profile_path}")
+            return 0
+
+        assert refine_client is not None
         refine_prompt = config.prompts.refine_template.format(
             existing_answer=initial_summary, context=""
         )
@@ -168,7 +177,8 @@ async def _process_dataset(config: Config) -> int:
         return 0
     finally:
         await close_client_async(initial_client)
-        await close_client_async(refine_client)
+        if refine_client is not None:
+            await close_client_async(refine_client)
 
 
 def run(config: Config) -> int:

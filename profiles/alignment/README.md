@@ -15,18 +15,18 @@ The checklist skeleton lives in `profiles/alignment/prompts/seed.md`. The verifi
 
 The SOUL artifact works differently:
 
-1. The existential and operational `system_prompt.md` files act as source material.
+1. The existential `human_profile.md` and operational `system_prompt.md` files act as source material.
 2. `profiles/alignment/prompts/soul_seed.md` defines the SOUL.md target shape and compression rules.
-3. `core/soul_creator.py` asks the LLM to merge both prompts into one durable identity document for Hermes/OpenClaw-style agents.
+3. `core/soul_creator.py` asks the LLM to merge both source artifacts into one durable identity document for Hermes/OpenClaw-style agents.
 
 ## Files
 
 | File                                               | Purpose                                                                                                                                         |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `profiles/alignment/prompts/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
-| `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating a durable SOUL.md from both profile system prompts.                                                        |
+| `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating a durable SOUL.md from the existential human profile and operational system prompt.                         |
 | `core/alignment_spec.py`                           | Loads skills from both profiles, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
-| `core/soul_creator.py`                             | Loads both profile system prompts, calls the LLM with the soul seed, writes the final SOUL.md artifact.                                        |
+| `core/soul_creator.py`                             | Loads the existential human profile and operational system prompt, calls the LLM with the soul seed, writes the final SOUL.md artifact.        |
 | `scripts/verify_alignment.sh`                      | Runtime tool. Passes the spec + an artifact to `rlm` for evaluation.                                                                            |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
 | `workspaces/alignment/artifacts/SOUL.md`           | The generated, committed durable identity document for Hermes/OpenClaw-style agents.                                                            |
@@ -44,8 +44,8 @@ The default output path is `workspaces/alignment/artifacts/alignment_spec.md`.
 
 ## Build the soul
 
-Requires `build-prompts` to have been run for both profiles so the source
-`system_prompt.md` files exist.
+Requires `build-prompts` to have been run for both profiles so the existential
+`human_profile.md` and operational `system_prompt.md` source files exist.
 
 ```bash
 python -m core build-soul

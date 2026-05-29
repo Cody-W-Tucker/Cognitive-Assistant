@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate a durable SOUL.md from both layer system prompts.
+"""Generate a durable SOUL.md from both layer source artifacts.
 
-Reads the latest existential and operational system prompts, combines them with
-the alignment soul seed template, and produces a single SOUL.md artifact for
-Hermes/OpenClaw-style agents.
+Reads the latest existential human profile and operational system prompt,
+combines them with the alignment soul seed template, and produces a single
+SOUL.md artifact for Hermes/OpenClaw-style agents.
 
 Usage:
     python -m core build-soul
@@ -29,7 +29,7 @@ MAX_SOUL_OUTPUT_TOKENS = 6000
 
 
 class SoulCreator:
-    """Generate a durable SOUL.md from both layer prompts."""
+    """Generate a durable SOUL.md from both layer source artifacts."""
 
     def __init__(self) -> None:
         self.api = APIConfig()
@@ -42,9 +42,9 @@ class SoulCreator:
     async def generate_soul(self, output_path: Optional[Path] = None) -> Path:
         """Generate the SOUL.md artifact and write it to disk."""
         seed_content = self._load_seed()
-        system_prompts = self._load_system_prompts()
+        profile_sources = self._load_profile_sources()
 
-        prompt = seed_content.format(system_prompts=system_prompts)
+        prompt = seed_content.format(profile_sources=profile_sources)
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,
@@ -64,32 +64,43 @@ class SoulCreator:
             raise FileNotFoundError(f"Soul seed not found at {SEED_PATH}")
         return SEED_PATH.read_text(encoding="utf-8")
 
-    def _load_system_prompts(self) -> str:
-        existential_prompt = self._load_latest_system_prompt(
+    def _load_profile_sources(self) -> str:
+        existential_prompt = self._load_latest_artifact(
             EXISTENTIAL_PROFILE.workspace_dir / "artifacts",
             "existential",
+            artifact_pattern="human_profile*.md",
+            artifact_label="human_profile",
         )
-        operational_prompt = self._load_latest_system_prompt(
+        operational_prompt = self._load_latest_artifact(
             OPERATIONAL_PROFILE.workspace_dir / "artifacts",
             "operational",
+            artifact_pattern="system_prompt*.md",
+            artifact_label="system_prompt",
         )
         return "\n\n".join([existential_prompt, operational_prompt])
 
-    def _load_latest_system_prompt(self, artifacts_dir: Path, layer_name: str) -> str:
+    def _load_latest_artifact(
+        self,
+        artifacts_dir: Path,
+        layer_name: str,
+        *,
+        artifact_pattern: str,
+        artifact_label: str,
+    ) -> str:
         if not artifacts_dir.exists():
             raise FileNotFoundError(f"Artifacts directory not found: {artifacts_dir}")
 
-        prompt_files = sorted(artifacts_dir.glob("system_prompt*.md"))
+        prompt_files = sorted(artifacts_dir.glob(artifact_pattern))
         if not prompt_files:
             raise FileNotFoundError(
-                f"No system_prompt*.md files found in {artifacts_dir}. Run build-prompts first."
+                f"No {artifact_pattern} files found in {artifacts_dir}. Run build-prompts first."
             )
 
         content = prompt_files[-1].read_text(encoding="utf-8").strip()
         return (
-            f'<system_prompt layer="{layer_name}">\n'
+            f'<profile_source layer="{layer_name}" artifact="{artifact_label}">\n'
             f"{content}\n"
-            f"</system_prompt>"
+            f"</profile_source>"
         )
 
     def _extract_soul(self, response: str) -> str:

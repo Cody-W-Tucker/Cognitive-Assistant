@@ -13,9 +13,9 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-Each profile exposes the generated system prompt, the list of skills currently
-in the workspace, and a helper to read a specific skill file. The operational
-profile additionally exports per-tool specs.
+Each profile exposes its generated base context artifact, the list of skills
+currently in the workspace, and a helper to read a specific skill file. The
+operational profile additionally exports per-tool specs.
 
 | Output | Existential | Operational | Alignment |
 |---|---|---|---|
@@ -33,9 +33,11 @@ Skill names are dynamic — read them from `skillNames` rather than hardcoding.
 
 ## Downstream Usage
 
-Treat the system prompt as the base layer and the generated skills as
-conditional overlays. Pick a profile, load its system prompt, and map its
-`skillNames` to skill contents:
+Treat the exported base context artifact as the base layer and the generated
+skills as conditional overlays. For the existential profile,
+`systemPromptFile` now points to `human_profile.md`. For the operational
+profile, it points to `system_prompt.md`. Then map `skillNames` to skill
+contents:
 
 ```nix
 { inputs, ... }:
@@ -133,7 +135,8 @@ If you need to read a generated artifact directly without going through the
 flake outputs, the committed paths are:
 
 ```
-workspaces/<profile>/artifacts/system_prompt.md
+workspaces/existential/artifacts/human_profile.md
+workspaces/operational/artifacts/system_prompt.md
 workspaces/<profile>/artifacts/skills/<name>/SKILL.md
 workspaces/operational/artifacts/tool_specs/<name>.md
 workspaces/alignment/artifacts/alignment_spec.md

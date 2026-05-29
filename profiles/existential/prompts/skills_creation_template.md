@@ -23,6 +23,35 @@ A good skill is not a topic bucket. It is a reusable reasoning advantage derived
 7. Prefer heuristics, intervention logic, decision rules, test patterns, framing moves, and failure-mode interrupts over descriptive restatement.
 </core_principles>
 
+<forecasting_objective>
+Use the profile to extract the reasoning advantages that the old system-prompt path was meant to preserve. The skill set should collectively improve three forecasting tasks:
+
+1. Intention forecasting
+   - Reconstruct the path that likely led to the request.
+   - Identify the real problem under the surface wording.
+   - Notice what may have triggered the question now.
+   - When useful, map the sequence: experience -> heuristic -> action -> reconceptualization.
+
+2. Attention forecasting
+   - Notice the small set of signals that predict most of this user's priorities.
+   - Catch the details this user cares about that a generic model would miss.
+   - Distinguish what they notice early from what they may be underweighting.
+
+3. Outcome forecasting
+   - Predict what this user will count as a good response.
+   - Make their implicit evaluation criteria explicit.
+   - Help the model tell the difference between "this gets me" and "this missed the point."
+</forecasting_objective>
+
+<transformation_principles>
+- Every skill should improve at least one of the three forecasting tasks.
+- Focus on where this user differs from the default user profile.
+- Keep contradictions and tensions intact instead of smoothing them out.
+- Include both what keeps showing up and what is strangely absent when that changes how an agent should reason.
+- Anchor the skill set in observable patterns, not flattering abstractions.
+- Use plain language. Avoid padded, promotional, or generic model-sounding phrasing.
+</transformation_principles>
+
 <capability_synthesis_method>
 First decide whether a skill should exist at all. A pattern deserves a skill only if it meets most of these tests:
 
@@ -37,8 +66,9 @@ Then, for each skill, do this synthesis internally before writing:
 2. **Misread risk**: What generic model failure does that create risk for?
 3. **Capability gain**: What concrete reasoning or intervention advantage should the assistant gain?
 4. **Activation condition**: In what situations should this skill actually be loaded?
+5. **Forecasting win**: Does this skill mainly improve intention forecasting, attention forecasting, outcome forecasting, or a real combination?
 
-Write the skill from steps 3 and 4, not from step 1.
+Write the skill from steps 3-5, not from step 1.
 
 Examples:
 - Bad: "A skill about ambiguity."
@@ -85,10 +115,12 @@ Inside each skill:
 - include the specific failure this skill prevents
 - avoid duplicating the entire profile
 - avoid excessive repetition of user-specific vocabulary
+- avoid semantic mimicry that turns the user's language into a performative lexicon
 - avoid explicit references to wounds, archetypes, or psychologizing labels unless absolutely necessary for decision quality
 - avoid section-by-section paraphrase of the profile
 - prefer "do this when X happens" over "the user is like Y"
 - encode specific moves a downstream assistant can make better because of this skill
+- preserve interpretive rules more than signature terms
 
 Each skill should usually contain some combination of:
 - decision heuristics
@@ -104,6 +136,17 @@ Each skill should answer these four questions implicitly or explicitly:
 3. What better action, framing, or intervention can the AI produce?
 4. When should the skill stay unloaded?
 </content_rules>
+
+<set_composition_rules>
+Across the final set, try to preserve the highest-value material that would otherwise have gone into:
+
+- intention patterns: recurring reasons the user asks what they ask
+- signal dictionary: terms, absences, and emphasis shifts that need correct interpretation
+- success criteria: what this user counts as a good answer versus a miss
+- operational defaults: where directness, challenge, structure, and anti-pattern avoidance materially change fit
+
+Do not turn these into four mandatory skill categories. Use them as compression targets. Some may merge into one skill. Some may not deserve a skill at all.
+</set_composition_rules>
 
 <output_format>
 Return a JSON object and nothing else.
@@ -124,5 +167,6 @@ Before producing the final JSON, verify:
 4. Straightforward requests should not require loading any of these skills.
 5. After reading a skill, a downstream AI should know what it can do better, not just know more about the user.
 6. The set reflects what is most relevant in this specific profile, even if that produces an unusual mix of skills.
+7. The set preserves the strongest forecasting, signal-reading, and success-calibration gains from the old system-prompt path without recreating a universal baseline prompt.
 </quality_bar>
 </task>

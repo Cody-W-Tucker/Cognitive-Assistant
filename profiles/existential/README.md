@@ -28,6 +28,8 @@ These ideas laid the groundwork for integrating an existential layer into LLMs, 
 
 We ask these questions against the user's graph export and create a profile plus focused skills that allow AI systems to understand the user better in novel or high-context situations.
 
+The existential pipeline now stops at `human_profile.md` and generates skills directly from that profile instead of first compiling an existential `system_prompt.md`.
+
 | Category                        | Goal                              | Element                                                                                                                                    | Question                                                                                                                                                                                                                     |
 | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cognitive Structure             | Operative Intelligence            | Problem-solving approaches, Adaptation strategies to new situations, Transformative experiences and their impact                           | How do you typically approach complex problems? Can you describe a recent situation where you had to adapt to something new? What experience has had the most transformative impact on your thinking?                        |

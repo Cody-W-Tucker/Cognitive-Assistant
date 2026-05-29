@@ -42,7 +42,9 @@
           inherit skillsDir systemPromptFile skillNames;
           skillFile = name: skillsDir + "/${name}/SKILL.md";
         };
-      existential = mkLayerExports ./workspaces/existential;
+      existential = (mkLayerExports ./workspaces/existential) // {
+        systemPromptFile = ./workspaces/existential/artifacts/human_profile.md;
+      };
       operational = (mkLayerExports ./workspaces/operational) // {
         toolSpecs = {
           memory = ./workspaces/operational/artifacts/tool_specs/memory.md;
