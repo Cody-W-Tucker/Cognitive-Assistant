@@ -13,13 +13,12 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-Each profile exposes its generated base context artifact, the list of skills
-currently in the workspace, and a helper to read a specific skill file. The
-operational profile additionally exports per-tool specs.
+Each profile exposes the generated skills currently in the workspace and a
+helper to read a specific skill file. The operational profile additionally
+exports per-tool specs.
 
 | Output | Existential | Operational | Alignment |
 |---|---|---|---|
-| `lib.<profile>.contextFile` | yes | yes | — |
 | `lib.<profile>.skillsDir` | yes | yes | — |
 | `lib.<profile>.skillNames` | yes | yes | — |
 | `lib.<profile>.skillFile <name>` | yes | yes | — |
@@ -33,9 +32,8 @@ Skill names are dynamic — read them from `skillNames` rather than hardcoding.
 
 ## Downstream Usage
 
-Treat the exported base context artifact as the base layer and the generated
-skills as conditional overlays. For both profiles, `contextFile` points to
-`human_profile.md`. Then map `skillNames` to skill contents:
+Use the generated skills as conditional overlays. Read `skillNames`, then map
+them to `skillFile` contents:
 
 ```nix
 { inputs, ... }:
@@ -45,7 +43,6 @@ let
   readSkill = name: builtins.readFile (layer.skillFile name);
 in
 {
-  programs.opencode.context = builtins.readFile layer.contextFile;
   programs.opencode.skills = builtins.listToAttrs (
     map (name: { inherit name; value = readSkill name; }) layer.skillNames
   );

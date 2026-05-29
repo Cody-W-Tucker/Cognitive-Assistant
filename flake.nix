@@ -33,13 +33,12 @@
         workspaceDir:
         let
           skillsDir = workspaceDir + "/artifacts/skills";
-          contextFile = workspaceDir + "/artifacts/human_profile.md";
           skillNames = builtins.attrNames (
             nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
           );
         in
         {
-          inherit skillsDir contextFile skillNames;
+          inherit skillsDir skillNames;
           skillFile = name: skillsDir + "/${name}/SKILL.md";
         };
       existential = mkLayerExports ./workspaces/existential;
