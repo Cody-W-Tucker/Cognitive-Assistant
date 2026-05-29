@@ -2,8 +2,8 @@
 """Profile-aware prompt creator.
 
 Loads the most recent `questions_with_answers_rlm_*.csv` from the active
-profile's data directory, formats it into context (with human answers if the
-profile carries them), and runs the 2-call refinement pipeline:
+profile's data directory, formats it into context, and runs the 2-call
+refinement pipeline:
 
   1. initial_template -> human_profile.md
   2. refine_template  -> system_prompt.md
@@ -44,8 +44,6 @@ def load_dataset_context(config: Config) -> str:
     redact = config.get_redaction_function()
     section_template = config.profile.section_header_template
     answer_label = config.profile.answer_label
-    include_human = config.profile.include_human_answers
-
     formatted_sections: List[str] = []
     redaction_count = 0
 
@@ -59,54 +57,23 @@ def load_dataset_context(config: Config) -> str:
 
         qa_sections: List[str] = []
 
-        if include_human:
-            iter_columns = list(
-                zip(
-                    config.csv.QUESTION_COLUMNS,
-                    config.csv.HUMAN_ANSWER_COLUMNS,
-                    config.csv.ANSWER_COLUMNS,
-                )
-            )
-        else:
-            iter_columns = list(
-                zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS)
-            )
+        iter_columns = list(zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS))
 
         for index, columns in enumerate(iter_columns, start=1):
-            if include_human:
-                question_col, human_col, answer_col = columns
-                question = row.get(question_col, "").strip()
-                human_answer = row.get(human_col, "").strip()
-                ai_answer = row.get(answer_col, "").strip()
+            question_col, answer_col = columns
+            question = row.get(question_col, "").strip()
+            answer = row.get(answer_col, "").strip()
 
-                if not question or (not human_answer and not ai_answer):
-                    continue
+            if not question or not answer:
+                continue
 
-                redacted_human = redact(human_answer)
-                redacted_ai = redact(ai_answer)
-                if redacted_human != human_answer or redacted_ai != ai_answer:
-                    redaction_count += 1
+            redacted_answer = redact(answer)
+            if redacted_answer != answer:
+                redaction_count += 1
 
-                qa_sections.append(
-                    f"{index}. {question}\n\n"
-                    f"   Human Answer: {redacted_human}\n\n"
-                    f"   {answer_label}: {redacted_ai}"
-                )
-            else:
-                question_col, answer_col = columns
-                question = row.get(question_col, "").strip()
-                answer = row.get(answer_col, "").strip()
-
-                if not question or not answer:
-                    continue
-
-                redacted_answer = redact(answer)
-                if redacted_answer != answer:
-                    redaction_count += 1
-
-                qa_sections.append(
-                    f"{index}. {question}\n\n   {answer_label}: {redacted_answer}"
-                )
+            qa_sections.append(
+                f"{index}. {question}\n\n   {answer_label}: {redacted_answer}"
+            )
 
         if qa_sections:
             entry = section_template.format(category=category) + "\n\n"

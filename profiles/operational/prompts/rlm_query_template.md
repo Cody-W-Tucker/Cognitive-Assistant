@@ -21,6 +21,12 @@ Answer the following question using only evidence that can be supported from the
 </question>
 
 Requirements:
+- when `graph_pages.jsonl` and `mention_evidence.jsonl` are present, use them as a structured evidence layer
+- treat `mention_evidence` as the stronger source for concrete claims because it preserves source-note lines and repeated reference patterns
+- treat `graph_pages` as canonical background for stable entities, themes, and summaries, but do not let a single page body carry a behavioral claim by itself when stronger artifact traces are available
+- for questions about workflow, quality thresholds, sequencing, repair, or proof standards, prefer direct work artifacts over graph summaries when they diverge
+- for questions about recurring themes, enduring mission, people, projects, concepts, or long-running relational patterns, let the graph layer sharpen pattern selection and entity continuity
+- use graph structure to compress and disambiguate the corpus, not to override stronger read-backed behavioral evidence
 - build a high-salience composite example from the strongest repeated evidence you actually read
 - the composite should feel like the most representative way this user behaves under the conditions named in the question
 - infer the tacit operational rule that this composite and its supporting reads justify

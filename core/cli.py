@@ -2,8 +2,8 @@
 """Unified CLI entry point: `python -m core <command> --profile <name>`.
 
 Subcommands:
-  ingest-interview   Interactive human interview (existential-style profiles)
   ingest-corpus      Normalize intake exports into ready/*.jsonl (operational)
+  ingest-substrate   Project schema graph/focus exports into ready/*.jsonl packets
   ask-questions      Run RLM against questions.csv -> answers CSV
   build-prompts      2-call refinement -> human_profile.md + system_prompt.md
   build-skills       Generate skills/ from latest human_profile.md
@@ -40,35 +40,36 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser(
-        "ingest-interview",
-        help="Run the interactive human interview (existential profiles).",
-    ).add_argument("--resume", action="store_true", help="Resume the most recent session")
-
-    parser_interview = subparsers.choices["ingest-interview"]
-    parser_interview.add_argument(
-        "--output", help="Custom output filename (within the profile data dir)"
-    )
-    parser_interview.add_argument(
-        "--questions-file",
-        type=Path,
-        help="Path to a custom questions CSV (default: profile questions.csv)",
-    )
-
-    subparsers.add_parser(
         "ingest-corpus",
         help="Normalize intake exports into ready/*.jsonl (operational profiles).",
+    )
+
+    substrate_parser = subparsers.add_parser(
+        "ingest-substrate",
+        help="Project schema graph/focus exports into ready/*.jsonl packets.",
+    )
+    substrate_parser.add_argument(
+        "--graph",
+        type=Path,
+        help="Path to a schema graph.json export.",
+    )
+    substrate_parser.add_argument(
+        "--focus",
+        type=Path,
+        action="append",
+        default=[],
+        help="Path to a schema focus-bundle.json export. Repeat for multiple bundles.",
+    )
+    substrate_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Output directory for JSONL packets (default: workspaces/<profile>/data/ready/substrate)",
     )
 
     ask_parser = subparsers.add_parser(
         "ask-questions",
         help="Run RLM against the profile's questions.csv.",
     )
-    ask_parser.add_argument(
-        "--filesystem-only",
-        action="store_true",
-        help="Use filesystem-only RLM prompt (existential profiles).",
-    )
-
     subparsers.add_parser(
         "build-prompts",
         help="2-call refinement: human_profile.md + system_prompt.md.",
@@ -182,25 +183,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         config = _resolve_config(args)
 
-    if args.command == "ingest-interview":
-        from core import ingest_interview
-
-        return ingest_interview.run(
-            config,
-            resume=args.resume,
-            output=args.output,
-            questions_file=args.questions_file,
-        )
-
     if args.command == "ingest-corpus":
         from core import ingest_corpus
 
         return ingest_corpus.run(config)
 
+    if args.command == "ingest-substrate":
+        from core import ingest_substrate
+
+        return ingest_substrate.run(
+            config,
+            graph_path=args.graph,
+            focus_paths=args.focus,
+            output_dir=args.output_dir,
+        )
+
     if args.command == "ask-questions":
         from core import question_asker
 
-        return question_asker.run(config, filesystem_only=args.filesystem_only)
+        return question_asker.run(config)
 
     if args.command == "build-prompts":
         from core import prompt_creator

@@ -31,7 +31,6 @@ SCRIPT_MODULES = [
 _PLACEHOLDER_FIXTURES = {
     "synthesis_prompt": "sample synthesis",
     "question": "sample question",
-    "human_answer": "sample human answer",
     "category": "sample category",
     "goal": "sample goal",
     "element": "sample element",
@@ -59,7 +58,6 @@ def check_prompt_rendering(config: Config) -> List[str]:
         "refine_template": ["existing_answer", "context"],
         "skills_creation_template": ["bio_content"],
         "rlm_query_template": profile.rlm_prompt_placeholders,
-        "rlm_query_template_filesystem_only": ["synthesis_prompt", "question"],
         "tool_specs_creation_template": [
             "bio_content",
             "supported_tools",

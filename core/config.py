@@ -69,11 +69,7 @@ class LayerProfile:
     # RLM prompt placeholder set used by question_asker and health_check fixtures
     rlm_prompt_placeholders: List[str] = field(default_factory=list)
 
-    # CSV schema
-    include_human_answers: bool = False
-
     # Pipeline gates
-    has_interview_ingest: bool = False
     has_corpus_ingest: bool = False
     has_tool_specs: bool = False
     supported_tools: dict[str, str] = field(default_factory=dict)
@@ -123,22 +119,19 @@ EXISTENTIAL_PROFILE = LayerProfile(
     workspace_dir=ROOT_DIR / "workspaces" / "existential",
     questions_csv=ROOT_DIR / "profiles" / "existential" / "questions.csv",
     prompts_dir=ROOT_DIR / "profiles" / "existential" / "prompts",
-    rlm_review_paths=[
-        Path("/home/codyt/Knowledge/Personal/Journal"),
-        Path("/home/codyt/Knowledge/Personal/Knowledge"),
+    rlm_review_paths=None,
+    rlm_review_globs=[
+        "ready/substrate/graph_pages.jsonl",
+        "ready/substrate/mention_evidence.jsonl",
     ],
-    rlm_review_globs=None,
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
         "refine_template": "refine_template.md",
         "skills_creation_template": "skills_creation_template.md",
         "rlm_query_template": "rlm_query_template.md",
-        "rlm_query_template_filesystem_only": "rlm_query_template_filesystem_only.md",
     },
-    rlm_prompt_placeholders=["synthesis_prompt", "question", "human_answer"],
-    include_human_answers=True,
-    has_interview_ingest=True,
+    rlm_prompt_placeholders=["synthesis_prompt", "question"],
     has_corpus_ingest=False,
     has_tool_specs=False,
     section_header_template="# Understanding: **{category}**",
@@ -169,8 +162,6 @@ OPERATIONAL_PROFILE = LayerProfile(
         "element",
         "question",
     ],
-    include_human_answers=False,
-    has_interview_ingest=False,
     has_corpus_ingest=True,
     has_tool_specs=True,
     supported_tools={
@@ -283,7 +274,7 @@ def _resolve_globs(base_dir: Path, patterns: Iterable[str]) -> List[Path]:
 
 @dataclass
 class CSVConfig:
-    """CSV schema, parameterized by whether the profile carries human answers."""
+    """CSV schema for profile question and answer datasets."""
 
     profile: LayerProfile
     DELIMITER: str = ","
@@ -300,12 +291,6 @@ class CSVConfig:
     )
 
     @property
-    def HUMAN_ANSWER_COLUMNS(self) -> List[str]:
-        if not self.profile.include_human_answers:
-            return []
-        return ["Human_Answer 1", "Human_Answer 2", "Human_Answer 3"]
-
-    @property
     def FIELDNAMES(self) -> List[str]:
         base = [
             "Category",
@@ -313,8 +298,6 @@ class CSVConfig:
             "Element",
             *self.QUESTION_COLUMNS,
         ]
-        if self.profile.include_human_answers:
-            base.extend(self.HUMAN_ANSWER_COLUMNS)
         base.extend(self.ANSWER_COLUMNS)
         return base
 
@@ -364,10 +347,6 @@ class PromptsConfig:
         return self._load("rlm_query_template")
 
     @property
-    def rlm_query_template_filesystem_only(self) -> str:
-        return self._load("rlm_query_template_filesystem_only")
-
-    @property
     def tool_specs_creation_template(self) -> str:
         return self._load("tool_specs_creation_template")
 
@@ -381,7 +360,6 @@ class OutputConfig:
     """Output file naming patterns."""
 
     QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_rlm_{timestamp}.csv"
-    HUMAN_INTERVIEW_PATTERN: str = "human_interview_{timestamp}.csv"
     TIMESTAMP_FORMAT: str = "%Y%m%d_%H%M%S"
 
 

@@ -47,13 +47,13 @@ class APIConfig:
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
             "initial_model": os.getenv(
                 "ANTHROPIC_INITIAL_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
             ),
             "refine_model": os.getenv(
                 "ANTHROPIC_REFINE_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
             ),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-7"),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "1_000_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "128_000")),
         },

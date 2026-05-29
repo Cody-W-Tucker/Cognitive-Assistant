@@ -8,8 +8,18 @@ Existential layer handles ideation/motivation; operational adds extracted rules 
 ## Workflow
 
 1. Analyze user's outputs to uncover implicit habits (e.g., "Check mobile first" or "Prioritize by ROI").
-2. Enhance with industry standards.
-3. Process into datasets for AI that mirrors user's style.
+2. Optionally ingest the schema graph export into `workspaces/operational/data/ready/substrate/` before question asking.
+   Use `python -m core --profile operational ingest-substrate --graph /path/to/graph.json`.
+3. Run `ask-questions` so RLM can read the graph packets alongside the rest of `ready/**/*.jsonl`.
+4. Enhance with industry standards.
+5. Process into datasets for AI that mirrors user's style.
+
+When the graph export is present, use it as a structured evidence layer:
+
+- `mention_evidence.jsonl` should carry more weight for concrete claims because it preserves matched lines from source notes.
+- `graph_pages.jsonl` should carry less weight for behavioral claims and more weight for stable entity/theme continuity.
+- For workflow, sequencing, repair, and quality-threshold questions, direct work traces should beat graph summaries when they conflict.
+- For mission, recurring concepts, people, projects, and long-running patterns, the graph layer should help disambiguate and reinforce what the broader corpus is already showing.
 
 ## Dataset Example
 

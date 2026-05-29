@@ -6,20 +6,19 @@ Eventually, the Existential Layer for LLMs will be implicit through the interpla
 
 ## How it Works
 
-1. Have a journal or text that describes your psychological and existential patterns.
-    - You can use my journal prompt below if you don't enjoy this form of writing.
-2. Embed text you've written into a vector store.
-3. Run the Question Asker.
-    - It will ask questions to your journals designed to understand you.
-4. Run the profile and skills generators.
-    - They create a human-readable profile plus lazily loaded skills that downstream AI systems can use when generic behavior is not enough.
-    - Generated outputs are written to `artifacts/`.
+1. Export the graph and ingest it into the existential workspace.
+   Use `python -m core --profile existential ingest-substrate --graph /path/to/graph.json`.
+2. Run the Question Asker.
+   It will ask the existential question set against the graph packets in `workspaces/existential/data/ready/substrate/`.
+3. Run the profile and skills generators.
+   They create a human-readable profile plus lazily loaded skills that downstream AI systems can use when generic behavior is not enough.
+   Generated outputs are written to `artifacts/`.
   
 ### Updated Pipeline Method
 
 Now you can use the [Open-WebUI Pipelines Code](pipelines/songbird.py) to carry this process out on the fly.
 
-This new method creates a profile of the question and its semantically similar context, rather than relying on the interview process.
+This method creates a profile from the graph-backed evidence rather than relying on a separate interview track.
 
 ## What it is
 
@@ -27,7 +26,7 @@ These scripts create a profile and skill set based on philosophical inquiries by
 
 These ideas laid the groundwork for integrating an existential layer into LLMs, enabling them to contextualize their actions in alignment with long-term human goals and ethical considerations.
 
-We ask these questions to the user's journal and create a profile plus focused skills that allow AI systems to understand the user better in novel or high-context situations.
+We ask these questions against the user's graph export and create a profile plus focused skills that allow AI systems to understand the user better in novel or high-context situations.
 
 | Category                        | Goal                              | Element                                                                                                                                    | Question                                                                                                                                                                                                                     |
 | ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

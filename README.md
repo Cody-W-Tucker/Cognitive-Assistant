@@ -116,7 +116,7 @@ The repo runs as one unified pipeline parameterized by a layer profile
 
 ```bash
 # Existential profile
-python -m core --profile existential ingest-interview
+python -m core --profile existential ingest-substrate --graph /path/to/graph.json
 python -m core --profile existential ask-questions
 python -m core --profile existential build-prompts
 python -m core --profile existential build-skills

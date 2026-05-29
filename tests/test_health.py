@@ -25,6 +25,7 @@ SCRIPT_MODULES = [
     "core.prompt_creator",
     "core.skills_creator",
     "core.question_asker",
+    "core.ingest_substrate",
     "core.health_check",
     "core.cli",
     "core.soul_creator",

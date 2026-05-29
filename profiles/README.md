@@ -33,13 +33,13 @@ At runtime, `core/config.py` maps each registered profile to:
 - a `workspace_dir` in `workspaces/<name>/`
 - a `questions_csv` file
 - a `prompts_dir`
-- pipeline capability flags such as whether the profile supports interview ingest, corpus ingest, or tool spec generation
+- pipeline capability flags such as whether the profile supports corpus ingest or tool spec generation
 
 That profile declaration determines which commands are valid and which artifacts get produced.
 
 Examples:
 
-- `existential` enables `ingest-interview` and includes human answers in `questions.csv` processing.
+- `existential` reads graph-derived JSONL packets from its workspace and builds prompts from those answers.
 - `operational` enables `ingest-corpus` and `build-tool-specs`.
 - `alignment` is not a normal `--profile` target; it sits above both profiles and consumes their generated outputs.
 

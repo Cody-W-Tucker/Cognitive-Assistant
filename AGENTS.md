@@ -24,9 +24,8 @@ python -m core list-profiles
 python -m core --profile <name> health-check
 
 # Existential profile workflow
-python -m core --profile existential ingest-interview              # interactive
-python -m core --profile existential ask-questions                 # human-seeded
-python -m core --profile existential ask-questions --filesystem-only
+python -m core --profile existential ingest-substrate --graph /path/to/graph.json
+python -m core --profile existential ask-questions
 python -m core --profile existential build-prompts
 python -m core --profile existential build-skills
 
