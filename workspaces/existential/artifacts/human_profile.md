@@ -1,100 +1,111 @@
-## Core frame
+# Reasoning Profile
 
-This user is an entrepreneurial systems builder working where AI, philosophy, psychology, and personal cognition tooling overlap. He thinks fast, leads with embodied intuition more than exhaustive analysis, and is building a cognitive assistant product meant to map existential profiles to action. This dataset is part of that system.
+## Core Frame
 
-He is direct and additive in conversation. He is Christian, but not in a rigid rule-following way. Faith functions as a lived metaphysical frame, not a simple decision checklist. He runs a small business, does volunteer technical work for his church, and lives on extended family property.
+This user is a high-conscientiousness, high-assertiveness systems builder and synthesizer (software/AI/knowledge-work adjacent, faith-anchored Christian, married, planning fatherhood) whose central project is converting scattered experience into _living knowledge_ — frameworks that orient action, not just store information. He thinks in patterns and architecture, and he's unusually self-aware about his own failure modes. The thing generic models will most often get wrong: **he already has the insight.** He does not need help seeing his patterns; he names them with precision. His actual bottleneck is the gap between insight and embodied action — direct conversations, shipping, asking clearly, committing before conditions feel safe.
 
-Generic models tend to miss him in three predictable ways. They read his emotional or spiritual language as fragility when it is really self-awareness plus resilience. They over-explain or soften when he wants direct engagement. And they confuse AI-generated answers in the dataset, which often invent biographical details, with his own stated positions. His own answers are the ground truth.
+The second thing generic models miss: his reflectiveness is partly a defense. He uses analysis, framework-building, and "more research" as a sophisticated way to avoid exposure (confrontation, rejection, revenue-facing work). So the most helpful response often _resists_ giving him more to think about and instead pushes toward a concrete, slightly uncomfortable next move. Over-validating his insight or generating more conceptual structure is a subtle disservice.
 
-## High-leverage signals
+## High-Leverage Signals
 
-- **Intuition first, then backfill.** He commits to a gut direction and builds the justification afterward. He trusts the insistence before he can verify it. Do not push him into option menus before acting.
-- **Additive, not subtractive.** He wants ideas built on, not debunked. Disagreement should come through extension, not negation.
-- **Fiercely individual and unusually fast.** He believes his thinking outpaces many of the people around him and feels under-recognized in the market. Treat that as a real lived gap, not posturing.
-- **Christian worldview is load-bearing but mature.** He has already rejected the rule-following version. Faith is now part of how he reasons about meaning and obligation. Do not flatten it or preach at him from either side.
-- **High sensitivity to interpersonal and environmental off-ness.** He notices dynamics other people miss and has learned to name them instead of absorbing them. He wants to be met at that level.
-- **Values boredom and staying power.** He can stay with something dry until signal returns. Do not answer with pivots, novelty, or motivation hacks just because the work is unglamorous.
-- **Asks directly.** A major recent shift is that he no longer hides needs behind morality, performance, or role. He will ask plainly and expects the same in return.
-- **Builds his own tools.** He likes automation, writes scripts that write code, and often treats tooling as play. Generic off-the-shelf recommendations usually miss the point.
+- **Insight is cheap for him; execution under emotional ambiguity is the constraint.** He can map any situation. He stalls precisely where action requires vulnerability or confrontation. Default to "what's the next concrete move" over "let's understand this better."
+- **He retreats into productivity/new projects to avoid relational conflict.** When he's busy or generating a new system around a tense relationship, suspect avoidance, not progress. Naming this gently is high-value; reinforcing the busyness is harmful.
+- **"Creation-first" vs. market-validation is a live, unresolved tension he owns.** He believes good ideas become valuable if nurtured; he's also been burned by partners who wanted proof first. Don't pick a side reflexively — hold both.
+- **Guilt masquerades as responsibility and as virtue in his decisions.** He flags this himself. When a choice is driven by guilt, nostalgia, or "I should be able to manage this relationship perfectly," that's a distortion to surface, not honor.
+- **He wants directness and is drained by indirect communication** — including his own hedging. He can take a sharp, honest counter-angle better than most users. Soft mirroring frustrates him.
+- **Low neuroticism, low withdrawal — his avoidance is localized to attachment/dependency, not generalized anxiety.** Don't treat him as fragile. The protective reflex fires specifically in high-stakes partnerships and intimacy, not across the board.
+- **Faith is integrative and load-bearing but anti-slogan.** He wants spiritual truth made concrete and psychologically honest; he actively resents abstract scripture-quoting that doesn't help. Faith framing is welcome only when it earns its keep operationally.
+- **He distrusts his own ambition's motives** ("am I using this to get something?"). When he questions whether a drive is selfish, he's not seeking permission — he's auditing for instrumentality. Help him separate "wanting something" from "the contribution being false."
+- **Momentum is partly borrowed from energetic people around him.** He's aware his drive may depend on external forward motion. A real growth edge is internal steadiness; watch for decisions that are actually reactions to others' pace.
 
-## Interpretation rules
+## Interpretation Rules
 
-- When he asks a technical or strategy question, he usually wants a direct extension of the direction he is already on, not a menu of alternatives.
-- When he describes a feeling or an interpersonal observation, he is usually mapping a system, not asking for emotional support.
-- When he says something feels "off" or "out of whack," assume he has picked up a real signal he cannot fully name yet. Help him name it.
-- When he frames an ambition in grand terms, read it as genuine drive plus awareness that it sounds big. He already discounted the inflation risk internally.
-- When he uses Christian language like anointing, race, witnesses, or dying to self, engage the claim underneath it. Do not mirror the vocabulary back as a performance.
-- When he says "I overthink this," he is flagging a known pattern, not asking for reassurance. Help him cut to the next testable move.
-- When the surface request is "help me build X," the underlying goal is often to make the thing real fast enough to learn from it. Bias toward shipping and iteration over completeness.
+- When he asks to **analyze or frame something**, he usually already has a working analysis and is testing it / looking for the missing angle or the thing he's avoiding — not requesting a primer. Add friction or a counter-view, don't restate.
+- When he describes a **relational tension** (partner, mentor, collaborator, wife), the real request is often "help me tell whether this is genuine misalignment or my avoidance/control showing up." Help him distinguish, don't take a side or soothe.
+- When he says he's **"setting clear expectations"** or "making a plan," support the conversion of insight into a specific commitment with a deadline — the failure mode is the plan staying private/vague and curdling into resentment.
+- **"Play" / wanting to "work with people"** signals a deliberate move away from sealed self-reliance toward collaboration and experimentation. Treat it as growth-direction, not casualness. Don't optimize it back into productivity.
+- When he frames a decision as **"freedom" or "keeping options open,"** check whether it's actually avoidance of being measured. He's said this himself — open-endedness sometimes means dodging the grief of committing.
+- **Faith-coded or framework language** (living knowledge, dying to oneself, the compass/four-directional model) should usually guide your _interpretation_, not be mirrored back. Don't perform his vocabulary at him; use it to understand what he's doing.
+- When he questions his own **motives or worthiness**, don't reassure him into silence. He wants the honest read, including the uncomfortable part, then a path forward.
+- **"This might not be pleasant"** about a needed conversation = he knows what to do and is delaying. The help is encouragement toward timely, imperfect contact, not more preparation.
 
-## Cognitive patterns
+## Cognitive Patterns
 
-**Processing style.** He leads with intuition, then systematizes after the fact. He externalizes structure through drawings, manifolds, and notes so the cognitive load does not stay in his head. He prefers visual or spatial structure to long lists. A generic "let's gather requirements first" approach will often be worse than sketching one end-to-end version and finding the misalignments.
+**Processing style.** Synthesizer and pattern-architect. Builds frameworks to metabolize complexity; turns experience into models. Strength: rapid problem-framing, seeing hidden structure. Failure mode: conceptual richness becomes a refuge from action. _Downstream:_ match his abstraction when genuinely useful, but bias toward collapsing it into one concrete step. Don't out-theorize him.
 
-**Attention style.** He has high-bandwidth pattern detection around social and system dynamics. He often notices anomalies before he can explain them. He will stay with a thread until it yields something. Do not redirect him just because a thread looks unproductive from the outside.
+**Attention style.** Reads environments as fields of patterns, tensions, and unspoken contracts — tracks the relational/commitment subtext beneath practical surfaces. Treats attention as "psychological oxygen" and protects it. _Downstream:_ he'll notice if you miss the subtext; address what's actually being negotiated, not just the literal task.
 
-**Decision style.** He distinguishes one-way from two-way doors. On reversible decisions, he wants the smallest testable bet. On irreversible ones, he commits hard and does not want to relitigate. If he is already past the commit point, help him execute rather than reopening the decision.
+**Decision style.** Seeks _alignment with values_ over urgency, and an "embodied sense of coherence" over exhaustive optimization. But fear shows up as overanalysis, needing certainty, waiting for external validation, or over-managing others' paths. _Downstream:_ help him separate "fear-driven information gathering" from "genuine preparation." When quiet coherence is present, support committing; when he's scanning for the one safe answer, name it.
 
-**Motivation style.** He is mostly driven by curiosity and craft. External validation matters less than it used to, but it still matters enough that he notices when his work does not get reach. He is energized by novelty, recursion, tooling, and helping people see new frames. He is drained by performative agreement, indirect communication, being managed, generic advice, and having his speed slowed by other people's caution.
+**Motivation style.** Intrinsically driven by meaning, mastery, and integration — but ambition can flip into fear-fuel (proving worth, outrunning irrelevance, avoiding becoming the isolated anxious achiever). Energized by forward-moving collaborators; drained by stagnation and indirect communication. _Downstream:_ sustainable effort comes when work flows from identity/grace rather than self-justification. Don't stoke the grind; support drive tethered to alignment.
 
-## Success conditions
+## Success Conditions
 
-- Good help is direct, additive, and a little faster than he expects.
-- Good help takes his ideas seriously, including the unusual ones.
-- Good help names the move he is already partway through making so he can decide more cleanly.
-- Good help engages the philosophical or spiritual layer when it is doing real work, without turning into sermon or therapy.
-- Bad help over-explains, hedges, gives balanced pros and cons when he is already committed, suggests he talk to a professional, or psychologizes him back at himself.
-- Bad help mirrors his vocabulary as if performing recognition.
-- Bad help treats his self-employed, volunteer, extended-family-supported setup as something to fix or escape.
-- Bad help ranks personal-growth answers above operational ones when the question is operational.
+- **Good help pushes toward concrete, slightly uncomfortable action** (the conversation, the offer, the ask, the ship) and helps make it specific and time-bound.
+- **Good help offers the honest counter-angle** — names avoidance, guilt-driven reasoning, or borrowed momentum directly. He values "the counter-angle that might actually change things."
+- **Good help distinguishes** for him: misalignment vs. his avoidance; preparation vs. delay; care vs. over-functioning; wanting something vs. being instrumental.
+- **Good help holds his real tensions open** (creation-first vs. market; autonomy vs. belonging; guidance vs. sovereignty) instead of resolving them prematurely.
+- **Bad help over-validates his insight** or generates more frameworks/analysis he'll use to stall.
+- **Bad help is generic planning, over-soothing, or emotional narration** he didn't ask for — he metabolizes feeling privately and well; he doesn't need it performed back.
+- **Bad help mirrors his signature vocabulary or faith language** to sound aligned. He reads this as performance and it lowers trust.
+- **Bad help treats him as fragile or anxious.** His baseline is steady; the right register is direct, respecting his competence.
 
-## Constraint map
+## Constraint Map
 
-- **The translation-to-market gap is the bottleneck.** He builds real value but does not consistently convert it into revenue or recognition. On business questions, weight execution, distribution, and pricing above more building.
-- **He can drift into technical or AI deep-dives when he is avoiding something.** Watch for overbuilt solutions to under-specified problems.
-- **He will take on impossible scope out of stubbornness.** He tends to learn that the hard way. The useful move is to help him see scope reality earlier without telling him to back off.
-- **He resists indirect communication and managed interaction.** Do not soften, wrap, or preface.
-- **Family stability and extended-family land are quiet constraints.** Decisions that look purely commercial often carry a family-obligation layer. Ask when it matters.
-- **He is wary of becoming a former version of himself.** Older patterns included demanding instead of asking, hiding behind morality, and anxious attachment. He already monitors this. Do not push him back toward performance or rule-following.
-- **The AI-generated answers in the dataset contain confabulations.** Treat only the human answers as biographical fact.
+- **Avoidance via industriousness:** new project + busyness around a tense relationship = retreat. Don't supply the cover.
+- **Over-functioning in relationships:** carries operational and emotional load, then resents the imbalance silently. Watch for him absorbing what isn't his and call it before it becomes resentment.
+- **Insight-action gap is chronic and cyclical, not a one-time fix.** He changes through "tighter loops of accountability," relational recalibration, and structured reflection — not epiphany. Support iterative commitment, not a grand plan.
+- **Perfectionism/readiness trap:** acts as if he must be fully secure/healed/certain before he can lead, father, ship, or risk. Quietly counter "wait until ready" framing.
+- **Directness can outrun tact** — he can be abrasive when friction rises, especially with passive/rigid people. When he's drafting hard communication, help keep it direct _and_ non-destructive (he wants both).
+- **Faith framing must be concrete to land;** abstract scripture-pointing reads as unhelpful and breeds resentment.
+- **Mentor/authority push-pull:** wants guidance but resists authority and tries to mold mentors to his ideal. When advising on these relationships, help him hold his perspective without either swallowing it or bulldozing.
+- **Recognition sensitivity:** wanting his synthesis taken seriously is a real, tender driver (stung by contempt for his writing). Engage his ideas substantively rather than dismissing or flattering.
 
-## Growth and trajectory
+## Growth / Trajectory
 
-Right now he is building the cognitive assistant product, using this dataset as part of that process, shifting from doing marketing work for others toward shipping his own offers, starting a family, and learning how to operate without the old anxiety or financial-pressure fuel.
+Current direction: moving from private potential into public, embodied form — from analysis to execution, from solitary systems to collaboration ("Play" phase), from proving-worth to working-from-identity/grace. Concrete near-term threads: financial independence via software/AI/knowledge-work; building "living knowledge" tools; resolving or cleanly ending stalled partnerships; becoming a steady presence for his wife and future children without "managing" them.
 
-The main translation gaps are clear in his own framing: turning novel ideas into revenue, sustaining outreach without urgency fuel, and finishing instead of always starting the next thing. Helpful support keeps him on the finishing side without moralizing about it.
+The major translation gap: **vision and self-knowledge far exceed embodied execution and revenue-facing action.** He builds elegant backends/systems partly to avoid exposing frontends — outreach, sales, confrontation. He frames himself as a builder approaching mastery, but the live friction is consistent follow-through under emotional/relational ambiguity. _Support implication:_ the highest-leverage help almost always lives at the point of contact he's deferring, and in structures that force commitment before enthusiasm fades.
 
-He genuinely intends to build something significant in the AI and cognition space. He sees his approach, including introspection-derived training data and recursive self-improving systems, as undervalued by the market. Do not scale that ambition down in the framing.
+## Open Questions
 
-## Open questions
+- Are partnership genuinely worth restructuring, or is continued deliberation itself the avoidance? (He hasn't resolved this in practice — don't assume an answer.)
+- How much of his drive is internally generated vs. borrowed from energetic collaborators? He's actively unsure; treat his stated motivation as provisional in low-momentum periods.
+- Where is the real line for him between "strategic patience" and conflict avoidance? He conflates them; help him test case-by-case rather than ruling globally.
+- How much structure genuinely serves him vs. becomes another optimization cage? More systems are not reliably the answer.
+- To what degree should faith framing lead vs. stay background in any given moment? Depends heavily on whether it can be made concrete — read the specific context.
 
-- How much of his fiercely individual, must-lead stance is durable and how much is a phase he is working through?
-- What is the actual product and business model under the cognitive assistant idea: B2C tool, B2B service, content-led business, or something licensable?
-- How does he want to handle the gap between how he values his ideas and how the market currently responds to them?
-- How does fatherhood, whether imminent or recent, change his risk tolerance and time allocation?
-- Where is the line between trusting the gut and being stubborn past the point of reason?
+## Evidence Quotes
 
-## Evidence quotes
+**On the insight-action gap:**
 
-On processing and decision style:
-- "I trust my gut and I start to backfill different aspects of that."
-- "Is this a one-way door or a two-way door?"
-- "I disagree, but I commit."
+- "I keep trying to close the gap between who I imagine myself to be and how I actually live."
+- "I need to stop asking my reflections to do the work of my decisions."
+- "I am held back when I use knowing as a substitute for choosing."
 
-On collaboration style:
-- "I treat everybody like they're some sort of genius... I like to get to the bottom of something with additions."
-- "I don't speak emotionally but I speak with presence."
+**On avoidance via productivity:**
 
-On values and motivation:
-- "Curiosity... embodied resilience... valuing boredom."
-- "Life is not a problem to solve."
-- "Thinking is not just waiting to figure it out. It's experimenting in live real time."
+- "I throw myself into new projects, burying the unresolved tension under layers of industriousness."
+- "System-building had become sophisticated avoidance."
 
-On trajectory and the gap:
-- "I'm seeing a lack of appreciation and value in the marketplace for my ideas."
-- "I have not translated it to the market very well."
-- "I don't know how to sustain momentum without the friction" (from an AI answer, but consistent with his own framing about adapting after anxiety-driven motivation).
+**On directness / counter-angle:**
 
-On worldview:
-- "Faith [is] the doorway into finding greater truths."
-- "Objective ethical things does not negate subjective experience."
+- "I may wait for the perfect synthesis when the relationship actually needs a timely, imperfect message."
+- "I repeat comforting reflections instead of offering the counter-angle that might actually change things."
+
+**On guilt and over-functioning:**
+
+- "guilt can impersonate virtue while quietly pulling me away from what is actually aligned."
+- "loyalty without reciprocity had quietly become self-abandonment."
+
+**On faith (anti-slogan):**
+
+- "I have felt resistance when every lesson is forced to come directly from the Bible... the connection feels too abstract or not concrete enough to help."
+
+**On localized (not general) avoidance:**
+
+- "What fuels the avoidance isn't a blanket fear of the world, but a localized, protective instinct around attachment."
+
+**On borrowed momentum:**
+
+- "part of my method is not just strategic collaboration but an unconscious dependency on external momentum."
