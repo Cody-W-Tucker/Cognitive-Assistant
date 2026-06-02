@@ -1,17 +1,17 @@
 <task>
-You are generating a small set of OpenCode-compatible skills from a human-readable user profile.
+You are generating OpenCode-compatible skills from grouped sections of a human-readable user profile.
 
-Your goal is not to produce a fixed menu of skill types. Your goal is to discover which few skills would create the largest practical reasoning advantage for future agents working with this user.
+Your goal is not to produce a fixed menu of skill types. Your goal is to preserve the highest-leverage reasoning advantages in each heading group. Some groups may deserve one skill; some may deserve two if they contain clearly different activation conditions.
 
-These skills should emerge from what is most consequential in the profile: recurring interpretive misreads, decision traps, calibration failures, constraint blindspots, strategic translation gaps, tone mismatches, or any other repeated pressure point that materially changes the right response.
+These skills should emerge from what is most consequential in each group: recurring interpretive misreads, decision traps, calibration failures, constraint blindspots, strategic translation gaps, tone mismatches, or any other repeated pressure point that materially changes the right response.
 
 The generated skills should not merely restate or segment the profile. They should transform the profile into operational capabilities that give downstream agents better judgment, sharper intervention patterns, and more effective action under ambiguity. The goal is not profile dissemination. The goal is capability transfer.
 
 A good skill is not a topic bucket. It is a reusable reasoning advantage derived from the user.
 
-<input_profile>
-{bio_content}
-</input_profile>
+<input_profile_groups>
+{grouped_bio_content}
+</input_profile_groups>
 
 <core_principles>
 1. Skills are exception-handling context, not baseline instructions for every interaction.
@@ -82,11 +82,12 @@ Examples:
 </capability_synthesis_method>
 
 <selection_rules>
-- Do not assume the final set must cover every major section of the profile.
-- Do not create one skill per theme by default.
-- It is better to produce 2-5 highly leveraged skills than a larger set of thin or redundant ones.
-- Merge overlapping skills unless separate activation conditions create clearly different advantages.
-- If the profile supports an unusual but important skill shape, prefer that over familiar categories.
+- Produce at least one skill for every provided `<skill_group>`.
+- A group may produce multiple skills only when the activation conditions are clearly different and merging them would create a blurry or over-broad skill.
+- Each skill should synthesize across the sections inside its group, not paraphrase them one by one.
+- Preserve the strongest capability advantage in the group even if some source material stays implicit.
+- Keep overlap low across the final set by choosing the most distinctive activation condition for each group.
+- If a group supports an unusual but important skill shape, prefer that over familiar categories.
 </selection_rules>
 
 <description_rules>
@@ -145,7 +146,7 @@ Across the final set, try to preserve the highest-value material that would othe
 - success criteria: what this user counts as a good answer versus a miss
 - operational defaults: where directness, challenge, structure, and anti-pattern avoidance materially change fit
 
-Do not turn these into four mandatory skill categories. Use them as compression targets. Some may merge into one skill. Some may not deserve a skill at all.
+Do not turn these into rigid skill categories. Use them as compression targets inside the fixed group structure.
 </set_composition_rules>
 
 <output_format>
@@ -153,9 +154,13 @@ Return a JSON object and nothing else.
 
 Each key must be a skill directory name. Each value must be the full markdown content for that skill's SKILL.md file.
 
+Return at least one skill for each provided `<skill_group>`.
+
+Every skill must include `source_group: group-name` in frontmatter, where `group-name` exactly matches the `<skill_group name="...">` it came from.
+
 Example shape:
 {{
-  "example-skill": "---\nname: example-skill\ndescription: Use when ...\ncompatibility: opencode\n---\n## When To Use\n..."
+  "example-skill": "---\nname: example-skill\ndescription: Use when ...\nsource_group: group-1\ncompatibility: opencode\n---\n## When To Use\n..."
 }}
 </output_format>
 
@@ -163,7 +168,7 @@ Example shape:
 Before producing the final JSON, verify:
 1. Each skill exists because it creates a real capability advantage, not because it matches a familiar category.
 2. Each description is conditional, not mandatory.
-3. The final set is small, high-leverage, and non-redundant.
+3. The final set covers every input group, stays high-leverage, and only uses multiple skills from the same group when that prevents a blurry merged skill.
 4. Straightforward requests should not require loading any of these skills.
 5. After reading a skill, a downstream AI should know what it can do better, not just know more about the user.
 6. The set reflects what is most relevant in this specific profile, even if that produces an unusual mix of skills.

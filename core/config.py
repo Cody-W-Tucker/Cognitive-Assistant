@@ -16,7 +16,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional, Tuple
 
 # Make the repo root importable so `lib.*` resolves regardless of how callers
 # invoke the pipeline.
@@ -83,6 +83,9 @@ class LayerProfile:
     section_header_template: str = "# Understanding: **{category}**"
     answer_label: str = "AI Answer"
 
+    # Skills creator section grouping
+    skill_heading_groups: List[Tuple[str, List[str]]] = field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Profile registry — the two layer profiles
@@ -135,6 +138,17 @@ EXISTENTIAL_PROFILE = LayerProfile(
     has_tool_specs=False,
     section_header_template="# Understanding: **{category}**",
     answer_label="AI Answer",
+    skill_heading_groups=[
+        (
+            "group-1",
+            ["Core Frame", "High-Leverage Signals", "Interpretation Rules"],
+        ),
+        ("group-2", ["Success Conditions", "Constraint Map"]),
+        (
+            "group-3",
+            ["Growth / Trajectory", "Counterpart Implications", "Open Questions"],
+        ),
+    ],
 )
 
 OPERATIONAL_PROFILE = LayerProfile(
@@ -172,6 +186,28 @@ OPERATIONAL_PROFILE = LayerProfile(
     ],
     section_header_template="# Operational Category: **{category}**",
     answer_label="Operational Answer",
+    skill_heading_groups=[
+        (
+            "group-1",
+            ["Core Frame", "High-Leverage Signals", "Salience Structure"],
+        ),
+        (
+            "group-2",
+            ["Lived Thresholds", "Mode Shifts", "Breakdown and Repair"],
+        ),
+        (
+            "group-3",
+            ["Quality Detection", "Artifact Relation", "Success Conditions"],
+        ),
+        (
+            "group-4",
+            [
+                "Tensions and Tradeoffs",
+                "Boundary Conditions",
+                "Counterpart Implications",
+            ],
+        ),
+    ],
 )
 
 register_profile(EXISTENTIAL_PROFILE)

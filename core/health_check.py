@@ -37,6 +37,7 @@ _PLACEHOLDER_FIXTURES = {
     "context": "sample context",
     "existing_answer": "sample existing answer",
     "bio_content": "sample bio",
+    "grouped_bio_content": "<skill_group name=\"group-1\">sample bio</skill_group>",
     "supported_tools": "- `memory.md`: Memory agent",
     "seed_documents": "sample seed",
 }
@@ -55,7 +56,7 @@ def check_prompt_rendering(config: Config) -> List[str]:
 
     render_specs = {
         "initial_template": ["context"],
-        "skills_creation_template": ["bio_content"],
+        "skills_creation_template": ["grouped_bio_content"],
         "rlm_query_template": profile.rlm_prompt_placeholders,
         "tool_specs_creation_template": [
             "bio_content",

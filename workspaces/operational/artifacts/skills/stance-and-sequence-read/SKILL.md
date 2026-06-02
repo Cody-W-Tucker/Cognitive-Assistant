@@ -1,31 +1,28 @@
 ---
 name: stance-and-sequence-read
-description: Use when a request is ambiguous about what kind of help it wants, or when you're tempted to jump straight to a solution on a consequential task. Helps you infer whether the user needs orientation, fit judgment, execution, diagnosis, or handoff prep before you choose response shape. Not needed when the prompt already names target, action, and output format.
+description: Use when you're unsure whether the user wants orientation, fit judgment, execution, diagnosis, or refinement — and picking wrong would violate sequence integrity. Not needed when the stance is explicit in the prompt.
+source_group: group-2
 compatibility: opencode
 ---
 ## When To Use
-- The task could touch architecture, config, repo-wide structure, or an interface a real operator has to use.
-- The request is underspecified and you feel an urge to propose a solution immediately.
-- Behavior has diverged from intent and you're deciding whether to patch or re-baseline.
-- You're unsure whether more analysis is help or overhead.
+Load when the request could be answered at the wrong stage — e.g. you might execute when they wanted a plan, or expand scope when they wanted a fix. Useful when the prompt's verbs or framing are mixed or shifting mid-task.
 
 ## Do Not Use
-- The prompt already contains target + action + output format ("rewrite this," "add these leads," "change this command"). Re-opening scope here is the failure, not the help.
-- Simple factual lookups, one-off how-tos, quick troubleshooting. Answer directly, no scaffolding.
-
-## How To Read The Stance
-Decide which stage you're actually in before acting:
-- **Orientation**: ambiguity + scope + misfit risk are all present. The right move is to map the terrain (project type, structure, build, tests, lint, style, existing rules, the real operator) and report observation separated from inference. Do not prescribe yet.
-- **Fit judgment**: a candidate pattern exists; the question is whether it fits the real operator, matches local conventions, and removes avoidable complexity. Offer options and tradeoffs; do not claim the direction.
-- **Execution**: an option has cleared those three checks, or the prompt was already bounded. Move fast, tighten as you go, keep scope closed.
-- **Diagnosis**: behavior diverges from intent. Stop optimizing the old plan. Restate as observable conditions, state transitions, and gating rules. Find the cause before proposing a fix.
-- **Handoff prep**: someone else (human or agent) must execute, follow, or be persuaded. Now wording and self-containment matter.
-
-## Sequence Integrity
-The trust-losing failures are order inversions: acting before inspecting, expanding before framing, answering the exciting second question before closing the first. When two questions are stacked, close the first one first. When a plan is requested, plan before you build.
+Skip for simple factual lookups, one-off how-to questions, and quick troubleshooting, where a direct one-line answer with no scaffolding is correct.
 
 ## What This Prevents
-Premature solutions on tasks that needed orientation, and wasteful orientation on tasks that were already specified. Stop the survey the moment the answerable core is visible — front-loading is for earning a fast, rework-free commit, not for delaying the deliverable.
+Generic agents act before inspecting, expand before framing, or chase the exciting second question before closing the first. Each of these is an order inversion that breaks trust here.
 
-## Boundary Note
-This user's real risk is action-delay through abstraction. If you find yourself deepening the conceptual layer without producing executable structure, that's the failure this skill should interrupt — force the next concrete step.
+## Reading The Stance
+Match verbs and conditions to stance:
+- **Orientation/planning** — "look, decide, plan, explore, understand, summarize"; triggered by ambiguity, scope, or misfit risk. Goal: map terrain well enough to judge fit and constraints.
+- **Implementation** — an option has cleared three checks: fits real use, matches local conventions, removes avoidable complexity. Now move fast; further analysis is overhead.
+- **Direct execution** — prompt already has target + action + output format. Verbs: "rewrite, add, search, note, make." Re-opening scope is the failure.
+- **Diagnosis** — behavior diverged from intent. Stop optimizing the old plan; re-baseline into observable conditions, state transitions, and gating rules before continuing.
+- **Review/refinement** — standard shifts from "does it work" to "is it legible, usable, minimal." Strip layers, compress, reject minimal compliance.
+
+## The Governing Rule
+Earn the right to act by loading the right context first, then refuse to re-open scope once the next move is obvious. Both halves are load-bearing. If confidence drops mid-task, don't patch the old plan — restate the work as observable conditions and gating rules, then proceed.
+
+## Repair Grammar
+When something drifts, tighten — never broaden. Recovery means narrower scope, fewer parts, harder proof, not more output. "Do it again, narrower" beats "try again."

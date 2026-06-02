@@ -1,34 +1,26 @@
 ---
 name: earn-every-layer
-description: Use when the solution risks becoming structurally heavier than the job, or when inherited engineering defaults (config layers, factories, defensive scaffolding, branching) are creeping in. Helps you collapse to the smallest legible form that still does the work, judged against the real operator. Not needed when complexity is already minimal or the user explicitly asked for a robust system.
+description: Use when work is directionally right but risks becoming structurally heavier than the job — added abstraction, config layers, or defensive scaffolding. Not needed when standard scaffolds genuinely keep work small and testable.
+source_group: group-4
 compatibility: opencode
 ---
 ## When To Use
-- You're adding an abstraction, config layer, factory, or error-handling branch.
-- A pattern "seems overly complex" or you're reaching for ceremony because it's conventional.
-- The output has accreted moving parts that are harder to reason about than the original problem.
-- You're in review/refinement, where the standard is "legible, usable, minimal," not just "does it work."
+Load when you notice ceremony accreting: a config that "seems overly complex," an abstraction layer, a function store where a flat file would do, error handling the library already covers, or branching the type system makes unnecessary. Also when energy or momentum has dropped and the problem feels uncontrollable.
 
 ## Do Not Use
-- A choice is still reversible and exploratory — roughness, wrappers, and "for now" scaffolding are fine there.
-- A standard scaffold genuinely keeps work small and testable (MVP, small diffs, post-change checks). Those earn their keep.
-
-## The Test For Each Layer
-For every piece of structure, ask: why can't this collapse? A layer survives only if it materially improves clarity or control. Specifically challenge:
-- An if-tree the type system already makes unnecessary.
-- Local error handling the library already covers.
-- A function store where a flat config file would do.
-- Configurability or factories added before a second case actually exists.
-- Defensive checks that duplicate responsibility living upstream.
-
-## Operator Filter
-Before adopting a pattern, ask: is this a good pattern for the actual person who'll use it — a non-technical editor, a coding agent, a buyer reading copy? A clever pattern a non-technical user can't operate is a defect, not sophistication. Fit beats abstract correctness.
-
-## Repair When Overbuilt
-Don't add more to rescue it. Collapse: hardcode the config, remove the redundant handling, combine files, kill the unnecessary branching, point at the one obvious editable place. Recovery is reducing surface area, never expanding it.
+Don't strip for its own sake. This user readily adopts MVP, small diffs, and post-change checks — scaffolds that keep work small and testable earn their keep. The target is unjustified structure, not all structure. And don't apply this to comprehensive codebase summaries: there, completeness means "all the facts needed to act," which is not the same as overbuilding.
 
 ## What This Prevents
-Premature abstraction, defensive scaffolding that adds ceremony before value, and structure substituting for judgment. Standards survive on payoff, not convention.
+Overbuilt output that adds ceremony before value and is harder to operate than the problem requires. Also the live failure mode where conceptual fluency stalls the actual deliverable — insight that never becomes executable structure.
 
-## Boundary Note
-This user does ask for comprehensive coverage at times — that's not a contradiction. Completeness means "all the facts needed to act," never open-ended exhaustiveness or extra structure. Strip parts, not decision-relevant facts.
+## The Test For Each Layer
+Ask of every surviving piece: does this materially improve clarity or control, or does it survive only by convention? "This could just be a config file" is the canonical collapse move. Standards survive on payoff, not on being standard.
+
+## Compression Under Pressure
+Recovery here is constraint, not expansion: reduce scope, hardcode where safe, compress language, make the next step obvious. When stuck, shrink the problem to something inspectable — a hardcoded config, a scoped checklist, a concrete inventory. A crisp intermediate object proves the work is controllable again.
+
+## Forcing The Executable Step
+If the user is circling in the conceptual layer, don't mirror it back. Translate insight into structured inputs and concrete commands. Pair every interesting idea with the smallest runnable next move.
+
+## Reversibility Boundary
+Roughness is fine while the move is reversible — sketchy setups, temporary UI, "for now" scaffolding during exploration. The bar rises sharply the moment a choice becomes structural: core config, infrastructure, repeated workflows, operator-facing interfaces.

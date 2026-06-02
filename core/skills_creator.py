@@ -15,7 +15,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Set
 
 from core.config import Config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
@@ -40,7 +40,8 @@ class SkillsCreator:
         """Generate skill files from the selected bio."""
         resolved_bio_path = self._resolve_bio_path(bio_path)
         bio_content = resolved_bio_path.read_text(encoding="utf-8")
-        skills_payload = await self._generate_skill_documents(bio_content)
+        grouped_bio_content = self._build_grouped_bio_content(bio_content)
+        skills_payload = await self._generate_skill_documents(grouped_bio_content)
         resolved_output_dir = output_dir or self.config.paths.SKILLS_DIR
         self._write_skills(skills_payload, resolved_output_dir)
         return resolved_output_dir
@@ -60,9 +61,9 @@ class SkillsCreator:
             )
         return bio_files[-1]
 
-    async def _generate_skill_documents(self, bio_content: str) -> Dict[str, str]:
+    async def _generate_skill_documents(self, grouped_bio_content: str) -> Dict[str, str]:
         prompt = self.config.prompts.skills_creation_template.format(
-            bio_content=bio_content,
+            grouped_bio_content=grouped_bio_content,
         )
         response = await generate_text_async(
             self.handle,
@@ -73,6 +74,54 @@ class SkillsCreator:
         payload = self._parse_json_response(response)
         self._validate_payload(payload)
         return payload
+
+    def _build_grouped_bio_content(self, bio_content: str) -> str:
+        sections = self._parse_bio_sections(bio_content)
+        groups = self.config.profile.skill_heading_groups
+        if not groups:
+            raise ValueError(
+                f"Profile '{self.config.profile.name}' has no skill heading groups configured"
+            )
+
+        grouped_sections: List[str] = []
+        for group_name, headings in groups:
+            missing_headings = [heading for heading in headings if heading not in sections]
+            if missing_headings:
+                missing_text = ", ".join(missing_headings)
+                raise ValueError(
+                    f"Profile '{self.config.profile.name}' bio is missing grouped headings: "
+                    f"{missing_text}"
+                )
+
+            group_parts = [
+                f"<skill_group name=\"{group_name}\">",
+                "<source_sections>",
+            ]
+            for heading in headings:
+                group_parts.append(f"## {heading}\n{sections[heading].strip()}")
+            group_parts.extend(["</source_sections>", "</skill_group>"])
+            grouped_sections.append("\n\n".join(group_parts))
+
+        return "\n\n".join(grouped_sections)
+
+    def _parse_bio_sections(self, bio_content: str) -> Dict[str, str]:
+        section_matches = list(
+            re.finditer(r"^## (?P<heading>.+?)\n", bio_content, flags=re.MULTILINE)
+        )
+        if not section_matches:
+            raise ValueError("Bio content does not contain any level-2 headings")
+
+        sections: Dict[str, str] = {}
+        for index, match in enumerate(section_matches):
+            heading = match.group("heading").strip()
+            start = match.end()
+            end = (
+                section_matches[index + 1].start()
+                if index + 1 < len(section_matches)
+                else len(bio_content)
+            )
+            sections[heading] = bio_content[start:end].strip()
+        return sections
 
     def _parse_json_response(self, response: str) -> Dict[str, str]:
         match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", response)
@@ -90,11 +139,18 @@ class SkillsCreator:
         if not payload:
             raise ValueError("Generated skills payload is empty")
 
-        if len(payload) > 6:
+        expected_groups = {group_name for group_name, _ in self.config.profile.skill_heading_groups}
+        if len(payload) < len(expected_groups):
+            raise ValueError(
+                f"Generated {len(payload)} skills; expected at least {len(expected_groups)} to cover configured heading groups"
+            )
+
+        if len(payload) > 10:
             raise ValueError(
                 f"Generated too many skills ({len(payload)}); expected a small high-leverage set"
             )
 
+        seen_groups: Set[str] = set()
         for skill_name, content in payload.items():
             if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
                 raise ValueError(
@@ -108,6 +164,21 @@ class SkillsCreator:
                 raise ValueError(
                     f"Skill {skill_name} is missing required description frontmatter"
                 )
+            source_group_match = re.search(
+                r"^source_group:\s*(?P<group>[a-z0-9]+(?:-[a-z0-9]+)*)\s*$",
+                content,
+                flags=re.MULTILINE,
+            )
+            if source_group_match is None:
+                raise ValueError(
+                    f"Skill {skill_name} is missing required source_group frontmatter"
+                )
+            source_group = source_group_match.group("group")
+            if source_group not in expected_groups:
+                raise ValueError(
+                    f"Skill {skill_name} references unknown source_group '{source_group}'"
+                )
+            seen_groups.add(source_group)
             if "## When To Use" not in content:
                 raise ValueError(
                     f"Skill {skill_name} is missing '## When To Use' section"
@@ -118,6 +189,13 @@ class SkillsCreator:
                 )
             if len(content.strip()) < 200:
                 raise ValueError(f"Skill {skill_name} is unexpectedly short")
+
+        missing_groups = expected_groups - seen_groups
+        if missing_groups:
+            missing_text = ", ".join(sorted(missing_groups))
+            raise ValueError(
+                f"Generated skills did not cover all configured heading groups: {missing_text}"
+            )
 
     def _write_skills(self, payload: Dict[str, str], output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
