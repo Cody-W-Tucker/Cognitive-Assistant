@@ -17,14 +17,22 @@ class LLMHandle:
 
 
 def create_client(
-    api_config: Any, model: Optional[str] = None, async_mode: bool = False
+    api_config: Any,
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
+    async_mode: bool = False,
 ) -> LLMHandle:
     """Create a provider-specific client and retain provider metadata."""
-    client, resolved_model = api_config.create_client(model=model, async_mode=async_mode)
+    resolved_provider = provider or api_config.LLM_PROVIDER
+    client, resolved_model = api_config.create_client(
+        provider=resolved_provider,
+        model=model,
+        async_mode=async_mode,
+    )
     return LLMHandle(
         client=client,
         model=str(resolved_model or "unknown"),
-        provider=api_config.LLM_PROVIDER,
+        provider=resolved_provider,
         async_mode=async_mode,
     )
 

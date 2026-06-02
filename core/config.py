@@ -130,6 +130,7 @@ EXISTENTIAL_PROFILE = LayerProfile(
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
+        "ensemble_synthesis_template": "ensemble_synthesis_template.md",
         "skills_creation_template": "skills_creation_template.md",
         "rlm_query_template": "rlm_query_template.md",
     },
@@ -163,6 +164,7 @@ OPERATIONAL_PROFILE = LayerProfile(
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
+        "ensemble_synthesis_template": "ensemble_synthesis_template.md",
         "skills_creation_template": "skills_creation_template.md",
         "tool_specs_creation_template": "tool_specs_creation_template.md",
         "rlm_query_template": "rlm_query_template.md",
@@ -367,6 +369,10 @@ class PromptsConfig:
     @property
     def initial_template(self) -> str:
         return self._load("initial_template")
+
+    @property
+    def ensemble_synthesis_template(self) -> str:
+        return self._load("ensemble_synthesis_template")
 
     @property
     def skills_creation_template(self) -> str:

@@ -40,31 +40,36 @@ def check_script_imports(script_modules: Iterable[str]) -> List[str]:
     return issues
 
 
-def check_provider_setup(*, config, create_client: Callable) -> List[str]:
-    """Verify provider environment variables, package availability, and client creation."""
+def check_provider_setup(
+    *, config, create_client: Callable, providers: Iterable[str] | None = None
+) -> List[str]:
+    """Verify provider environment variables, packages, and client creation."""
     issues: List[str] = []
-    provider = config.api.LLM_PROVIDER
-    provider_config = config.api.PROVIDERS.get(provider)
+    provider_names = list(providers or [config.api.LLM_PROVIDER])
 
-    if not provider_config:
-        return [f"Unsupported provider configured: {provider}"]
+    for provider in provider_names:
+        provider_config = config.api.PROVIDERS.get(provider)
 
-    env_key = f"{provider.upper()}_API_KEY"
-    if not os.getenv(env_key):
-        issues.append(f"Missing environment variable: {env_key}")
+        if not provider_config:
+            issues.append(f"Unsupported provider configured: {provider}")
+            continue
 
-    package_name = "anthropic" if provider == "anthropic" else "openai"
-    try:
-        importlib.import_module(package_name)
-    except ImportError as exc:
-        issues.append(f"Missing Python package '{package_name}': {exc}")
-        return issues
+        env_key = f"{provider.upper()}_API_KEY"
+        if not os.getenv(env_key):
+            issues.append(f"Missing environment variable: {env_key}")
 
-    if os.getenv(env_key):
+        package_name = "anthropic" if provider == "anthropic" else "openai"
         try:
-            create_client(config.api)
-        except Exception as exc:
-            issues.append(f"Failed to create {provider} client: {exc}")
+            importlib.import_module(package_name)
+        except ImportError as exc:
+            issues.append(f"Missing Python package '{package_name}': {exc}")
+            continue
+
+        if os.getenv(env_key):
+            try:
+                create_client(config.api, provider=provider)
+            except Exception as exc:
+                issues.append(f"Failed to create {provider} client: {exc}")
 
     return issues
 

@@ -7,7 +7,7 @@ import unittest
 from types import SimpleNamespace
 from typing import Any
 
-from lib.llm import LLMHandle, close_client_async, generate_text
+from lib.llm import LLMHandle, close_client_async, create_client, generate_text
 
 
 class FakeMessages:
@@ -28,6 +28,22 @@ class FakeAsyncClient:
 
 
 class LLMHelperTests(unittest.TestCase):
+    def test_create_client_keeps_requested_provider_metadata(self) -> None:
+        class FakeAPIConfig:
+            LLM_PROVIDER = "openai"
+
+            def create_client(self, **kwargs: Any) -> tuple[str, str]:
+                self.kwargs = kwargs
+                return "client", "grok-test"
+
+        api_config = FakeAPIConfig()
+        handle = create_client(api_config, provider="xai", async_mode=True)
+
+        self.assertEqual(handle.provider, "xai")
+        self.assertEqual(handle.model, "grok-test")
+        self.assertTrue(handle.async_mode)
+        self.assertEqual(api_config.kwargs["provider"], "xai")
+
     def test_anthropic_omits_empty_system_prompt(self) -> None:
         messages = FakeMessages()
         client = SimpleNamespace(messages=messages)

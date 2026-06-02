@@ -1,142 +1,153 @@
-# Field Guide to How This User Works
+# Field Guide: How This User Actually Works
 
 ## Core Frame
 
-This user works to keep execution honest by forcing contact with the real object before committing to action. The recurring move across every domain — code, config, copy, lead generation, agent design — is the same: name the thing, inspect it, bound the decision, then act. He is trying to secure *operational legibility*: a state where the structure, the constraints, the intended operator, and the success criteria are all explicit enough that a decision can be inspected rather than trusted on faith. What he is most consistently avoiding is **false progress** — output that is fluent, elaborate, or technically correct but operationally useless, hard to verify, or mismatched to whoever has to use it.
+This user organizes work around keeping decisions in contact with the real object before committing to action. The opening move on any task carrying design, implementation, or judgment weight is not to solve but to *bound*: name the object, surface the governing constraints and use context, name the operator who has to live with the result, then narrow until the next move is obvious and defensible. What is being protected is decision-quality under real operating conditions — not correctness in the abstract, but usability, legibility, and fit for the person or system that will actually run the output.
 
-A generic reader will likely read this as "careful, process-oriented engineer" and overweight the planning. That misses two things. First, the planning is not a ritual; it is a *control surface* he installs only when ambiguity or scope makes premature action dangerous, and he drops it instantly for narrow tasks. Second, his deepest instinct under pressure is not to add rigor but to **simplify** — to strip moving parts until the control surface is small enough to judge directly. The orientation pass and the simplification pass are the same impulse pointed at two ends of a task: understand reality first, then reduce it to the smallest legible form that still does the job.
+A generic reader might mistake this for a preference for "structure," "thoroughness," or "minimalism." The stronger pattern is more specific: structure is valued when it makes work inspectable; simplification is valued when it lowers hidden operating cost; detail is valued only when it changes the decision. The discovery passes, the checklists, and the simplification demands are the same control mechanism wearing different clothes — a way of forcing hidden complexity, hidden assumptions, and hidden scope into the open before effort compounds around them. He is not anti-depth or anti-planning; he is against unearned depth, ungrounded planning, and abstraction that stops the work from being directly understood, changed, or handed off. He is fast, even impatient, once the situation is bounded — the upfront structure exists precisely to earn the right to move quickly afterward.
 
 ## High-Leverage Signals
 
-- **Inspect-before-prescribe is the default for consequential work.** He opens substantial tasks by mapping the terrain (project type, structure, build, tests, linting, style, existing rules) rather than asking for a solution. Action is something the situation has to *earn* through being understood.
-- **Correction by concretization.** When something misses, he doesn't negotiate or re-describe his dissatisfaction. He names the failure mode in one stroke and replaces the loose request with a tighter operating spec: what evidence to use, what to ignore, what shape the answer takes, what not to mention.
-- **"Earn every layer" toward complexity.** He actively strips inherited engineering defaults — config layers, factories, type-check branching, redundant error handling — asking why each cannot collapse. Standards survive only if they materially improve clarity or control, not because they're conventional.
-- **Simplification is his primary recovery behavior.** Under load, drift, or sprawl, he reduces scope, hardcodes, compresses language, and demands the next step be obvious. He recovers through *constraint, not expansion*.
-- **Usability-for-the-real-operator as a hard filter.** "Is this a good pattern for a non-technical person?" recurs as a gate before adoption. Output is judged against the actual user (a non-technical editor, a coding agent, a buyer reading copy), not against abstract correctness.
-- **Fast discovery, high-integrity execution.** He accepts speed in reconnaissance and debugging probes but raises the bar sharply at the commit point — preferring durable fixes over "looks right" patches, rejecting minimal compliance.
-- **Bug reports arrive pre-bounded.** He packages failures as observable mismatches (where, what's failing, reproducible context) rather than vague complaints, and trusts a fix only when it's coupled to a diagnosed cause plus a verification step.
-- **Delegation with centralized judgment.** He gives agents and helpers bounded operations — scout, retrieve, test — but keeps task framing, proof thresholds, and final synthesis under direct control. Authority over direction is non-negotiable; execution is delegated through explicit specs.
+- **Inspect-before-prescribe is the default opening move.** On consequential work he asks to map the actual object first — codebase, component, schema, prompt, lead, current copy, or runtime behavior — and summarize before any change. He does not trust a fix or recommendation that hasn't touched the real artifact.
+- **He names the operator early.** "Is this a good pattern *for a non-technical person*?" The intended user — a non-technical editor, a maintainer, a coding agent, a buyer — is loaded into the task framing itself, not discovered later. A solution that ignores who runs it is treated as failed regardless of technical merit.
+- **Complexity must earn its place.** He actively strips inherited engineering ceremony — asks why a config can't just be hardcoded values, why a factory needs an if-tree if the types already encode behavior, why local error handling should stay if the library already covers it. Extra files, layers, branching, configurability, and defensive checks are suspect until they prove they improve usability, maintainability, or decision quality.
+- **Correction by concretization.** When something misses, he doesn't say "better" — he names the failure mode and replaces the loose request with a tighter operating spec: what evidence to use, what to ignore, what shape the answer takes, what not to mention.
+- **Planning is a control phase, not a ritual.** He plans when ambiguity, architectural risk, or unfamiliar context could make action premature. Once the object, target, and acceptance criteria are clear, more planning reads as drag, and he says so.
+- **Evidence sufficiency over exhaustive evidence.** He wants enough direct context to avoid overreach, not endless discovery. Once a claim or next move is supported well enough, the work should narrow and execute.
+- **Simplification as a recovery move.** When a surface feels heavier than the job deserves, he collapses it. Under load this gets more aggressive — compressing language, cutting density, insisting the next step be obvious.
+- **Delegation is bounded autonomy.** He lets a collaborator scout, summarize, rewrite, debug, or implement, but scope, sequence, proof threshold, and output shape stay under his control.
+- **The recurring mission shape: turn expertise into runnable machinery.** Across projects he converts messy, expert-dependent domains into structured workflows, simpler configs, guided interfaces, and offers tied to concrete pain. Knowledge stuck in heads or chat threads is a failure state.
 
 ## Salience Structure
 
-- **Mismatch with the real operator becomes signal fast.** Before almost anything else, he checks whether the thing fits the person who'll use it. A clever pattern that a non-technical user can't operate registers as a defect immediately.
-- **Unjustified complexity jumps out.** A config that "seems overly complex," an abstraction layer, a function store where a flat file would do — these are noticed early and treated as drag, not sophistication.
-- **Ungrounded fluency triggers suspicion.** Output that sounds clean while leaning on thin evidence, broad matches instead of close reads, or a scope jump from few examples to a large claim reads as a failure forming.
-- **Background until it breaks: polish, elegance, completeness.** He doesn't notice missing polish; he notices missing *legibility*. Exhaustive coverage stays in the background unless it's the kind of completeness that means "enough context to act."
-- **Generic systems overweight thoroughness and underweight fit.** A generic assistant assumes more detail is better. This user reads detail that isn't decision-relevant as noise, and reads a missing build/test/lint/style summary as a real gap.
-- **Process exhaust is noise to be stripped.** Citations, file/line references, tool chatter, references to prior or future conversations — these read as clutter that distracts from judgment, and he removes them.
+- **The actual object becomes signal first.** He orients around files, components, schemas, logs, current wording, commands, leads, or visible behavior. Abstract advice without artifact contact loses force.
+- **Operating context is the second signal.** Who will use this, and at what level — non-technical editor, maintainer, AI agent, buyer, or himself under time pressure — is noticed almost reflexively, often before technical correctness is evaluated.
+- **Complexity creep is highly salient.** A config that "seems overly complex," a pattern with too many moving parts, unnecessary separation, clever configuration, dense copy — these register as the primary threat before anything else does.
+- **Local conventions are primary signal.** He cares what the project already does: build system, test setup, linting, style, rules, imports, surrounding architecture. Generic systems underweight these.
+- **Ungrounded fluency reads as a warning sign.** Output that sounds clean while leaning on thin evidence, broad matches, or a scope-jump from few examples to a big claim triggers tightening.
+- **The next action is a major organizing signal.** Work that doesn't clarify what to do next feels incomplete even when informative.
+- **What stays in the background:** elegance, generality, future-proofing, exhaustive completeness, presentation polish. These are not noticed as virtues; they surface only when they start costing legibility. Generic systems overweight polish, comprehensiveness, and sophisticated architecture for him — he treats all three as suspect until they earn their place.
 
 ## Lived Thresholds
 
-- **Planning turns on at ambiguity + scope + misfit risk.** When a task has architectural, usability, or repository-wide consequences, he forces orientation first. For narrow, specified tasks ("rewrite this," "add these leads," "change this command"), planning would be overhead and he skips straight to execution.
-- **Roughness is fine while the move is reversible.** Sketchy setups, temporary UI, wrappers, "for now / later" scaffolding are all acceptable during exploration. Roughness stops being acceptable the moment a choice becomes structural — core config, infrastructure, repeated workflows, operator-facing interfaces.
-- **Evidence is enough when the answerable core is visible.** He stops expanding the search once a small candidate set supports the claim and the next move is obvious. He then harvests only the highest-yield reads and finalizes — early stopping is deliberate, not impatience.
-- **Polish matters only at handoff.** Wording gets tightened when someone else must follow it, execute it, or be persuaded by it. The standard is "easier to act on," never elegance for its own sake.
-- **Uncertainty forces direct inspection.** When he can't trust a first-pass interpretation, he won't reason about it abstractly — he reads the actual code, tests the actual tool behavior, surveys the actual repo. The unknown gets converted into a bounded inspection job.
-- **Confidence drops → re-baseline.** When assumptions shift mid-task, he stops optimizing the old plan and restates the work as observable conditions, state transitions, and gating rules before continuing.
+- **Uncertainty forces inspection.** When a task is unfamiliar, architectural, consequential, or likely to hide constraints, he shifts into orientation mode: inspect, map, summarize, then decide. He manually tests behavior rather than trusting documentation or assumption.
+- **Planning becomes overhead once the next move is obvious.** When he has already named the asset, action, and output form, extended analysis reads as reopening scope.
+- **Roughness is acceptable during scouting.** Early exploration can be approximate and "good enough" if it is only reducing uncertainty or finding candidates. The precision rule binds tightly only when the objective is actionable.
+- **Roughness stops being acceptable at handoff.** When the output must guide implementation, sales, a non-technical user, or a later agent, clarity and completeness become non-negotiable.
+- **Evidence is sufficient when it supports a bounded move.** He doesn't need absolute certainty — enough direct contact with the artifact to avoid speculative overreach, and then stop.
+- **Confidence drops enough to intervene when fluency outruns verification.** A plausible explanation without source contact, cause diagnosis, or before/after validation triggers correction — at which point he narrows scope, demands direct passages, and cuts back rather than embellishes.
+- **Complexity triggers reversal.** Even after a path has begun, he may reopen the decision if the implementation starts to feel harder to reason about than the problem itself.
 
 ## Breakdown and Repair
 
-- **Failure type: scope/rigor/framing drift.** When a response is too broad, ungrounded, or answers the wrong layer, he repairs by *removing interpretive slack* — restating the task with explicit boundaries, exclusions, and proof thresholds, then asking again under stricter constraints. Not "try again" but "do it again, narrower."
-- **Failure type: overbuilt structure.** When a system has accreted ceremony, he repairs by collapsing it — hardcode the config, remove the redundant error handling the library already covers, combine files, kill the branching the type system makes unnecessary.
-- **Failure type: muddy language.** When wording doesn't "make sense," he doesn't ask for flair; he asks for clarity and a more obvious next action, often rewriting himself toward simpler form.
-- **Failure type: ungrounded fluency.** When a draft leans on weak signals, he narrows it, requires direct passages, runs a challenge pass against the weakest cases, and *cuts the claim back* rather than embellishing if support doesn't materialize.
-- **Failure type: order inversion.** He loses trust when the assistant acts before inspecting, expands before framing, or answers the exciting second question before closing the first. Repair is sequence enforcement: "look first," "answer this one first," "decide and plan first."
-- **Failure type: blind patch.** A fix asserted without a diagnosed cause stays low-trust. Repair is demanding cause-level explanation plus a concrete before/after verification tied to the original failure.
-- **General repair grammar: tighten, don't broaden.** Across all breakdowns, recovery means reducing surface area — narrower scope, fewer parts, harder proof — never adding more output to rescue a drifting task.
+- **Breakdown: the assistant gets ahead of the work.** It recommends before inspecting, implements before understanding, or answers the more exciting part before the first requested step. **Repair:** resequence — "look first," "answer this one first," "decide and plan first." The objection is to ungrounded speed, not difficulty.
+- **Breakdown: fluency without grounding.** A clean-sounding draft leaning on weak evidence or a scope jump. **Repair:** narrow the brief, require direct passages and concrete files/logs/behavior, check the weakening cases; if support doesn't materialize, cut the claim rather than smooth it.
+- **Breakdown: complexity outrunning understanding.** Abstraction, configurability, helpers, defensive checks, or file splits accumulate without clear payoff. **Repair:** collapse the surface — "treat this like a config file," fewer files, direct defaults, explicit control points — until the control point is obvious and inspectable.
+- **Breakdown: technically correct but not usable.** It works in code or prose but is hard for the real operator to understand, edit, or act on. **Repair:** evaluate against the actual user and simplify the path.
+- **Breakdown: scope/rigor/framing miss in analytical work.** **Repair:** not "try again" but "do it again under these stricter constraints" — explicit exclusions, proof thresholds, answer shape, things not to mention. He removes interpretive slack rather than re-explaining intent.
+- **Breakdown: blind patch on a bug.** A fix not tied to a diagnosed cause. **Repair:** isolate the failure, identify the cause, make the smallest change tied to that cause, and verify the original failure is gone. A fix broader than its diagnosis stays untrusted.
+- **Breakdown: exploration keeps expanding.** More context gathered after the answerable core is already visible. **Repair:** stop broad search, use the strongest candidates, synthesize, and move on.
 
 ## Quality Detection
 
-- **Proof = contact with the real object.** A summary is trustworthy because it's tied to actual files, build commands, and constraints. A design judgment is trustworthy because it reflects the actual operator. Abstract confidence doesn't count.
-- **Quality = decision-ready clarity, not detail.** Good work makes the important structure easy to understand, covers the relevant ground without obvious holes, *and* stays anchored to the real use case — all three at once. Detail alone reads as elaborate but weak.
-- **He distrusts: speculation, invented frameworks, unsolicited abstraction, scope creep.** "Don't guess," "just answer," "be concise," "grounded in" recur as enforcement against probabilistic intent-modeling.
-- **Shallow tell:** plausible-but-unverifiable, can't drive the next action, requires interpretation before it communicates.
-- **Premature tell:** abstraction added before need is proven, automation introduced too early, moving parts harder to reason about than the original problem.
-- **Overprocessed tell:** citations, tool chatter, performative rigor, multi-voice or flowery output, structure that's bureaucratic rather than legible.
-- **The honesty standard:** he prefers answers that separate observation from inference and state their own limits — work that "feels earned rather than merely fluent."
+- **Strong work is decision-ready.** It lets him judge, implement, revise, or hand off without inferring missing structure. Detail alone never qualifies.
+- **Proof is contact with the real object** — a summary tied to actual files, build, tests, lint, and style; a design judgment that reflects the actual operator; a simplification that genuinely cuts complexity rather than renaming it.
+- **Strong work is simple without being shallow.** It removes unnecessary moving parts while preserving the information needed to act safely, and fits the operator who has to maintain or run it.
+- **Strong work exposes the standard of judgment.** Criteria, tradeoffs, and limits are visible, which is what earns trust.
+- **Weak work hides behind sophistication.** Plausible, elaborate, or superficially complete output that is hard to verify, hard to operate, or misfit to the user — treated as unfinished and re-scoped.
+- **Weak work lacks a proof path.** "It should work" is weaker than "this was wrong, this changed, this confirms the failure is gone."
+- **Overprocessing is itself a quality failure.** Citations, tool chatter, invented frameworks, flowery or multi-voice output, detail in the wrong dimension that makes the main path harder to see — all rejected in favor of compact, concrete, evidence-bounded prose.
+- **The composite standard:** simplify to the minimum form that preserves real utility, *then* add enough concrete structure that the next decision needs no guesswork. Both halves required.
 
 ## Artifact Relation
 
-- **The artifact is the source of truth.** He returns to the actual codebase, schema, component, config, or tool behavior rather than reasoning from a remembered template. "Read that" is a recurring correction.
-- **The artifact is a drift test.** When abstraction starts feeling clever, he checks it against the concrete thing it has to serve — can a non-technical person actually use this pattern? Does the function store need to be more than a config file?
-- **Direct testing beats assumed behavior.** With tools, he manually tests, notices the tool isn't doing what he assumed, and narrows the question from "how do I use this?" to "what does this actually do, and what would I need instead?"
-- **Logs and tests are demanded as observable evidence.** He'll ask a broken command to emit a usable log file rather than debug abstractly; he wants a confirming reproduction or before/after result before trusting a fix.
-- **A smaller artifact restores momentum.** When energy drops, he shrinks the problem to something inspectable — a hardcoded config, a scoped checklist, a concrete inventory — because a crisp intermediate object proves the work is now controllable.
-- **Structured specs are his coordination object.** He hands off through complete, self-contained executable briefs that transfer execution without needing further clarification — the artifact carries the intent so collaboration doesn't require shared strategy authorship.
+- **Artifacts are sources of truth.** Code, configs, schemas, repo structure, logs, current copy, and lead data matter more than generalized memory or assumed best practice. He refuses to judge a pattern in the abstract.
+- **Artifacts are thinking surfaces.** Inventories and structured surveys aren't documentation — they force coverage, prevent omission, and make work auditable against named dimensions. He discovers the right decision by looking at the concrete shape of the thing.
+- **Artifacts are debugging surfaces.** Unexpected behavior should be turned into visible evidence: he'll convert a broken command into something that emits a usable log file, manufacturing an inspectable artifact when one is missing.
+- **Artifacts are coordination objects.** A repo summary, scoped plan, config file, lead list, or rewritten message lets other agents work without reinventing the task.
+- **A simpler config is a control surface.** Consolidating behavior into one obvious, editable place keeps intent from drifting across files and indirection layers.
+- **Rewrites test whether meaning survived.** "Make it make sense" treats the text itself as verification: if a reader needs interpretation, the artifact failed.
+- **Artifacts test abstraction drift.** If an abstraction can't be explained through the actual files, fields, behavior, or workflow, it loses credibility. Direct contact with the real object often changes the next move.
+- **A good artifact compresses future work** — it becomes easier to rerun, hand off, edit, or verify later.
 
 ## Mode Shifts
 
-- **Exploration → planning:** triggered by ambiguity, scope, or misfit risk. Verbs flip to *look, decide, plan, explore, understand, summarize*. Standard becomes "map the terrain well enough to judge fit and constraints."
-- **Planning → implementation:** triggered by an option clearing three checks — fits real use, matches local conventions, removes avoidable complexity. Once cleared, he moves fast from comparison to execution and further tightening.
-- **Implementation → diagnosis:** triggered by behavior diverging from intent. He pauses, re-baselines into observable conditions and gating rules, and tightens logic instead of accepting surface plausibility.
-- **Direct execution mode:** triggered when the prompt already contains target + action + output format. Verbs flip to *rewrite, add, search, note, make, treat this like*. Further analysis is now overhead; re-opening scope is the failure.
-- **Review/refinement:** standard shifts from "does it work" to "is it legible, usable, and minimal." Here he strips layers, compresses language, and rejects minimal compliance in favor of proper fixes.
-- **The governing rule across shifts:** he earns the right to act by loading the right context first, then refuses to re-open scope once the next move is obvious. Both halves are load-bearing.
+- **Exploration mode begins when the object is unclear.** Map project type, directory structure, build, tests, linting, style rules, existing instructions, or current workflow; surface constraints and name the operator before any recommendation.
+- **Planning mode begins when there are multiple viable paths.** The question becomes which path fits the real user, local conventions, complexity budget, and maintenance burden. Once an option clears those filters, he moves quickly — he is not indecisive once the checks pass.
+- **Implementation mode begins when the target is concrete.** When he says rewrite, add, search, simplify, change, or create with clear acceptance criteria, he wants execution, not another framework.
+- **Diagnosis mode begins when observed behavior diverges from intended.** Separate actual versus expected, find the precise cause, validate the repair.
+- **Refinement mode engages when the artifact exists but doesn't yet carry the point.** Tighten copy, cut moving parts, improve defaults, sharpen fit to the pain point.
+- **Simplification is a standing override.** It can interrupt momentum at any point when the surface feels heavier than the job deserves — not a phase but an always-available reversal.
+- **Stop mode begins when the answer is supported enough.** He does not reward endless exploration once the evidence supports a bounded claim or next move.
+- **The mode that doesn't shift: control of the standard.** He delegates scouting, retrieval, and execution — but task framing, proof standards, and final synthesis stay with him across every mode. He signals the active mode through his own verbs: plan-first verbs (*look, decide, plan, explore, understand*) versus act-now verbs (*rewrite, add, search, note, make, treat this like*).
 
 ## Success Conditions
 
-- **Good execution converts a messy domain into a usable operating system** — a structured workflow, a simpler config, a guided interface, a lead annotated with its concrete pain point. Knowledge gets out of heads and chat threads into reusable, runnable form.
-- **Good execution is reversible until enough real context is visible**, then becomes a bounded, defensible commitment with visible consequences.
-- **Good execution stays small enough to judge.** It reduces moving parts, preserves what can be inspected, and makes the next action obvious.
-- **Weak execution is fluent but ungrounded** — persuasive summary on weak contact with the material, scope expanding faster than evidence, structure substituting for judgment.
-- **Weak execution is overbuilt** — abstraction, configurability, or defensive scaffolding that adds ceremony before value and is harder to operate than the problem requires.
-- **Weak execution leaks process** — exposes seams, tool chatter, or meta-context that forces downstream humans to adapt to the assistant's logic.
-- **Weak execution solves the happy path only** — works in the demo, fails on missing-state, precondition, or the real operator's actual level of use.
+- **Good execution preserves contact with reality.** It starts from the actual file, behavior, message, user, or business context.
+- **Good execution converts uncertainty into a runnable mechanism** — a system someone (agent or non-expert) can operate without rediscovering the logic each time — and reduces uncertainty visibly: what is now known, what changed, what remains.
+- **Good execution makes the next action obvious.** It does not leave him holding a fluent summary with no operational consequence.
+- **Good execution simplifies the control surface and respects local patterns.** Important behavior lives somewhere obvious and editable; generic architecture is not imported when the project already has a simpler convention.
+- **Good execution survives contact with the real operator** — usable by the non-technical editor, the coding agent, or the buyer who needs the point immediately.
+- **Good execution pairs cause-level diagnosis with bounded verification** — small change, confirmed against the original failure.
+- **Weak execution is fluent but ungrounded** — sounds informed, drifts from the evidence, over-claims from partial inspection.
+- **Weak execution adds hidden maintenance cost** — layers, dependencies, or branching added before need is proven.
+- **Weak execution produces false progress** — looks complete but can't be verified, handed off, or used by the intended operator.
+- **Weak execution leaks scaffolding** — citations, tool references, meta-context, multi-voice output that exposes the generation process.
+- **The clearest failure signal:** he has to manually restate scope, evidence rules, exclusions, and output shape.
 
 ## Tensions and Tradeoffs
 
-- **Thoroughness vs. tightening.** He asks for *comprehensive* codebase summaries yet relentlessly *strips* complexity. Resolved by scope: completeness means "all the facts needed to act," never open-ended exhaustiveness.
-- **Speed vs. correctness.** He moves fast — but only through reversible discovery. He trades speed against *breadth*, never against verifiability. Fast reconnaissance buys safe speed; the commit point pays full rigor.
-- **Autonomy vs. control.** He delegates real operations to agents and helpers but never delegates the standard of proof or the framing. Collaborators are instruments for narrowing uncertainty, not co-authors of the answer standard.
-- **Simplicity vs. structure.** He rejects conventional structure that survives only by convention, yet adopts standard engineering scaffolds (MVP, small diffs, post-change checks) readily when they keep work small and testable. The line is "does this layer earn its keep."
-- **Inspection vs. momentum.** Front-loaded orientation can read as slow, but it's what lets him move fast later without rework. The risk is that orientation tips into avoidance — though the traces show him stopping the survey the moment the answerable core appears.
-- **Technical fluency vs. action-delay.** A noted vulnerability: high comfort in abstract/conceptual processing can stall the externally-validatable deliverable. His own simplification instinct is the counterweight, but insight that isn't immediately paired with executable structure is a live failure mode.
+- **Speed vs. rigor, resolved by location not compromise.** Fast through reversible discovery and probes; high-integrity at the commitment point. He buys safe speed with cheap upfront discovery.
+- **Comprehensiveness vs. simplicity.** He asks for both — full survey *and* aggressive simplification. The reconciling rule: comprehensive enough to orient, simple enough to operate. Thoroughness is always bounded to operationally relevant facts.
+- **Autonomy vs. control.** Collaborators get bounded operational autonomy (scout, retrieve, test) while framing, proof standards, and synthesis stay centralized. Delegation requires a complete spec, not shared authority over strategy.
+- **Structure vs. anti-ceremony.** He adopts standard engineering discipline (small diffs, post-change checks, testable steps) easily *and* strips inherited ceremony aggressively. The line: structure that reduces ambiguity is welcome; structure that survives only by convention gets cut.
+- **The stated-vs-actual gap.** He asks for "comprehensive" coverage but actually optimizes for decision-readiness. Comprehensiveness is instrumental — the orientation pass that lets him narrow, not an end in itself.
+- **Simplification vs. underbuilding.** He wants fewer moving parts, not missing context. The goal is not minimalism; it is the smallest form that still supports correct action.
+- **Rough drafts vs. usable artifacts.** Roughness is fine while finding the shape; once the artifact must guide someone else, clarity and fit become non-negotiable.
 
 ## Boundary Conditions
 
-- **Strongest in:** technical implementation, debugging, codebase exploration, architecture/config simplification, UX-for-non-technical-users judgment, prompt refinement, lead qualification and sales-copy tightening.
-- **Relaxes for:** simple factual lookups, one-off how-to questions, quick troubleshooting — here he often asks direct one-line questions with no scaffolding, no inspection pass, no tightening loop.
-- **Mixed/weaker evidence:** interpersonal coordination, long-running human handoffs, situations where he fully transfers decision authority, and emotional/motivational self-report.
-- **Notably absent:** he does not rely on planning rituals for narrow tasks, does not need reassurance or completeness for its own sake, and refuses checks (extra error handling, defensive scaffolding) that duplicate responsibility already living upstream.
-- **Counter-pressure exists:** he sometimes requests broad comprehensive exploration — but it's bounded to operationally relevant facts, so it isn't true counter-evidence to the simplification pattern.
-- **Confidence collapse zone:** in philosophical/phenomenological exploration lacking concrete anchors (simulation theory, cognitive archetypes), he abandons constraint-seeking and verification loops entirely — the operating system requires physical artifacts or bounded business parameters to engage.
+- **Strongest in:** codebase exploration, architecture and config decisions, debugging, design review, prompt/system-message work, agent workflows, and lead-enrichment + sales rewriting. Anywhere the result will be implemented, navigated, or acted on.
+- **Also strong in execution-facing writing.** Copy, sales messages, lead notes, and guides are judged by whether they make the point usable and actionable.
+- **Relaxes for:** simple factual lookups, quick troubleshooting, one-off how-to questions. Here he often asks directly with no decomposition frame, no imposed format, no tightening loop.
+- **Mixed evidence on non-technical tasks generally.** The inspect-first, scope-tightening standard is well-supported in technical and revision-heavy work; the corpus does not justify treating it as a universal preference.
+- **Weaker in open-ended philosophical or phenomenological exploration**, where the constraint-seeking and artifact-anchoring drop away and approximation is explicitly permitted. His operational fluency depends on physical artifacts or explicitly bounded business parameters.
+- **Not a blanket anti-process or anti-proof stance.** He adopts engineering discipline when it keeps work small, testable, and reversible, and wants enough proof to act safely — not academic certainty.
 
 ## Counterpart Implications
 
-- **Because he inspects before prescribing, a fitting counterpart leads with a grounded read of the actual object** — surveys the repo, tests the real behavior, surfaces constraints — before offering a recommendation, and presents findings as observation separated from inference.
-- **Because he simplifies under pressure, a fitting counterpart proactively questions whether each layer earns its keep** and offers the smaller, more legible version rather than defending elegant structure. Pushback that says "this could just be a config file" feels intelligent, not obstructive.
-- **Because he corrects by concretization, a fitting counterpart asks for the missing decision criteria up front** — intended operator, success threshold, what to exclude — so it doesn't have to be told twice. Initiative that bounds the task feels helpful; initiative that expands scope feels intrusive.
-- **Because he trusts only fixes coupled to diagnosed causes, a fitting counterpart pairs every change with the cause it addresses and a concrete verification** — never "this should work now."
-- **Because he stops once evidence is sufficient, a fitting counterpart matches his pace: fast reconnaissance, early stopping, no broad searching after the answerable core is visible.** Padding the answer after the point is made erodes trust.
-- **Because he strips process exhaust, a fitting counterpart keeps output compact and concrete** — no citations, tool chatter, invented frameworks, or references to the interaction itself. The response should be evaluable quickly for substance, scope, and honesty.
-- **Because he retains framing authority, a fitting counterpart offers options and tradeoffs but doesn't claim the direction** — it executes bounded operations well and hands back legible work, treating his spec as the boundary.
-- **Because his real risk is action-delay through abstraction, a fitting counterpart gently forces the executable next step** — translating insight into structured inputs and concrete commands rather than mirroring the conceptual layer back at him.
+- **Scout before prescribing.** Because he works through grounded orientation, a fitting counterpart first inspects the real artifact and reports what's actually there, then recommends. Initiative that gathers grounded context feels helpful; initiative that jumps to output feels intrusive.
+- **Keep asking who runs this and at what level**, and let the answer reshape the recommendation. This reads as intelligent, not pedantic.
+- **Treat criticism as a spec change.** Because he corrects by concretization, the right response is "do it again under these constraints" — tighten the next pass rather than defend the last one or ask for vague reassurance.
+- **Push back on unearned complexity practically.** Not managerial caution but "this layer doesn't seem to buy enough — can we collapse it?" Earn trust by removing moving parts, not demonstrating sophistication.
+- **Volunteer evidence boundaries.** Separate observation from inference, say what couldn't be verified, and cut a claim that won't hold rather than dress it up — but give proof without clutter, avoiding citations, tool chatter, or process exhaust unless asked.
+- **Diagnose before patching**, and bring a verification step unprompted: here's what was wrong, here's the minimal change, here's how we know it's gone.
+- **Know when to stop exploring.** Once the evidence supports a bounded next move, shift from discovery to execution.
+- **Turn ambiguity into artifacts.** Repo maps, simplified configs, before/after checks, concise plans, and annotated lead lists are more useful than extended discussion — they make the work easier to inspect, correct, and continue.
+- **Match the pace shift.** Thorough and reversible during discovery, decisive and clean at commitment, never re-opening scope once the next action is obvious.
 
 ## Open Questions
 
-- How does this operating system behave in genuinely interpersonal or political work, where the "real object" is a person, not a system? Evidence is thin.
-- Where exactly is his line between "comprehensive enough" and "exhaustive overkill"? The traces show both impulses but not a clean rule.
-- Does the inspect-first discipline hold when he's under severe time pressure with a contractual deadline, or does he drop to rough-draft-to-unlock-payment mode? Some evidence suggests the latter.
-- How much formal verification does he actually require versus a lighter manual check? The stable signal is "some direct proof," not a specific method.
-- In the philosophical/exploratory mode where his constraint-seeking vanishes — is that a deliberate context switch he values, or a blind spot he'd want a counterpart to interrupt?
-- How does he handle a collaborator who is *right* but contradicts his framing? Evidence shows retained authority, but not how he metabolizes correct dissent.
+- How much of the inspect-first, scope-tightening standard carries into purely interpersonal or organizational work, outside systems and artifacts? Evidence is largely silent here.
+- How much formal verification does he actually require versus a light manual check? The stable signal is "some direct proof," not one specific method.
+- In creative or speculative work, where exactly is the line between useful looseness and ungrounded drift?
+- When does simplification risk underbuilding, and what signals make him accept more architecture?
+- When does he want a collaborator to challenge the framing itself versus simply execute within the given frame?
 
 ## Evidence Fragments
 
-**Inspect-before-prescribe:** "explore this codebase — project type, directory structure, build system, testing setup, linting, code style, existing rules" then "comprehensive summary." / "look at this component and schema, decide and plan whether the pattern is good for a non-technical person."
+**Inspect-before-prescribe / Artifact Relation:** "Explore this codebase" by identifying project type, directory structure, build system, tests, linting, style, and rules, then return a comprehensive summary. / "Look at the existing component and schema first, then decide and plan whether the pattern is good for the intended user."
 
-**Correction by concretization:** "seems overly complex" → "treat this like a hardcoded config file instead of a function store." / "rewrite this to make more sense." / "don't guess," "just answer," "be concise," "grounded in."
+**Operator framing:** "Is this a good pattern for a non technical person?" / Repo summary should include "the concrete build, lint, test, and style rules that make execution possible rather than a vague overview." / Lead research should pair each prospect with "the business pain AI could improve."
 
-**Earn every layer:** "why does the factory need an if-tree if the types already say what should happen," "why keep local error testing if the library already catches it," "are we reinventing the wheel."
+**Complexity must earn its place:** A setup "seems overly complex" → "treat this like a config file" instead of a function store. / Questioning "why the factory needs an if-tree if the types already say what should happen," "why local error testing should remain if the underlying library already catches those failures."
 
-**Usability filter:** "is this actually a good pattern for a non technical person?"
+**Correction by concretization:** "Don't guess," "read that," "just answer," "be concise," "grounded in." / Not "try again" but "do it again under these stricter constraints."
 
-**Fix posture:** wants "the actual break point or cause identified," then the repair "checked against the original behavior" — not "it should work now."
+**Mode signals:** plan-first verbs — "look, decide, plan, explore, understand"; act-now verbs — "rewrite, add, search, note, make, treat this like." Sequence protection: "look first," "answer this one first," "decide and plan first."
 
-**Sequence protection:** "look first," "answer this one first," "outline this first," "decide and plan first."
+**Quality as usable clarity:** "Rewrite this so it makes more sense." / "Comprehensive summary of all findings" when orientation is needed.
 
-**Simplification as recovery:** under sprawl, "reduce moving parts, preserve what can be inspected, get to an actionable shape fast."
+**Repair loop:** Identify what is actually wrong, make the smallest change tied to that cause, verify the original failure is gone, avoid broad fixes that create new uncertainty.
 
-**Mission:** convert expertise into "usable operating machinery" — agents tied to scripts and task records, leads paired with "the business pain AI could improve," configs collapsed to "one obvious, editable place."
-
-**Action-delay risk:** assistant fails when it provides "conceptual abstraction without implementation scaffolding" — every insight needs "instantaneous translation into structured inputs and specific technical implementation steps."
+**Mission:** Wants an agent "tied to scripts, task records, and a project package so work is tracked instead of living in conversation."

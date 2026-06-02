@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import List
 
 from core.config import Config
+from core.prompt_creator import get_prompt_creator_providers
 from core.prompt_loader import load_prompt_for_profile
 from lib.health import (
     check_prompt_files as shared_check_prompt_files,
@@ -56,6 +57,7 @@ def check_prompt_rendering(config: Config) -> List[str]:
 
     render_specs = {
         "initial_template": ["context"],
+        "ensemble_synthesis_template": ["candidate_profiles"],
         "skills_creation_template": ["grouped_bio_content"],
         "rlm_query_template": profile.rlm_prompt_placeholders,
         "tool_specs_creation_template": [
@@ -100,7 +102,13 @@ def run_health_checks(config: Config) -> List[str]:
     issues.extend(check_prompt_rendering(config))
     issues.extend(check_required_paths(config))
     issues.extend(check_script_imports(SCRIPT_MODULES))
-    issues.extend(check_provider_setup(config=config, create_client=create_client))
+    issues.extend(
+        check_provider_setup(
+            config=config,
+            create_client=create_client,
+            providers=get_prompt_creator_providers(),
+        )
+    )
     issues.extend(
         check_rlm_command(config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm")
     )

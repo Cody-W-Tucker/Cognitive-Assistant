@@ -79,12 +79,17 @@ class APIConfig:
 
         return str(provider_config.get("model", "unknown"))
 
+    def get_max_completion_tokens(self, provider: Optional[str] = None) -> int:
+        """Get max output tokens for the selected provider."""
+        provider = provider or self.LLM_PROVIDER
+        return int(
+            self.PROVIDERS.get(provider, {}).get("MAX_COMPLETION_TOKENS", 3000)
+        )
+
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:
         """Get max output tokens for the current LLM provider."""
-        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get(
-            "MAX_COMPLETION_TOKENS", 3000
-        )
+        return self.get_max_completion_tokens()
 
     @property
     def MAX_TOKENS(self) -> int:

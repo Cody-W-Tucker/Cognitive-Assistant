@@ -12,10 +12,25 @@ import asyncio
 import csv
 import os
 import sys
+from dataclasses import dataclass
 from typing import List
 
 from core.config import Config
+from lib.config import validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
+
+
+ENSEMBLE_DRAFT_PROVIDERS = ("xai", "anthropic", "openai")
+ENSEMBLE_SYNTHESIS_PROVIDER = "anthropic"
+
+
+@dataclass(frozen=True)
+class DraftResult:
+    """One model's draft profile output."""
+
+    provider: str
+    model: str
+    content: str
 
 
 def load_dataset_context(config: Config) -> str:
@@ -118,36 +133,145 @@ async def _call_llm(
         return ""
 
 
-async def _process_dataset(config: Config) -> int:
-    """Run the profile-specific prompt generation pipeline."""
-    print("Info: Processing dataset into profile artifacts")
-    print("Info: Step 1 generates the initial profile")
+def get_prompt_creator_providers() -> List[str]:
+    """Return the distinct providers required by the ensemble workflow."""
+    return list(dict.fromkeys([*ENSEMBLE_DRAFT_PROVIDERS, ENSEMBLE_SYNTHESIS_PROVIDER]))
 
-    context = load_dataset_context(config)
 
-    initial_client = create_client(
-        config.api, model=config.api.get_model("initial"), async_mode=True
+def validate_prompt_creator_config(config: Config) -> List[str]:
+    """Validate the inputs and providers required by build-prompts."""
+    issues: List[str] = []
+    if not config.paths.QUESTIONS_CSV.exists():
+        issues.append(f"Questions CSV not found at {config.paths.QUESTIONS_CSV}")
+
+    original_provider = config.api.LLM_PROVIDER
+    try:
+        for provider in get_prompt_creator_providers():
+            config.api.LLM_PROVIDER = provider
+            issues.extend(validate_provider_config(config.api))
+    finally:
+        config.api.LLM_PROVIDER = original_provider
+
+    return list(dict.fromkeys(issues))
+
+
+async def _generate_draft(config: Config, provider: str, prompt: str) -> DraftResult:
+    """Generate one draft profile from a specific provider."""
+    handle = create_client(
+        config.api,
+        provider=provider,
+        model=config.api.get_model("initial", provider=provider),
+        async_mode=True,
     )
 
     try:
-        initial_summary = await _call_llm(
+        content = await _call_llm(
             config,
-            initial_client,
-            config.prompts.initial_template.format(context=context),
+            handle,
+            prompt,
+            max_tokens=config.api.get_max_completion_tokens(provider),
         )
-        if not initial_summary:
-            print("Error: Failed to generate initial summary")
+        return DraftResult(provider=provider, model=handle.model, content=content)
+    finally:
+        await close_client_async(handle)
+
+
+def _build_candidate_profiles_block(draft_results: List[DraftResult]) -> str:
+    """Serialize candidate drafts for the synthesis prompt."""
+    draft_blocks = []
+    for result in draft_results:
+        draft_blocks.append(
+            "\n".join(
+                [
+                    f'<candidate provider="{result.provider}" model="{result.model}">',
+                    result.content.strip(),
+                    "</candidate>",
+                ]
+            )
+        )
+
+    return "\n\n".join(draft_blocks)
+
+
+def _save_draft_artifacts(config: Config, draft_results: List[DraftResult]) -> None:
+    """Persist candidate drafts without interfering with downstream human_profile discovery."""
+    for result in draft_results:
+        draft_path = config.paths.ARTIFACTS_DIR / f"profile_candidate_{result.provider}.md"
+        print(f"Info: Saving {result.provider.upper()} draft to {draft_path}")
+        draft_path.write_text(result.content.strip() + "\n", encoding="utf-8")
+
+
+async def _process_dataset(config: Config) -> int:
+    """Run the profile-specific prompt generation pipeline."""
+    print("Info: Processing dataset into profile artifacts")
+    print("Info: Step 1 generates ensemble draft profiles")
+
+    context = load_dataset_context(config)
+    base_prompt = config.prompts.initial_template.format(context=context)
+
+    draft_results = await asyncio.gather(
+        *[
+            _generate_draft(config, provider, base_prompt)
+            for provider in ENSEMBLE_DRAFT_PROVIDERS
+        ]
+    )
+    successful_drafts = [result for result in draft_results if result.content]
+    if len(successful_drafts) != len(ENSEMBLE_DRAFT_PROVIDERS):
+        failed_providers = [
+            provider
+            for provider in ENSEMBLE_DRAFT_PROVIDERS
+            if provider not in {result.provider for result in successful_drafts}
+        ]
+        print(
+            "Error: Failed to generate all ensemble drafts: "
+            + ", ".join(failed_providers)
+        )
+        return 1
+
+    _save_draft_artifacts(config, successful_drafts)
+
+    print("Info: Step 2 synthesizes the drafts with Anthropic")
+    synthesis_handle = create_client(
+        config.api,
+        provider=ENSEMBLE_SYNTHESIS_PROVIDER,
+        model=config.api.get_model("refine", provider=ENSEMBLE_SYNTHESIS_PROVIDER),
+        async_mode=True,
+    )
+    try:
+        synthesis_prompt = _build_synthesis_prompt(
+            config,
+            candidate_profiles=_build_candidate_profiles_block(successful_drafts),
+        )
+        final_profile = await _call_llm(
+            config,
+            synthesis_handle,
+            synthesis_prompt,
+            max_tokens=config.api.get_max_completion_tokens(ENSEMBLE_SYNTHESIS_PROVIDER),
+        )
+        if not final_profile:
+            print("Error: Failed to synthesize final profile")
             return 1
 
         profile_path = config.paths.ARTIFACTS_DIR / "human_profile.md"
-        print(f"Info: Saving initial summary to {profile_path}")
-        profile_path.write_text(initial_summary.strip() + "\n", encoding="utf-8")
+        print(f"Info: Saving synthesized profile to {profile_path}")
+        profile_path.write_text(final_profile.strip() + "\n", encoding="utf-8")
 
         print("Info: Artifacts created")
         print(f"- Human profile: {profile_path}")
+        for result in successful_drafts:
+            print(
+                f"- Candidate draft: {config.paths.ARTIFACTS_DIR / ('profile_candidate_' + result.provider + '.md')}"
+            )
         return 0
     finally:
-        await close_client_async(initial_client)
+        await close_client_async(synthesis_handle)
+
+
+def _build_synthesis_prompt(config: Config, *, candidate_profiles: str) -> str:
+    """Render the profile-specific ensemble synthesis prompt template."""
+    return config.prompts.ensemble_synthesis_template.format(
+        candidate_profiles=candidate_profiles,
+    )
 
 
 def run(config: Config) -> int:
@@ -155,7 +279,7 @@ def run(config: Config) -> int:
     print(f"{config.profile.display_name} - Prompt Creator")
     print("=" * 60)
 
-    issues = config.validate()
+    issues = validate_prompt_creator_config(config)
     if issues:
         print("Error: Configuration issues found")
         for issue in issues:
