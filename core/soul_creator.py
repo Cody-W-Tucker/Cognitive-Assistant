@@ -32,27 +32,19 @@ OUTPUT_FILE = OUTPUT_DIR / "SOUL.md"
 ARCHETYPE_OUTPUT_FILE = OUTPUT_DIR / "SOUL_ARCHETYPE.md"
 MAX_SOUL_OUTPUT_TOKENS = 6000
 MAX_ARCHETYPE_OUTPUT_TOKENS = 1600
-ARCHETYPE_PROFILE_SECTIONS = {
-    "existential": [
-        "Core Frame",
-        "High-Leverage Signals",
-        "Success Conditions",
-        "Counterpart Implications",
-    ],
-    "operational": [
-        "Core Frame",
-        "High-Leverage Signals",
-        "Success Conditions",
-        "Counterpart Implications",
-    ],
-}
 SOUL_PROFILE_SECTIONS = {
     "existential": [
         "Core Frame",
+        "Cognitive Patterns",
+        "Success Conditions",
+        "Constraint Map",
         "Counterpart Implications",
     ],
     "operational": [
         "Core Frame",
+        "Mode Shifts",
+        "Success Conditions",
+        "Tensions and Tradeoffs",
         "Counterpart Implications",
     ],
 }
@@ -71,10 +63,10 @@ class SoulCreator:
 
     async def generate_soul(self, output_path: Optional[Path] = None) -> Path:
         """Generate the SOUL.md artifact and write it to disk."""
-        archetype_profile_sources = self._load_profile_sources(ARCHETYPE_PROFILE_SECTIONS)
+        archetype_profile_sources = self._load_profile_sources()
         archetype = await self._generate_archetype(archetype_profile_sources)
         self._write_artifact(ARCHETYPE_OUTPUT_FILE, archetype)
-        soul_profile_sources = self._load_profile_sources(SOUL_PROFILE_SECTIONS)
+        soul_profile_sources = self._load_profile_sources(selected_sections=SOUL_PROFILE_SECTIONS)
 
         soul_seed = self._load_text_file(SOUL_SEED_PATH, "Soul seed")
         prompt = soul_seed.format(profile_sources=soul_profile_sources, archetype=archetype)
@@ -111,7 +103,9 @@ class SoulCreator:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content + "\n", encoding="utf-8")
 
-    def _load_profile_sources(self, selected_sections: dict[str, list[str]]) -> str:
+    def _load_profile_sources(
+        self, *, selected_sections: Optional[dict[str, list[str]]] = None
+    ) -> str:
         existential_prompt = self._load_latest_artifact(
             EXISTENTIAL_PROFILE.workspace_dir / "artifacts",
             "existential",
@@ -133,7 +127,7 @@ class SoulCreator:
         artifacts_dir: Path,
         layer_name: str,
         *,
-        selected_sections: dict[str, list[str]],
+        selected_sections: Optional[dict[str, list[str]]],
         artifact_pattern: str,
         artifact_label: str,
     ) -> str:
@@ -147,7 +141,7 @@ class SoulCreator:
             )
 
         content = prompt_files[-1].read_text(encoding="utf-8").strip()
-        selected_headings = selected_sections.get(layer_name)
+        selected_headings = selected_sections.get(layer_name) if selected_sections else None
         if selected_headings:
             content = self._extract_selected_sections(content, selected_headings)
 
@@ -187,6 +181,7 @@ class SoulCreator:
             "## Fit",
             "## Gifts",
             "## Voice",
+            "## Mode Reading",
             "## Guardrails",
         ]
         for section in required_sections:
@@ -207,8 +202,10 @@ class SoulCreator:
         required_sections = [
             "# SOUL",
             "## Opening",
+            "## Persona",
             "## Core Truths",
             "## Boundaries",
+            "## Detect Mode",
             "## Voice",
             "## Continuity",
             "## Closing",

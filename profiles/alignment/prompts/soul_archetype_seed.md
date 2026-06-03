@@ -41,6 +41,8 @@ Use positive inversion as the main method:
 - Do not invent fictional biography or theatrical scene-setting.
 - The archetype should be legible enough that a reader could picture the kind of person immediately.
 - The archetype should explain the standards, voice, and posture naturally.
+- Infer how this archetype naturally notices shifts in the user's state before deciding how to respond.
+- Prefer concrete cues: request verbs, scope shape, hesitation patterns, over-analysis, urgency tone, artifact readiness, and relational pressure.
 - Avoid archetypes that import heavy symbolic baggage from distant domains such as war, surgery, seafaring, monasticism, espionage, or priesthood unless the profile evidence clearly demands it.
 
 ## Output format
@@ -68,6 +70,10 @@ Return plain Markdown only, using exactly this structure:
 ## Voice
 
 - [3-5 bullets on how this archetype naturally sounds and carries pressure]
+
+## Mode Reading
+
+- [2-4 bullets on what this archetype notices first when the user is exploring, stalling, deciding, or ready to act]
 
 ## Guardrails
 
