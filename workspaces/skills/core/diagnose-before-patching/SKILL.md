@@ -1,34 +1,25 @@
 ---
 name: diagnose-before-patching
-description: Use when something is broken, behavior contradicts expectation, or a fix is being proposed. Prevents speculative patches and "should work now" answers by enforcing cause-first, verification-required repair.
+description: Use when something is broken or failing and the cause must be found before changing it. Owns failure diagnosis only.
 category: core
 source_group: hermes-operational
 compatibility: opencode
 ---
+
 ## When To Use
-- A bug, failing test, unexpected output, or behavior mismatch is in scope.
-- You are tempted to suggest a change because it "should fix it" or "is probably the issue."
-- A previous fix did not stick, or symptoms keep shifting.
+Load this only when something is broken, failing, regressing, contradictory, or behaving differently from the stated expectation. The skill owns cause-finding before repair.
+
+Use it for build failures, runtime errors, test regressions, bad outputs, broken prompts, unreliable workflows, or operational symptoms where a patch would otherwise be a guess.
 
 ## Do Not Use
-- Greenfield work where there is no broken behavior to diagnose.
-- Style, naming, or refactor requests with no behavioral defect.
+Do not use this for ordinary pre-solution inspection, stylistic refinement, packaging a decision, simplifying a design, or proving a completed fix. If there is no failure state or symptom, this skill is too heavy.
 
-## Required Sequence
-1. **State current behavior** — what actually happens, observed directly (log, test output, reproduction). Not inferred.
-2. **State intended behavior** — what should happen, and under what condition.
-3. **Name the cause** — the specific mechanism producing the gap. "Probably related to X" is not a cause; "X is called before Y is initialized, so Z is null at line N" is.
-4. **Propose the smallest change addressing that cause.** Not a rewrite, not a refactor bundled in.
-5. **Define the verification.** Concrete before/after check: a test that fails before and passes after, a log line, a reproduction that no longer reproduces.
+## What To Do
+- State the observed failure and the expected behavior in concrete terms.
+- Reproduce or localize the symptom before changing anything when feasible.
+- Trace from symptom to likely cause using the smallest useful evidence: logs, tests, diffs, inputs, config, or runtime behavior.
+- Change only what the cause explains. Avoid broad rewrites that merely pass near the symptom.
+- If the cause remains uncertain, label the patch as provisional and keep the next check narrow.
 
-If any step cannot be filled in, stop and surface that gap rather than proposing a patch.
-
-## Failure This Prevents
-"Should work now" patches with no diagnosed cause. Fixes that suppress symptoms without addressing mechanism. Plausible changes accepted because they sound reasonable, not because they were verified.
-
-## When Verification Is Hard
-If no test, log, or direct check is available, say so explicitly and define the weakest acceptable proxy (e.g., manual reproduction steps, a printed value, a state inspection). Do not let absence of tooling collapse the standard — lower the resolution but keep the verification step.
-
-## Repair Moves
-- If a fix has been proposed without a cause, withdraw it. Re-enter at step 3.
-- If verification is missing, the repair is not done, regardless of how confident the change feels.
+## Output Shape
+Return the failure, evidence, likely cause, minimal patch, and the targeted check that would prove the cause was addressed.
