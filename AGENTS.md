@@ -17,11 +17,14 @@ Two profiles are registered: `existential` and `operational`.
 
 ## CLI
 
-All commands take `--profile existential|operational`.
+Profile-specific build commands take `--profile existential|operational`.
 
 ```bash
+# Shared commands
 python -m core list-profiles
-python -m core --profile <name> health-check
+python -m core enhance-skill
+python -m core build-alignment-spec
+python -m core build-soul
 
 # Existential profile workflow
 python -m core --profile existential ingest-substrate --graph /path/to/graph.json
@@ -36,13 +39,21 @@ python -m core --profile operational build-prompts
 python -m core --profile operational build-skills
 python -m core --profile operational build-tool-specs
 
-# Alignment (cross-profile, no --profile flag)
+# Profile-aware validation
+python -m core --profile <name> health-check
+
+# Alignment verification
 python -m core build-alignment-spec
 scripts/verify_alignment.sh --file path/to/artifact.md
 ```
 
 Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)
 fail with a clear error rather than silently no-op.
+
+`build-skills` writes canonical generated skills to
+`workspaces/skills/<profile>/<skill>/SKILL.md` for generated profile skills.
+Manual imports can still live under purpose categories like
+`workspaces/skills/workflow/<skill>/SKILL.md`.
 
 `build-alignment-spec` reads from both profiles and writes
 `workspaces/alignment/artifacts/alignment_spec.md`. Regenerate it after `build-skills`

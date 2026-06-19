@@ -46,6 +46,15 @@ from lib.prompts import (
 
 
 @dataclass(frozen=True)
+class SkillSpec:
+    """Declaration for one canonical skill generated from scoped profile context."""
+
+    slug: str
+    source_group: str
+    source_headings: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class LayerProfile:
     """Static declaration of everything a profile customizes."""
 
@@ -85,6 +94,7 @@ class LayerProfile:
 
     # Skills creator section grouping
     skill_heading_groups: List[Tuple[str, List[str]]] = field(default_factory=list)
+    skill_specs: List[SkillSpec] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +160,27 @@ EXISTENTIAL_PROFILE = LayerProfile(
             ["Growth / Trajectory", "Counterpart Implications", "Open Questions"],
         ),
     ],
+    skill_specs=[
+        SkillSpec(
+            slug="mode-detection",
+            source_group="group-1",
+            source_headings=("Core Frame", "High-Leverage Signals", "Interpretation Rules"),
+        ),
+        SkillSpec(
+            slug="decision-calibration",
+            source_group="group-2",
+            source_headings=("Success Conditions", "Constraint Map"),
+        ),
+        SkillSpec(
+            slug="relational-orientation",
+            source_group="group-3",
+            source_headings=(
+                "Growth / Trajectory",
+                "Counterpart Implications",
+                "Open Questions",
+            ),
+        ),
+    ],
 )
 
 OPERATIONAL_PROFILE = LayerProfile(
@@ -210,6 +241,32 @@ OPERATIONAL_PROFILE = LayerProfile(
             ],
         ),
     ],
+    skill_specs=[
+        SkillSpec(
+            slug="scope-framing",
+            source_group="group-1",
+            source_headings=("Core Frame", "High-Leverage Signals", "Salience Structure"),
+        ),
+        SkillSpec(
+            slug="failure-recovery",
+            source_group="group-2",
+            source_headings=("Lived Thresholds", "Mode Shifts", "Breakdown and Repair"),
+        ),
+        SkillSpec(
+            slug="complexity-reduction",
+            source_group="group-3",
+            source_headings=("Quality Detection", "Artifact Relation", "Success Conditions"),
+        ),
+        SkillSpec(
+            slug="boundary-handoff",
+            source_group="group-4",
+            source_headings=(
+                "Tensions and Tradeoffs",
+                "Boundary Conditions",
+                "Counterpart Implications",
+            ),
+        ),
+    ],
 )
 
 register_profile(EXISTENTIAL_PROFILE)
@@ -234,7 +291,6 @@ class ProfilePathConfig(PathConfig):
             "INTAKE_DIR": "data/intake",
             "READY_DIR": "data/ready",
             "ARTIFACTS_DIR": "artifacts",
-            "SKILLS_DIR": "artifacts/skills",
             "TOOL_SPECS_DIR": "artifacts/tool_specs",
         }
         super().__init__(profile.workspace_dir, paths)
@@ -251,7 +307,6 @@ class ProfilePathConfig(PathConfig):
             "INTAKE_DIR",
             "READY_DIR",
             "ARTIFACTS_DIR",
-            "SKILLS_DIR",
             "TOOL_SPECS_DIR",
         ]:
             getattr(self, attr).mkdir(parents=True, exist_ok=True)

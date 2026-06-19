@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate a personalized alignment verification spec from both layer profiles.
+"""Generate a personalized alignment verification spec from unified skills.
 
-Reads skills from both existential and operational workspaces, combines them with
-the alignment seed template, and produces a single alignment spec that downstream
+Reads skills from the unified `workspaces/skills` store, combines them with the
+alignment seed template, and produces a single alignment spec that downstream
 tools (verify-alignment) can use to evaluate any output.
 
 This command sits above the profile system: it reads from both registered
@@ -20,7 +20,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from core.config import ROOT_DIR, EXISTENTIAL_PROFILE, OPERATIONAL_PROFILE
+from core.config import ROOT_DIR
+from core.skills_creator import canonical_skills_root
 from lib.config import APIConfig, validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
@@ -30,8 +31,7 @@ SEED_PATH = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
 OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
 OUTPUT_FILE = OUTPUT_DIR / "alignment_spec.md"
 
-EXISTENTIAL_SKILLS_DIR = EXISTENTIAL_PROFILE.workspace_dir / "artifacts" / "skills"
-OPERATIONAL_SKILLS_DIR = OPERATIONAL_PROFILE.workspace_dir / "artifacts" / "skills"
+UNIFIED_SKILLS_DIR = canonical_skills_root()
 
 # Static sections — not recomputed by the LLM.
 SPEC_PREAMBLE = """\
@@ -79,7 +79,7 @@ Verdict logic:
 
 
 class AlignmentSpecCreator:
-    """Generate a personalized alignment spec from skills across both layers."""
+    """Generate a personalized alignment spec from unified skills."""
 
     def __init__(self) -> None:
         self.api = APIConfig()
@@ -118,48 +118,34 @@ class AlignmentSpecCreator:
         return SEED_PATH.read_text(encoding="utf-8")
 
     def _load_all_skills(self) -> str:
-        """Load all skills from both workspaces into a tagged document."""
-        sections: List[str] = []
-
-        existential_skills = self._load_skills_from_dir(
-            EXISTENTIAL_SKILLS_DIR, "existential"
-        )
-        operational_skills = self._load_skills_from_dir(
-            OPERATIONAL_SKILLS_DIR, "operational"
-        )
-
-        if existential_skills:
-            sections.extend(existential_skills)
-
-        if operational_skills:
-            sections.extend(operational_skills)
-
+        """Load all unified skills into a tagged document."""
+        sections = self._load_skills_from_root(UNIFIED_SKILLS_DIR)
         if not sections:
             raise FileNotFoundError(
-                "No skills found in either workspace. Run build-skills for both profiles first."
+                "No skills found in workspaces/skills. Run build-skills or import skills first."
             )
 
         return "\n\n".join(sections)
 
-    def _load_skills_from_dir(self, skills_dir: Path, layer_name: str) -> List[str]:
-        """Load all SKILL.md files from a skills directory."""
+    def _load_skills_from_root(self, skills_dir: Path) -> List[str]:
+        """Load all SKILL.md files from the unified profile tree."""
         if not skills_dir.exists():
-            print(f"Warning: Skills directory not found: {skills_dir}")
+            print(f"Warning: Unified skills directory not found: {skills_dir}")
             return []
 
         skills: List[str] = []
-        for skill_dir in sorted(skills_dir.iterdir()):
-            if not skill_dir.is_dir():
-                continue
-            skill_file = skill_dir / "SKILL.md"
-            if skill_file.exists():
-                content = skill_file.read_text(encoding="utf-8").strip()
-                skills.append(
-                    f'<skill name="{skill_dir.name}">\n' f"{content}\n" f"</skill>"
-                )
+        for skill_file in sorted(skills_dir.glob("*/*/SKILL.md")):
+            source_profile = skill_file.parent.parent.name
+            skill_name = skill_file.parent.name
+            content = skill_file.read_text(encoding="utf-8").strip()
+            skills.append(
+                f'<skill source_profile="{source_profile}" name="{skill_name}">\n'
+                f"{content}\n"
+                f"</skill>"
+            )
 
         if skills:
-            print(f"Info: Loaded {len(skills)} skills from {layer_name} layer")
+            print(f"Info: Loaded {len(skills)} unified skills")
         else:
             print(f"Warning: No skills found in {skills_dir}")
 
@@ -212,18 +198,10 @@ def run(*, output_path: Optional[Path] = None) -> int:
             print(f"- {issue}")
         return 1
 
-    # Validate that at least one workspace has skills
-    has_existential = EXISTENTIAL_SKILLS_DIR.exists() and any(
-        EXISTENTIAL_SKILLS_DIR.iterdir()
-    )
-    has_operational = OPERATIONAL_SKILLS_DIR.exists() and any(
-        OPERATIONAL_SKILLS_DIR.iterdir()
-    )
-
-    if not has_existential and not has_operational:
+    if not UNIFIED_SKILLS_DIR.exists() or not any(UNIFIED_SKILLS_DIR.glob("*/*/SKILL.md")):
         print(
-            "Error: No skills found in either workspace. "
-            "Run build-skills for at least one profile first."
+            "Error: No skills found in workspaces/skills. "
+            "Run build-skills or import skills first."
         )
         return 1
 

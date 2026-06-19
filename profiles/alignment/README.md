@@ -9,7 +9,7 @@ Alignment sits **above** the layer profile system. The builders live in `core`, 
 The verification spec has two layers:
 
 1. **Generic artifact-readiness checklist** (universal SOP) — 10 fixed items that apply to any artifact: purpose stated, scope bounded, claims grounded, gaps surfaced, acceptance defined, structure earns its keep, internally consistent, form matches request, language precise, self-contained.
-2. **Personalization** — skills from both profiles overlay onto each checklist item as user-specific cues for what "satisfied" and "failed" look like in practice.
+2. **Personalization** — unified skills from `workspaces/skills` overlay onto each checklist item as user-specific cues for what "satisfied" and "failed" look like in practice.
 
 The checklist skeleton lives in `profiles/alignment/prompts/seed.md`. The verifier role and response format live in `core/alignment_spec.py` (preamble + postamble). The LLM only generates the personalized middle.
 
@@ -25,7 +25,7 @@ The SOUL artifact works differently:
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `profiles/alignment/prompts/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
 | `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating a durable SOUL.md from the existential and operational human profiles.                                      |
-| `core/alignment_spec.py`                           | Loads skills from both profiles, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
+| `core/alignment_spec.py`                           | Loads unified skills from `workspaces/skills`, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
 | `core/soul_creator.py`                             | Loads the existential and operational human profiles, calls the LLM with the soul seed, writes the final SOUL.md artifact.                     |
 | `scripts/verify_alignment.sh`                      | Runtime tool. Passes the spec + an artifact to `rlm` for evaluation.                                                                            |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
@@ -33,7 +33,7 @@ The SOUL artifact works differently:
 
 ## Build the spec
 
-Requires `build-skills` to have been run for at least one profile.
+Requires unified skills to exist in `workspaces/skills` from `build-skills` or a third-party import.
 
 ```bash
 python -m core build-alignment-spec
@@ -91,7 +91,7 @@ REWORK (if REWORK):
 
 ## Regenerating after skill changes
 
-The spec is a downstream artifact of the skills. Whenever you re-run `build-skills` for either profile, regenerate the alignment spec:
+The spec is a downstream artifact of the unified skills. Whenever you change `workspaces/skills`, regenerate the alignment spec:
 
 ```bash
 python -m core --profile existential build-skills

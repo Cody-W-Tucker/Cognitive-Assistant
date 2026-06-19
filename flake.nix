@@ -30,20 +30,66 @@
           }
         );
       mkLayerExports =
-        workspaceDir:
+        _profileName: workspaceDir:
         let
           humanProfile = workspaceDir + "/artifacts/human_profile.md";
-          skillsDir = workspaceDir + "/artifacts/skills";
-          skillNames = builtins.attrNames (
-            nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
-          );
         in
         {
-          inherit humanProfile skillsDir skillNames;
-          skillFile = name: skillsDir + "/${name}/SKILL.md";
+          inherit humanProfile;
         };
-      existential = mkLayerExports ./workspaces/existential;
-      operational = (mkLayerExports ./workspaces/operational) // {
+      skillsDir = ./workspaces/skills;
+      skillCategories = builtins.attrNames (
+        nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
+      );
+      skillNamesByCategory = nixpkgs.lib.genAttrs skillCategories (
+        category:
+        builtins.attrNames (
+          nixpkgs.lib.filterAttrs
+            (_: fileType: fileType == "directory")
+            (builtins.readDir (skillsDir + "/${category}"))
+        )
+      );
+      skillEntries = builtins.concatLists (
+        map (
+          category:
+          map (
+            name:
+            {
+              inherit category name;
+              path = skillsDir + "/${category}/${name}/SKILL.md";
+            }
+          ) skillNamesByCategory.${category}
+        ) skillCategories
+      );
+      skillsByName = builtins.listToAttrs (
+        map (
+          entry:
+          {
+            name = entry.name;
+            value = entry.path;
+          }
+        ) skillEntries
+      );
+      categorizedSkills = pkgs: pkgs.linkFarm "hermes-skills" (
+        map (
+          entry:
+          {
+            name = "${entry.category}/${entry.name}/SKILL.md";
+            path = entry.path;
+          }
+        ) skillEntries
+      );
+      skills = pkgs: pkgs.linkFarm "opencode-skills" (
+        map (
+          entry:
+          {
+            name = "${entry.name}/SKILL.md";
+            path = entry.path;
+          }
+        ) skillEntries
+      );
+      existential = mkLayerExports "existential" ./workspaces/existential;
+      operational = (mkLayerExports "operational" ./workspaces/operational) // {
         toolSpecs = {
           memory = ./workspaces/operational/artifacts/tool_specs/memory.md;
           tasks = ./workspaces/operational/artifacts/tool_specs/tasks.md;
@@ -52,6 +98,7 @@
     in
     {
       lib = {
+        inherit skills categorizedSkills;
         inherit existential operational;
         layers = {
           inherit existential operational;
@@ -77,6 +124,8 @@
               exec ${./scripts/verify_alignment.sh} "$@"
             '';
           };
+          skills = skills pkgs;
+          categorizedSkills = categorizedSkills pkgs;
         }
       );
 

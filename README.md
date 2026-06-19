@@ -13,88 +13,55 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 
 ## Nix Flake Outputs
 
-Each profile exposes the generated skills currently in the workspace and a
-helper to read a specific skill file. The operational profile additionally
-exports per-tool specs.
+Skills are unified under `workspaces/skills` and exposed in two downstream skill
+shapes, alongside tool-spec and alignment outputs:
 
-| Output | Existential | Operational | Alignment |
-|---|---|---|---|
-| `lib.<profile>.skillsDir` | yes | yes | — |
-| `lib.<profile>.skillNames` | yes | yes | — |
-| `lib.<profile>.skillFile <name>` | yes | yes | — |
-| `lib.<profile>.toolSpecs.{memory,tasks}` | — | yes | — |
-| `packages.verify-alignment` | — | — | yes |
-| `lib.alignment.spec` | — | — | yes |
-| `lib.alignment.toolSpecs.verifyAlignment` | — | — | yes |
-| `lib.alignment.seed` | — | — | yes |
-
-Skill names are dynamic — read them from `skillNames` rather than hardcoding.
+| Output                                     | Purpose                                                    |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `packages.<system>.skills`                 | Flat export shaped as `<skill>/SKILL.md`                   |
+| `packages.<system>.categorizedSkills`      | Categorized export shaped as `<category>/<skill>/SKILL.md` |
+| `lib.skills`                               | Flat export package helper                                 |
+| `lib.categorizedSkills`                    | Categorized export package helper                          |
+| `lib.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                     |
+| `packages.<system>.verify-alignment`       | Alignment verifier package                                 |
+| `lib.alignment.spec`                       | Generated alignment spec                                   |
+| `lib.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                        |
 
 ## Downstream Usage
 
-Use the generated skills as conditional overlays. Read `skillNames`, then map
-them to `skillFile` contents:
-
 ```nix
-{ inputs, ... }:
+{ pkgs, inputs, ... }:
 
 let
-  layer = inputs.cognitive-assistant.lib.existential;  # or .operational
-  readSkill = name: builtins.readFile (layer.skillFile name);
+  cognitive = inputs.cognitive-assistant;
+  system = pkgs.stdenv.hostPlatform.system;
+  flatSkills = cognitive.packages.${system}.skills;
+  categorizedSkills = cognitive.packages.${system}.categorizedSkills;
+  verifyAlignment = cognitive.packages.${system}.verify-alignment;
+  operational = cognitive.lib.operational;
+  alignment = cognitive.lib.alignment;
 in
 {
-  programs.opencode.skills = builtins.listToAttrs (
-    map (name: { inherit name; value = readSkill name; }) layer.skillNames
-  );
-}
-```
+  # Flat OpenCode-style skill tree: <skill>/SKILL.md.
+  # Requires globally unique skill slugs across workspaces/skills/*/*.
+  environment.etc."opencode/skills".source = flatSkills;
 
-To expose only a subset of skills, filter `skillNames` before mapping:
+  # Categorized Hermes-style skill tree: <category>/<skill>/SKILL.md.
+  environment.etc."hermes/skills".source = categorizedSkills;
 
-```nix
-let
-  layer = inputs.cognitive-assistant.lib.operational;
-  wanted = builtins.filter
-    (name: builtins.elem name [ "artifact-proof-bounds" "sequence-integrity-router" ])
-    layer.skillNames;
-in
-  builtins.listToAttrs (
-    map (name: { inherit name; value = builtins.readFile (layer.skillFile name); }) wanted
-  )
-```
-
-The operational profile also exports tool specs:
-
-```nix
-let
-  operational = inputs.cognitive-assistant.lib.operational;
-in
-{
+  # Operational profile tool specs.
   programs.opencode.tools = {
     memory = builtins.readFile operational.toolSpecs.memory;
     tasks = builtins.readFile operational.toolSpecs.tasks;
+
+    # Alignment verifier tool spec.
+    verifyAlignment = builtins.readFile alignment.toolSpecs.verifyAlignment;
   };
-}
-```
 
-The alignment layer exports the `verify-alignment` tool spec:
-
-```nix
-let
-  alignment = inputs.cognitive-assistant.lib.alignment;
-in
-{
-  programs.opencode.tools.verifyAlignment = builtins.readFile alignment.toolSpecs.verifyAlignment;
-}
-```
-
-Install the `verify-alignment` package for artifact verification:
-
-```nix
-{ pkgs, inputs, ... }:
-{
+  # Alignment spec and package for verifying generated artifacts.
+  environment.sessionVariables.ALIGNMENT_SPEC = "${alignment.spec}";
   environment.systemPackages = [
-    inputs.cognitive-assistant.packages.${pkgs.stdenv.hostPlatform.system}.verify-alignment
+    verifyAlignment
   ];
 }
 ```
@@ -109,7 +76,7 @@ verify-alignment --stdin < output.md
 ## Regeneration Workflow
 
 The repo runs as one unified pipeline parameterized by a layer profile
-(`existential` or `operational`). All commands take `--profile <name>`.
+(`existential` or `operational`) for profile-specific build steps.
 
 ```bash
 # Existential profile
@@ -124,7 +91,64 @@ python -m core --profile operational ask-questions
 python -m core --profile operational build-prompts
 python -m core --profile operational build-skills
 python -m core --profile operational build-tool-specs
+
+# Cross-profile / shared commands
+python -m core enhance-skill
+python -m core build-alignment-spec
+python -m core build-soul
 ```
+
+`build-skills` reads the active profile's latest `human_profile*.md`, but writes
+to the unified skill store. Cross-system consumers should read skills only from
+`workspaces/skills`, `packages.<system>.skills`, or
+`packages.<system>.categorizedSkills`, not from profile artifact directories.
+
+Generated canonical skills currently land at:
+
+```text
+workspaces/skills/<profile>/<skill-name>/SKILL.md
+```
+
+Use profile folders when the generator does not yet have a better stable
+category. Do not write generated skills into opaque folders like `group-1`.
+
+### Third-party skill import
+
+Bring external skills into the same flow by adding them directly under the
+unified store:
+
+```text
+workspaces/skills/<category>/<skill-name>/SKILL.md
+```
+
+Use one-level purpose categories (`workflow`, `communication`, `core`, etc.) for
+manually maintained skills and lowercase hyphenated skill slugs. Each `SKILL.md`
+should include frontmatter:
+
+```yaml
+---
+name: skill-name
+description: One sentence describing when the skill is useful.
+category: workflow
+source_group: third-party-source-name
+compatibility: opencode
+---
+```
+
+then regenerate the alignment spec if the skill set changed.
+
+To preview source material against the local canonical skill with Skill Enhancer, run:
+
+```bash
+python -m core enhance-skill
+python -m core enhance-skill --skill skill-name
+python -m core enhance-skill --apply
+python -m core enhance-skill --skill skill-name --apply
+```
+
+`enhance-skill` is dry-run by default. It shows the named source material, the
+canonical target skill path, and the current diff before any write. If you omit
+`--skill`, it iterates over every discovered workspace skill.
 
 If you need to read a generated artifact directly without going through the
 flake outputs, the committed paths are:
@@ -132,15 +156,28 @@ flake outputs, the committed paths are:
 ```
 workspaces/existential/artifacts/human_profile.md
 workspaces/operational/artifacts/human_profile.md
-workspaces/<profile>/artifacts/skills/<name>/SKILL.md
+workspaces/skills/<category-or-profile>/<name>/SKILL.md
 workspaces/operational/artifacts/tool_specs/<name>.md
 workspaces/alignment/artifacts/alignment_spec.md
 ```
 
+For downstream skill consumers specifically, the two skill package outputs both
+include all skills by default:
+
+- `packages.<system>.skills`
+  - export tree shaped as `<skill>/SKILL.md`
+- `packages.<system>.categorizedSkills`
+  - export tree shaped as `<category>/<skill>/SKILL.md`
+
+`skills` strips the category directory for OpenCode-style consumers.
+`categorizedSkills` preserves the category directory for Hermes-style
+consumers. Flat export assumes globally unique skill names across categories;
+that invariant is enforced by repo tests.
+
 ## Alignment Verification
 
-The alignment command sits above both profiles. It reads skills from both
-layers and writes a workspace artifact verification spec — a personalized
+The alignment command sits above both profiles. It reads unified skills from
+`workspaces/skills` and writes a workspace artifact verification spec — a personalized
 production-readiness checklist that a downstream verifier (`rlm`) uses to
 score AI-generated artifacts.
 

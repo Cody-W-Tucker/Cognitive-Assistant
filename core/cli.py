@@ -6,7 +6,8 @@ Subcommands:
   ingest-substrate   Project schema graph/focus exports into ready/*.jsonl packets
   ask-questions      Run RLM against questions.csv -> answers CSV
   build-prompts      Generate profile artifacts declared by the active profile
-  build-skills       Generate skills/ from latest human_profile.md
+  build-skills       Generate canonical skills from latest human_profile.md
+  enhance-skill      Enhance a skill from source material
   build-tool-specs   Generate tool_specs/ from latest human_profile.md (gated)
   build-soul         Generate SOUL.md from existential and operational profile artifacts
   update             Run build-prompts, build-skills, and build-tool-specs
@@ -77,14 +78,30 @@ def _build_parser() -> argparse.ArgumentParser:
 
     skills_parser = subparsers.add_parser(
         "build-skills",
-        help="Generate skills/ from the latest human_profile.md.",
+        help="Generate canonical skills from the latest human_profile.md.",
     )
     skills_parser.add_argument("--bio", type=Path, help="Path to a specific human_profile.md")
     skills_parser.add_argument(
         "--output",
         type=Path,
         dest="output_dir",
-        help="Output directory for skill folders",
+        help="Output directory for profile-grouped skill folders (default: unified workspaces/skills)",
+    )
+
+    skill_enhancer_parser = subparsers.add_parser(
+        "enhance-skill",
+        help="Enhance a skill from source material.",
+    )
+    skill_enhancer_parser.add_argument("--skill", help="Skill name to enhance (default: all workspace skills).")
+    skill_enhancer_parser.add_argument(
+        "--hermes-path",
+        type=Path,
+        help="Path to Hermes source material.",
+    )
+    skill_enhancer_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the LLM-backed enhancement after previewing the diff.",
     )
 
     tool_parser = subparsers.add_parser(
@@ -176,6 +193,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         from core import soul_creator
 
         return soul_creator.run(output_path=args.output_path)
+
+    if args.command == "enhance-skill":
+        from core import skill_enhancer
+
+        return skill_enhancer.run(
+            skill_name=args.skill,
+            hermes_path=Path(args.hermes_path).expanduser() if args.hermes_path else None,
+            apply=args.apply,
+        )
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":

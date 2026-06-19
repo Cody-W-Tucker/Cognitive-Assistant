@@ -2,23 +2,35 @@
 """Generate OpenCode-style skills from the latest profile bio.
 
 Profile-agnostic. Reads the most recent `human_profile*.md` from the active
-profile's artifacts directory, asks the LLM to produce a JSON map of
-{slug: SKILL.md content}, validates the payload, and writes one skill per
-directory. Stale skill directories not in the new payload are removed.
+profile's artifacts directory, scopes the profile content by declared skill
+spec, asks the LLM to create or refine one skill at a time, validates each
+document, and writes into the unified
+`workspaces/skills/<profile>/<skill>/SKILL.md` store. Profiles still own source
+bios/prompts; they do not own skill output paths.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, Optional
 
-from core.config import Config
-from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
+from core.config import Config, SkillSpec
+from core.skill_engine import (
+    canonical_skills_root,
+    create_declared_skill_document,
+    extract_frontmatter_value,
+    find_canonical_skill,
+    generate_hermes_enhancement,
+    refine_declared_skill_document,
+    validate_declared_skill_document,
+    validate_skill_slug,
+    with_generation_metadata,
+)
+from lib.llm import LLMHandle, close_client_async, create_client
 
 
 class SkillsCreator:
@@ -40,11 +52,32 @@ class SkillsCreator:
         """Generate skill files from the selected bio."""
         resolved_bio_path = self._resolve_bio_path(bio_path)
         bio_content = resolved_bio_path.read_text(encoding="utf-8")
-        grouped_bio_content = self._build_grouped_bio_content(bio_content)
-        skills_payload = await self._generate_skill_documents(grouped_bio_content)
-        resolved_output_dir = output_dir or self.config.paths.SKILLS_DIR
-        self._write_skills(skills_payload, resolved_output_dir)
+        sections = self._parse_bio_sections(bio_content)
+        resolved_output_dir = output_dir or canonical_skills_root()
+        declared_slugs = await self._generate_declared_skills(sections, resolved_output_dir)
+        self._cleanup_stale_generated_skills(resolved_output_dir, declared_slugs)
         return resolved_output_dir
+
+    async def generate_hermes_enhancement(
+        self,
+        *,
+        skill_name: str,
+        hermes_content: str,
+        local_content: str,
+        diff: str,
+        context: str,
+    ) -> str:
+        """Generate one enhanced SKILL.md from source material and local seed context."""
+        return await generate_hermes_enhancement(
+            handle=self.handle,
+            skill_name=skill_name,
+            hermes_content=hermes_content,
+            local_content=local_content,
+            diff=diff,
+            context=context,
+            temperature=self.config.api.TEMPERATURE,
+            max_output_tokens=self.config.api.MAX_COMPLETION_TOKENS,
+        )
 
     def _resolve_bio_path(self, bio_path: Optional[Path]) -> Path:
         if bio_path is not None:
@@ -61,48 +94,83 @@ class SkillsCreator:
             )
         return bio_files[-1]
 
-    async def _generate_skill_documents(self, grouped_bio_content: str) -> Dict[str, str]:
-        prompt = self.config.prompts.skills_creation_template.format(
-            grouped_bio_content=grouped_bio_content,
-        )
-        response = await generate_text_async(
-            self.handle,
-            user_prompt=prompt,
+    async def _generate_declared_skills(
+        self,
+        sections: Dict[str, str],
+        output_dir: Path,
+    ) -> set[str]:
+        specs = self.config.profile.skill_specs
+        if not specs:
+            raise ValueError(
+                f"Profile '{self.config.profile.name}' has no skill specs configured"
+            )
+
+        declared_slugs: set[str] = set()
+        for spec in specs:
+            validate_skill_slug(spec.slug)
+            declared_slugs.add(spec.slug)
+            scoped_bio_content = self._build_scoped_bio_content(spec, sections)
+            existing_path = find_canonical_skill(spec.slug, self.config.profile.name)
+            if existing_path is None:
+                content = await self._create_skill_document(spec, scoped_bio_content)
+            else:
+                local_content = existing_path.read_text(encoding="utf-8")
+                content = await self._refine_skill_document(
+                    spec,
+                    scoped_bio_content,
+                    local_content,
+                )
+            content = with_generation_metadata(spec, content, self.config.profile.name)
+            validate_declared_skill_document(spec, content, self.config.profile.name)
+            self._write_skill(spec.slug, content, output_dir, existing_path)
+        return declared_slugs
+
+    async def _create_skill_document(self, spec: SkillSpec, scoped_bio_content: str) -> str:
+        return await create_declared_skill_document(
+            handle=self.handle,
+            spec=spec,
+            source_profile=self.config.profile.name,
+            skills_creation_template=self.config.prompts.skills_creation_template,
+            scoped_bio_content=scoped_bio_content,
             temperature=self.config.api.TEMPERATURE,
             max_output_tokens=self.config.api.MAX_COMPLETION_TOKENS,
         )
-        payload = self._parse_json_response(response)
-        self._validate_payload(payload)
-        return payload
 
-    def _build_grouped_bio_content(self, bio_content: str) -> str:
-        sections = self._parse_bio_sections(bio_content)
-        groups = self.config.profile.skill_heading_groups
-        if not groups:
+    async def _refine_skill_document(
+        self,
+        spec: SkillSpec,
+        scoped_bio_content: str,
+        local_content: str,
+    ) -> str:
+        return await refine_declared_skill_document(
+            handle=self.handle,
+            spec=spec,
+            source_profile=self.config.profile.name,
+            scoped_bio_content=scoped_bio_content,
+            local_content=local_content,
+            temperature=self.config.api.TEMPERATURE,
+            max_output_tokens=self.config.api.MAX_COMPLETION_TOKENS,
+        )
+
+    def _build_scoped_bio_content(self, spec: SkillSpec, sections: Dict[str, str]) -> str:
+        missing_headings = [
+            heading for heading in spec.source_headings if heading not in sections
+        ]
+        if missing_headings:
+            missing_text = ", ".join(missing_headings)
             raise ValueError(
-                f"Profile '{self.config.profile.name}' has no skill heading groups configured"
+                f"Profile '{self.config.profile.name}' bio is missing headings for "
+                f"skill '{spec.slug}': {missing_text}"
             )
 
-        grouped_sections: List[str] = []
-        for group_name, headings in groups:
-            missing_headings = [heading for heading in headings if heading not in sections]
-            if missing_headings:
-                missing_text = ", ".join(missing_headings)
-                raise ValueError(
-                    f"Profile '{self.config.profile.name}' bio is missing grouped headings: "
-                    f"{missing_text}"
-                )
-
-            group_parts = [
-                f"<skill_group name=\"{group_name}\">",
-                "<source_sections>",
-            ]
-            for heading in headings:
-                group_parts.append(f"## {heading}\n{sections[heading].strip()}")
-            group_parts.extend(["</source_sections>", "</skill_group>"])
-            grouped_sections.append("\n\n".join(group_parts))
-
-        return "\n\n".join(grouped_sections)
+        group_parts = [
+            f'<skill_group name="{spec.source_group}" declared_slug="{spec.slug}">',
+            "<source_sections>",
+        ]
+        for heading in spec.source_headings:
+            group_parts.append(f"## {heading}\n{sections[heading].strip()}")
+        group_parts.extend(["</source_sections>", "</skill_group>"])
+        return "\n\n".join(group_parts)
 
     def _parse_bio_sections(self, bio_content: str) -> Dict[str, str]:
         section_matches = list(
@@ -123,93 +191,45 @@ class SkillsCreator:
             sections[heading] = bio_content[start:end].strip()
         return sections
 
-    def _parse_json_response(self, response: str) -> Dict[str, str]:
-        match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", response)
-        json_text = match.group(1) if match else response.strip()
-        try:
-            parsed = json.loads(json_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Failed to parse skills JSON: {exc}") from exc
-
-        if not isinstance(parsed, dict):
-            raise ValueError("Skills payload must be a JSON object")
-        return {str(key): str(value) for key, value in parsed.items()}
-
-    def _validate_payload(self, payload: Dict[str, str]) -> None:
-        if not payload:
-            raise ValueError("Generated skills payload is empty")
-
-        expected_groups = {group_name for group_name, _ in self.config.profile.skill_heading_groups}
-        if len(payload) < len(expected_groups):
-            raise ValueError(
-                f"Generated {len(payload)} skills; expected at least {len(expected_groups)} to cover configured heading groups"
-            )
-
-        if len(payload) > 10:
-            raise ValueError(
-                f"Generated too many skills ({len(payload)}); expected a small high-leverage set"
-            )
-
-        seen_groups: Set[str] = set()
-        for skill_name, content in payload.items():
-            if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
-                raise ValueError(
-                    f"Skill name '{skill_name}' must be a lowercase hyphenated slug"
-                )
-            if f"name: {skill_name}" not in content:
-                raise ValueError(
-                    f"Skill {skill_name} is missing matching frontmatter name"
-                )
-            if "description:" not in content:
-                raise ValueError(
-                    f"Skill {skill_name} is missing required description frontmatter"
-                )
-            source_group_match = re.search(
-                r"^source_group:\s*(?P<group>[a-z0-9]+(?:-[a-z0-9]+)*)\s*$",
-                content,
-                flags=re.MULTILINE,
-            )
-            if source_group_match is None:
-                raise ValueError(
-                    f"Skill {skill_name} is missing required source_group frontmatter"
-                )
-            source_group = source_group_match.group("group")
-            if source_group not in expected_groups:
-                raise ValueError(
-                    f"Skill {skill_name} references unknown source_group '{source_group}'"
-                )
-            seen_groups.add(source_group)
-            if "## When To Use" not in content:
-                raise ValueError(
-                    f"Skill {skill_name} is missing '## When To Use' section"
-                )
-            if "## Do Not Use" not in content:
-                raise ValueError(
-                    f"Skill {skill_name} is missing '## Do Not Use' section"
-                )
-            if len(content.strip()) < 200:
-                raise ValueError(f"Skill {skill_name} is unexpectedly short")
-
-        missing_groups = expected_groups - seen_groups
-        if missing_groups:
-            missing_text = ", ".join(sorted(missing_groups))
-            raise ValueError(
-                f"Generated skills did not cover all configured heading groups: {missing_text}"
-            )
-
-    def _write_skills(self, payload: Dict[str, str], output_dir: Path) -> None:
+    def _write_skill(
+        self,
+        skill_name: str,
+        content: str,
+        output_dir: Path,
+        existing_path: Path | None,
+    ) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
-        for existing_dir in output_dir.iterdir():
-            if existing_dir.is_dir() and existing_dir.name not in payload:
-                shutil.rmtree(existing_dir)
-                print(f"Info: Removed stale skill directory {existing_dir}")
-        for skill_name, content in payload.items():
-            skill_dir = output_dir / skill_name
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            skill_path = skill_dir / "SKILL.md"
-            skill_path.write_text(content.strip() + "\n", encoding="utf-8")
-            print(f"Info: Wrote {skill_path}")
+        skill_dir = output_dir / self.config.profile.name / skill_name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_path = skill_dir / "SKILL.md"
+        skill_path.write_text(content.strip() + "\n", encoding="utf-8")
+        if existing_path is not None and existing_path != skill_path and existing_path.exists():
+            shutil.rmtree(existing_path.parent)
+            self._remove_empty_parent(existing_path.parent.parent, output_dir)
+        print(f"Info: Wrote {skill_path}")
 
+    def _cleanup_stale_generated_skills(self, output_dir: Path, declared_slugs: set[str]) -> None:
+        if not output_dir.exists():
+            return
+        for skill_path in sorted(output_dir.glob("*/*/SKILL.md")):
+            content = skill_path.read_text(encoding="utf-8")
+            source_profile = extract_frontmatter_value(content, "source_profile")
+            if source_profile != self.config.profile.name:
+                continue
+            skill_name = extract_frontmatter_value(content, "name") or skill_path.parent.name
+            if skill_name in declared_slugs:
+                continue
+            shutil.rmtree(skill_path.parent)
+            self._remove_empty_parent(skill_path.parent.parent, output_dir)
+            print(f"Info: Removed stale generated skill {skill_path.parent}")
+
+    def _remove_empty_parent(self, directory: Path, stop_at: Path) -> None:
+        if directory == stop_at or not directory.exists():
+            return
+        try:
+            directory.rmdir()
+        except OSError:
+            return
 
 async def _async_run(
     config: Config,

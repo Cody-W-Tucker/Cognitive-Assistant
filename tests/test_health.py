@@ -8,6 +8,8 @@ the test passes in CI without secrets or external binaries.
 
 from __future__ import annotations
 
+from collections import defaultdict
+from pathlib import Path
 import unittest
 
 from core.config import Config, list_profiles
@@ -30,6 +32,8 @@ SCRIPT_MODULES = [
     "core.cli",
     "core.soul_creator",
 ]
+
+SKILLS_DIR = Path("workspaces/skills")
 
 
 class ProfileHealthTests(unittest.TestCase):
@@ -58,6 +62,18 @@ class ProfileHealthTests(unittest.TestCase):
     def test_modules_import(self) -> None:
         self.assertEqual(check_script_imports(SCRIPT_MODULES), [])
 
+    def test_workspace_skill_slugs_are_globally_unique(self) -> None:
+        skill_paths = sorted(SKILLS_DIR.glob("*/*/SKILL.md"))
+        slugs_by_path: dict[str, list[str]] = defaultdict(list)
+
+        for skill_path in skill_paths:
+            slugs_by_path[skill_path.parent.name].append(str(skill_path))
+
+        duplicates = {
+            slug: paths for slug, paths in slugs_by_path.items() if len(paths) > 1
+        }
+
+        self.assertEqual(duplicates, {})
 
 if __name__ == "__main__":
     unittest.main()
