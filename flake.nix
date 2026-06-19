@@ -98,7 +98,6 @@
     in
     {
       lib = {
-        inherit skills categorizedSkills;
         inherit existential operational;
         layers = {
           inherit existential operational;

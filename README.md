@@ -20,8 +20,6 @@ shapes, alongside tool-spec and alignment outputs:
 | ------------------------------------------ | ---------------------------------------------------------- |
 | `packages.<system>.skills`                 | Flat export shaped as `<skill>/SKILL.md`                   |
 | `packages.<system>.categorizedSkills`      | Categorized export shaped as `<category>/<skill>/SKILL.md` |
-| `lib.skills`                               | Flat export package helper                                 |
-| `lib.categorizedSkills`                    | Categorized export package helper                          |
 | `lib.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                     |
 | `packages.<system>.verify-alignment`       | Alignment verifier package                                 |
 | `lib.alignment.spec`                       | Generated alignment spec                                   |
