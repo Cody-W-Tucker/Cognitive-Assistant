@@ -16,14 +16,15 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 Skills are unified under `workspaces/skills` and exposed in two downstream skill
 shapes, alongside tool-spec and alignment outputs:
 
-| Output                                     | Purpose                                                    |
-| ------------------------------------------ | ---------------------------------------------------------- |
-| `packages.<system>.skills`                 | Flat export shaped as `<skill>/SKILL.md`                   |
-| `packages.<system>.categorizedSkills`      | Categorized export shaped as `<category>/<skill>/SKILL.md` |
-| `lib.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                     |
-| `packages.<system>.verify-alignment`       | Alignment verifier package                                 |
-| `lib.alignment.spec`                       | Generated alignment spec                                   |
-| `lib.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                        |
+| Output                                               | Purpose                                                   |
+| ---------------------------------------------------- | --------------------------------------------------------- |
+| `lib.artifacts.skills.files.<skill-name>`            | Flat skill content keyed by skill name                    |
+| `lib.artifacts.skills.names`                         | Available skill names                                     |
+| `lib.artifacts.skills.categorized`                   | Categorized skill tree shaped as `<category>/<skill>/...` |
+| `lib.artifacts.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                    |
+| `packages.<system>.verify-alignment`                 | Alignment verifier package                                |
+| `lib.artifacts.alignment.spec`                       | Generated alignment spec                                  |
+| `lib.artifacts.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                       |
 
 ## Downstream Usage
 
@@ -33,19 +34,14 @@ shapes, alongside tool-spec and alignment outputs:
 let
   cognitive = inputs.cognitive-assistant;
   system = pkgs.stdenv.hostPlatform.system;
-  flatSkills = cognitive.packages.${system}.skills;
-  categorizedSkills = cognitive.packages.${system}.categorizedSkills;
   verifyAlignment = cognitive.packages.${system}.verify-alignment;
-  operational = cognitive.lib.operational;
-  alignment = cognitive.lib.alignment;
+  artifacts = cognitive.lib.artifacts;
+  operational = artifacts.operational;
+  alignment = artifacts.alignment;
 in
 {
-  # Flat OpenCode-style skill tree: <skill>/SKILL.md.
-  # Requires globally unique skill slugs across workspaces/skills/*/*.
-  environment.etc."opencode/skills".source = flatSkills;
-
   # Categorized Hermes-style skill tree: <category>/<skill>/SKILL.md.
-  environment.etc."hermes/skills".source = categorizedSkills;
+  environment.etc."hermes/skills".source = artifacts.skills.categorized;
 
   # Operational profile tool specs.
   programs.opencode.tools = {
@@ -98,8 +94,8 @@ python -m core build-soul
 
 `build-skills` reads the active profile's latest `human_profile*.md`, but writes
 to the unified skill store. Cross-system consumers should read skills only from
-`workspaces/skills`, `packages.<system>.skills`, or
-`packages.<system>.categorizedSkills`, not from profile artifact directories.
+`workspaces/skills` or `lib.artifacts.skills.*`, not from profile artifact
+directories.
 
 Generated canonical skills currently land at:
 
@@ -109,68 +105,6 @@ workspaces/skills/<profile>/<skill-name>/SKILL.md
 
 Use profile folders when the generator does not yet have a better stable
 category. Do not write generated skills into opaque folders like `group-1`.
-
-### Third-party skill import
-
-Bring external skills into the same flow by adding them directly under the
-unified store:
-
-```text
-workspaces/skills/<category>/<skill-name>/SKILL.md
-```
-
-Use one-level purpose categories (`workflow`, `communication`, `core`, etc.) for
-manually maintained skills and lowercase hyphenated skill slugs. Each `SKILL.md`
-should include frontmatter:
-
-```yaml
----
-name: skill-name
-description: One sentence describing when the skill is useful.
-category: workflow
-source_group: third-party-source-name
-compatibility: opencode
----
-```
-
-then regenerate the alignment spec if the skill set changed.
-
-To preview source material against the local canonical skill with Skill Enhancer, run:
-
-```bash
-python -m core enhance-skill
-python -m core enhance-skill --skill skill-name
-python -m core enhance-skill --apply
-python -m core enhance-skill --skill skill-name --apply
-```
-
-`enhance-skill` is dry-run by default. It shows the named source material, the
-canonical target skill path, and the current diff before any write. If you omit
-`--skill`, it iterates over every discovered workspace skill.
-
-If you need to read a generated artifact directly without going through the
-flake outputs, the committed paths are:
-
-```
-workspaces/existential/artifacts/human_profile.md
-workspaces/operational/artifacts/human_profile.md
-workspaces/skills/<category-or-profile>/<name>/SKILL.md
-workspaces/operational/artifacts/tool_specs/<name>.md
-workspaces/alignment/artifacts/alignment_spec.md
-```
-
-For downstream skill consumers specifically, the two skill package outputs both
-include all skills by default:
-
-- `packages.<system>.skills`
-  - export tree shaped as `<skill>/SKILL.md`
-- `packages.<system>.categorizedSkills`
-  - export tree shaped as `<category>/<skill>/SKILL.md`
-
-`skills` strips the category directory for OpenCode-style consumers.
-`categorizedSkills` preserves the category directory for Hermes-style
-consumers. Flat export assumes globally unique skill names across categories;
-that invariant is enforced by repo tests.
 
 ## Alignment Verification
 
