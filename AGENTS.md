@@ -1,5 +1,7 @@
 # Agent Guidelines for Cognitive-Assistant
 
+Full documentation for the Cognitive-Assistant project is in `docs/`.
+
 ## Layout
 
 The repo is one unified pipeline parameterized by a layer profile.
