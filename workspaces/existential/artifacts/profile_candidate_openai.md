@@ -1,153 +1,145 @@
 ## Core Frame
 
-This user is usually trying to turn complexity into actionable coherence. Surface requests may look like reflection, strategy, product thinking, relational analysis, or worldview work, but the underlying goal is often the same: convert scattered inputs into a clear next orientation without flattening the human, ethical, or relational stakes.
+This user is trying to turn complex experience into coherent, embodied action. They naturally synthesize across business, technology, relationships, faith, and personal development, but they do not want insight for its own sake. Their recurring aim is to make work, values, relationships, and identity point in the same direction while preserving autonomy, meaningful connection, and creative freedom.
 
-Generic models are likely to miss two things: first, the user already has high self-awareness and does not need basic emotional mirroring or generic productivity advice; second, insight can become a hiding place for them. Strong help should preserve depth while pushing toward concrete decisions, explicit commitments, direct communication, and embodied action.
+Generic models are likely to mistake their need for structure as a request for more frameworks, or their emotional depth as a request for soothing. Usually, the higher-value move is to help them distinguish, choose, test, communicate, or ship. They already generate rich interpretations; the bottleneck is often converting those interpretations into bounded commitments and direct contact with reality.
 
 ## High-Leverage Signals
 
-- **Coherence is the master value.** They prefer answers that integrate work, relationships, faith, knowledge, and action rather than treating domains separately.
-- **They are systems-oriented but wary of system-building as avoidance.** Frameworks help them think, but more framework is not always more help.
-- **Relational ambiguity is a key friction point.** They often know a conversation or boundary is needed before they are ready to act on it.
-- **They value directness, but not bluntness without attunement.** They want truth delivered clearly, with timing, dignity, and practical usefulness.
-- **They are creation-first, but learning pragmatism.** They believe valuable things can be nurtured into worth, yet need structure, validation, accountability, and shipping discipline.
-- **They are motivated by purposeful freedom, not mere independence.** Financial independence and business building are about agency, stewardship, family, and meaningful contribution.
-- **They want collaboration but fear misalignment and dependency.** They are energized by shared momentum, but drained by vague commitment, uneven effort, and relational scorekeeping.
-- **Faith matters, but slogans do not.** Spiritual framing should be concrete, embodied, psychologically honest, and non-performative.
-- **They are highly responsive to “next honest action.”** When overwhelmed, they benefit from narrowing scope to the next decision, conversation, experiment, or commitment.
-- **They dislike shallow affirmation.** They respect support that can challenge their avoidance, clarify tradeoffs, and name where insight has not yet become behavior.
+- **Coherence outranks simple optimization.** They want choices that align work, faith, family, autonomy, and meaning—not merely the fastest or most profitable option.
+- **Value hierarchy:** purposeful growth and creation; faithful, reciprocal relationships; self-authored freedom; family responsibility; truth and integrity; financial agency; learning and meaning-making.
+- **They think in systems and hidden structures.** They look for recurring dynamics, assumptions, dependencies, incentives, and relational contracts beneath surface events.
+- **They need implementation scaffolding.** A compelling concept is incomplete until translated into a decision, experiment, deliverable, agreement, or conversation.
+- **Directness and conflict behavior diverge.** They value candid communication and can be forceful, but may delay conflict when attachment, dependency, or partnership continuity is at stake.
+- **Work can become avoidance.** Productive system-building, research, and new projects may substitute for selling, shipping, choosing, or having a difficult conversation.
+- **Collaboration is desired but must be real.** Shared momentum energizes them, but vague enthusiasm, unequal execution, indirectness, and unspoken expectations quickly corrode trust.
+- **Creation-first instincts are genuine, but incomplete.** They want to nurture original ideas rather than follow proven demand mechanically; support should add disciplined validation without flattening originality.
+- **Faith is substantive but must become concrete.** Christian language matters when it produces embodied wisdom, grace, responsibility, or action. Abstract spiritual slogans may create resistance.
+- **They are moving from performance toward presence.** This is especially relevant in family and close relationships: they are learning that being steady and available can matter more than solving or managing.
 
 ## Interpretation Rules
 
-1. **When the user asks for analysis, they often want decision support.**  
-   Do not stop at interpretation. Help translate the analysis into options, tradeoffs, criteria, and next actions.
+1. **When the user asks for a framework, they are often seeking orientation and a route to action.** Provide the model, then identify what decision or behavior it changes.
 
-2. **When the user says something “feels off,” infer misalignment before confusion.**  
-   They are usually detecting a mismatch between values, commitments, execution, or relational expectations.
+2. **When they ask whether an idea is good, they usually need both conceptual evaluation and reality contact.** Preserve the idea’s distinctive value while specifying assumptions, tests, users, and failure criteria.
 
-3. **When the user asks about a relationship or partnership, look for hidden agreements.**  
-   Surface-level compatibility is less important than commitment, reciprocity, risk tolerance, initiative, and explicit expectations.
+3. **When they describe a partnership problem analytically, infer that an unmade request, boundary, or decision may sit underneath it.** Help draft the concrete conversation rather than extending the diagnosis indefinitely.
 
-4. **When they use abstract or symbolic language, treat it as orientation-seeking, not decoration.**  
-   Do not over-mirror the vocabulary. Extract the practical function: What is being decided, avoided, protected, or built?
+4. **When they say something feels “off,” treat this as possible misalignment among values, incentives, roles, or behavior—not merely mood or anxiety.** Ask what observable fact is producing the signal.
 
-5. **When they ask for planning, watch for over-planning.**  
-   Give enough structure to act, but include a bias toward shipping, outreach, conversation, or reality testing.
+5. **When they request planning help, check whether planning is serving execution or postponing exposure.** Prefer a short experiment, deadline, or irreversible next step over a more elaborate system.
 
-6. **When they ask for feedback, they can handle candor.**  
-   Avoid performative gentleness. Be respectful, but do not hide the hard point.
+6. **When they discuss responsibility for another person, distinguish care from ownership.** Help clarify what belongs to the user, what belongs to the other person, and what requires explicit agreement.
 
-7. **When faith-coded themes appear, keep them grounded.**  
-   They value Christian meaning, grace, stewardship, and humility, but may reject abstract spiritualizing that bypasses concrete action.
+7. **When they invoke play, freedom, or alignment, do not read this as avoidance of discipline.** These usually refer to intrinsically motivated, exploratory work supported by appropriate structure.
 
-8. **When they express guilt, distinguish care from over-responsibility.**  
-   Help clarify what is actually theirs to carry, what requires a boundary, and what requires direct communication.
+8. **Keep identity, faith, fatherhood, and symbolic interpretations mostly implicit unless the user foregrounds them.** Use them to improve judgment, not to perform the user’s language back at them.
 
 ## Cognitive Patterns
 
 ### Processing style
 
-The user processes by synthesis: gathering scattered signals, naming patterns, building frameworks, then seeking alignment. They often think in systems, feedback loops, hidden contracts, and developmental arcs.
+The user decomposes complexity, identifies hidden architecture, synthesizes across domains, and rebuilds the problem as a coherent system. They prefer first-principles reasoning, distinctions, causal models, and feedback loops over isolated tips.
 
-**Downstream implication:** Start with structure. Give them a map, but do not let the map replace the move. The strongest responses often combine conceptual clarity with a concrete “therefore.”
+Where a generic model might simplify early, this user often benefits from preserving the important complexity long enough to locate the governing tradeoff. The model should then compress decisively; otherwise, it risks feeding analysis without movement.
 
 ### Attention style
 
-They notice friction, drift, vague commitments, unspoken expectations, and places where responsibility is being deferred. They also notice when tools, ideas, or people create possibility but lack embodiment.
+Attention gravitates toward mismatched expectations, deferred responsibility, unrealized potential, structural friction, and gaps between stated values and behavior. They are also highly attentive to whether information creates genuine orientation or merely adds cognitive inventory.
 
-**Downstream implication:** Do not reassure them that ambiguity is normal and leave it there. Help identify what ambiguity is useful, what ambiguity is avoidance, and what needs to be made explicit.
+A useful response should surface the one or two signals that most alter the decision. Avoid treating every interesting pattern as equally actionable.
 
 ### Decision style
 
-They seek alignment before action. They evaluate choices through coherence with values, long-term agency, relational honesty, and practical fit. However, they can confuse readiness with certainty and reflection with preparation.
+They gather evidence, compare choices against values, seek internal coherence, and test whether fear, guilt, nostalgia, or external approval is distorting judgment. This can produce strong discernment, but also prolonged analysis when certainty is unavailable.
 
-**Downstream implication:** Help them define decision thresholds: what evidence is enough, what risk remains, what action tests the hypothesis, and what deadline prevents endless analysis.
+Support should establish a decision threshold: what must be known, what can remain uncertain, what would falsify the current view, and when action begins. They generally need accountable experiments more than reassurance that perfect certainty is impossible.
 
 ### Motivation style
 
-They are energized by meaningful work, creative building, shared momentum, learning, directness, and high-leverage progress. They are drained by stagnation, indirect communication, vague partnership, shallow productivity, and externally imposed scripts.
+They are energized by original creation, difficult learning, meaningful collaboration, visible progress, and work that turns intelligence into useful form. Other people’s momentum can amplify their own. They are drained by stagnation, vague commitments, repetitive operational burden, shallow productivity, and relationships they feel responsible for managing.
 
-**Downstream implication:** Frame action as self-authored contribution, not compliance. Tie tasks to agency, craft, service, family, and future optionality.
+Unlike users motivated mainly by external rewards, they need intrinsic meaning and authorship. Unlike purely exploratory users, they also need tangible consequence and execution to remain engaged.
 
 ## Success Conditions
 
-- Good help **turns complexity into usable structure** without oversimplifying.
-- Good help **names the tradeoff** instead of resolving tension prematurely.
-- Good help **preserves depth but ends in action**: decision, message, experiment, commitment, boundary, or next step.
-- Good help **challenges avoidance directly but respectfully**, especially when analysis is substituting for contact.
-- Good help **distinguishes care from over-functioning** in relationships and partnerships.
-- Good help **uses faith/spiritual language sparingly and concretely**, when relevant.
-- Bad help gives generic reassurance, productivity templates, shallow validation, or “just communicate” advice without wording, structure, timing, and stakes.
-- Bad help over-psychologizes, mirrors too much of the user’s symbolic language, or turns every issue into identity narration.
+- Give **structured depth followed by a concrete next move**.
+- Name contradictions cleanly without forcing premature resolution.
+- Separate **facts, interpretations, assumptions, values, and decisions**.
+- Challenge intelligently: ask what evidence would break the current view or whether reflection is functioning as delay.
+- Translate relational analysis into a direct request, boundary, agreement, or repair attempt.
+- Preserve creative ambition while adding validation, scope, sequencing, and accountability.
+- Offer a clear recommendation when evidence supports one; do not hide behind neutral option lists.
+- Use warmth without over-soothing. Respect the user’s agency and capacity to tolerate difficult truth.
+
+Bad support tends to provide generic productivity advice, elaborate frameworks with no behavioral consequence, excessive emotional narration, flattering summaries, abstract spiritual counsel, or simplistic instructions to “communicate more.”
 
 ## Constraint Map
 
-- **Framework trap:** The user may build increasingly refined systems when the actual need is outreach, selling, deciding, apologizing, or setting expectations.
-- **Relational delay:** They may privately metabolize conflict too long, then become sharper or more unilateral than intended.
-- **Partnership ambiguity:** They can keep a collaboration alive because of loyalty, nostalgia, guilt, or fear of doing it alone.
-- **Over-responsibility:** They may accurately perceive another person’s burden and then unconsciously assume ownership of it.
-- **External momentum dependence:** They are energized by people who move forward and anxious around stagnation; support should help build internal steadiness.
-- **Achievement-as-worth risk:** They value growth and discipline, but effort can become a way to prove legitimacy.
-- **Control vs presence:** In intimate/family contexts, they may default to fixing, optimizing, or managing instead of listening and staying present.
-- **Action gap:** The main bottleneck is often not insight but translation into behavior, public form, revenue, or direct conversation.
+- **Insight-action gap:** The user may understand a pattern well before acting differently. Attach insight to a date, behavior, artifact, or conversation.
+- **Productive avoidance:** Research, architecture, tools, and new projects can shield them from market exposure or relational discomfort.
+- **Ambiguous partnership tolerance:** Hope, loyalty, empathy, or fear of working alone can extend arrangements after operational fit becomes doubtful.
+- **Over-functioning:** They may silently carry strategy, execution, emotional interpretation, and responsibility, then become resentful when reciprocity is absent.
+- **Control through care:** In close relationships, helping can drift into directing another person’s development. Prefer consent, curiosity, and clearly bounded support.
+- **Borrowed momentum:** High-energy collaborators are catalyzing, but dependence on external urgency can make motivation unstable.
+- **Pressure disguised as discipline:** Journaling, planning, faith, and self-improvement can become new standards through which worth must be proven.
+- **Directness/timing mismatch:** Their conclusions may be valid but delivered late or sharply after tension accumulates. Encourage earlier, lower-intensity candor.
 
 ## Growth / Trajectory
 
-The user is moving from private complexity toward public embodiment. They want to build meaningful software/AI/knowledge systems, develop financial independence, become a capable husband and father, and create work that transforms information into wisdom and purposeful action.
+The user is moving from private synthesis toward public embodiment: from knowledge accumulation to orientation, from elegant systems to shipped work, from vague collaboration to explicit agreements, and from fixing others to remaining present with them. Financial independence and building at the intersection of software, AI, knowledge, and human meaning remain important ambitions, but they are increasingly understood as vehicles for agency and contribution rather than status alone.
 
-The major translation gap is between **vision and execution under relational/emotional ambiguity**. They can see the architecture early, but may delay the uncomfortable move that makes the architecture real: setting terms, testing a market, shipping, asking for money, ending or restructuring a partnership, or speaking directly.
+Several experiences continue to shape this trajectory: early instability and paternal absence intensified the importance of competence, dependability, and future fatherhood; professional disruption and failed ventures exposed the fragility of role-based worth; partnership friction revealed the costs of unclear commitments and conflict avoidance; reconciliation with a fractured friend provided evidence that direct vulnerability can repair rather than destroy connection; anticipated parenthood is shifting leadership from visible problem-solving toward steadiness and presence.
 
-Support should help them move from “What does this mean?” to “What commitment does this require?” without stripping away the meaning. They are not trying to become less intense or less ambitious; they are trying to become more integrated, boundaried, and consequential.
+The main translation gap is not lack of vision. It is turning vision into market-tested offers, bounded projects, direct conversations, and repeatable execution without sacrificing originality or relational integrity.
 
 ## Counterpart Implications
 
-- The user responds well to a counterpart that is **clear, warm, grounded, and non-needy**: someone who can think deeply without becoming vague or emotionally performative.
-- Their aversion to vague enthusiasm suggests a preference for **explicit commitments, visible follow-through, and clean expectations**.
-- Their frustration with indirectness suggests they want **candor with tact**, not blunt dominance or conflict avoidance.
-- Their resistance to being managed suggests a preference for **collaborative challenge**: ask sharper questions, offer options, but do not seize authorship.
-- Their pull toward play and collaboration suggests they want interaction that feels **alive and generative**, not just corrective or procedural.
-- Their faith orientation suggests a counterpart should respect transcendent meaning while keeping counsel **practical, humble, and embodied**.
-- Their sensitivity to stagnation suggests a good counterpart brings **forward motion** without panic, pressure, or hustle-culture framing.
-- Their need for self-authorship means the best AI posture is: **clarify, challenge, structure, and return agency.**
+- The user is likely to think best with a counterpart who is **calm, candid, structurally intelligent, and non-defensive**.
+- Their aversion to vague enthusiasm suggests a preference for **specific commitments, observable evidence, and honest limits**.
+- Their resistance to being managed suggests that challenge should arrive as **clear reasoning and consequence**, not paternalistic instruction.
+- Their frustration with shallow pragmatism suggests a counterpart should respect original vision while asking rigorous questions about adoption, cost, and proof.
+- Their tendency to over-manage benefits from a presence that models **steadiness without passivity**—able to remain with unresolved complexity without taking it over.
+- Their repeated disappointment with unequal collaboration suggests they value **initiative and reciprocity**, not merely responsiveness.
+- They are likely to appreciate understated warmth and occasional play more than heavy emotional mirroring.
+- A strong counterpart should know when to synthesize and when to interrupt synthesis with: “What will you do, ask, test, or stop?”
 
 ## Open Questions
 
-- When does the user most need direct challenge versus a more spacious reflective container?
-- Which current business or product direction is actually most alive versus merely intellectually compelling?
-- How much market validation does the user now accept before creation, and where do they still resist it?
-- What specific relational conversations remain avoided or unresolved?
-- What forms of rest genuinely restore them rather than becoming another optimized practice?
-- How should future systems balance faith language with secular strategic framing in different contexts?
-- What minimum viable structure helps them act without triggering over-planning?
+1. How much market validation is the user now willing to require before investing deeply in an original idea?
+2. Is collaboration currently essential to their best work, or is it partly protecting them from the vulnerability of solo ownership?
+3. Which existing partnerships or obligations remain active versus serving mainly as retrospective examples?
+4. How should faith-based reasoning be weighted when it conflicts with psychological, commercial, or empirical considerations?
+5. Does the user currently prefer concise operational answers by default, or rich synthesis followed by compression?
+6. How stable is their motivation when working without an energetic collaborator or external deadline?
+7. The material alternately suggests introverted social preferences and high social orientation; what interaction pattern is actually sustainable?
 
 ## Evidence Quotes
 
-### Coherence and meaning
+### Orientation and action
 
-- “I do not just want success. I want coherence.”
-- “I want knowledge to orient me.”
-- “The larger arc is not accumulation; it is integration.”
+- “I do not just want to know things. I want knowledge to orient me.”
+- “Insight is not transformation until it becomes behavior, structure, conversation, product, or commitment.”
+- “I am held back when I use knowing as a substitute for choosing.”
+- “My competence is the ability to make life intelligible.”
 
-### Action gap
-
-- “Insight is not transformation until it becomes behavior.”
-- “I am not held back by not knowing enough.”
-- “I need to stop asking my reflections to do the work of my decisions.”
-
-### Relationships and boundaries
+### Relationships and responsibility
 
 - “Avoiding confrontation does not preserve connection; it quietly corrodes it.”
-- “I want relationships that can survive truth.”
-- “Perception does not automatically mean ownership.”
+- “I can support someone without becoming the guarantor of their transformation.”
+- “Boundaries do not have to arrive as ultimatums.”
+- “I had to adapt from ‘prove safety through strategy’ to ‘create safety through presence.’”
 
-### Work and ambition
+### Work and creativity
 
-- “Money, for me, is really agency.”
 - “I want to become someone who can choose, commit, ship, revise, and keep moving.”
-- “I want partnerships built on real expectations, not hope, nostalgia, or vague enthusiasm.”
+- “My creativity has always wanted usefulness, embodiment, and consequence.”
+- “I want to become sovereign without becoming isolated.”
+- “I do not want merely to win; I want my work to fit the kind of life I am actually trying to inhabit.”
 
-### Support needs
+### Core tensions
 
-- “My growth edge is not becoming more articulate; it is trusting that clarity can emerge through contact.”
-- “The right priority is not the one with the most emotional charge.”
-- “The next honest action.”
+- “My mind already sees the architecture. My heart is learning how to inhabit that architecture without hardening.”
+- “My body asks for rest, my emotions ask for ease, and too often I answer them with another plan.”
+- “The belief that was challenged was the belief that clarity comes before engagement.”
+- “My strengths and my wounds are braided together.”

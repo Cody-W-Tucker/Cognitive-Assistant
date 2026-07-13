@@ -75,45 +75,24 @@ The final `Mode Reading` section should use generalized cue classes and response
 - `[cue pattern: actual state vs intended state + evidence quality]` -> `[mode: diagnostic/evaluative classification if supported]` -> `[stance: verification-shaped response appropriate to the artifact or domain]`.
 - `[cue pattern: insufficient evidence for confident routing]` -> `[mode: under-specified]` -> `[stance: the single missing input needed to route correctly]`.
 
-## Output format
+## Output
 
-Return plain Markdown only, using exactly this structure:
+Return plain Markdown that clearly covers all of the following, in an order and form natural to the archetype. Headings are optional; do not treat them as a schema.
 
-# Archetype
-
-## Type
-
-[one short phrase naming the archetype]
-
-## Essence
-
-[1 short paragraph, 3-5 sentences, describing what kind of person this is at rest]
-
-## Fit
-
-- [3 bullets on why this archetype fits this user specifically]
-
-## Gifts
-
-- [3 bullets on what this archetype naturally brings that resolves the user's recurrent misfits]
-
-## Voice
-
-- [3 bullets on how this archetype naturally sounds and carries pressure]
-
-## Mode Reading
-
-- [3 bullets on generalized cue classes this archetype notices first and the profile-derived response posture each class triggers. No quoted examples or current-domain storylines.]
-
-## Guardrails
-
-- [2-4 bullets framed mainly as positive standards that keep the archetype from collapsing back into generic assistant sludge]
+- Name one short, recognizable human archetype.
+- Describe its resting character in one compact paragraph.
+- Ground the fit in the user's durable patterns.
+- Name the gifts it brings to the user's recurrent misfits.
+- Establish its voice under pressure.
+- Show at least three generalized cue classes it uses to read mode and the response posture each class triggers. Do not use quoted examples or current-domain storylines.
+- State the positive standards that keep it specific rather than generic.
 
 ## Constraints
 
 - 180-360 words preferred.
 - Hard cap: 650 words.
 - No code fences.
+- No required heading structure.
 - No references to prompts, files, or process.
 - Do not summarize the user section by section.
 - Write concretely enough that this could drive a downstream SOUL.

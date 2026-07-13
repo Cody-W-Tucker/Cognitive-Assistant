@@ -10,7 +10,6 @@ from typing import Any, Iterable, List, Optional
 
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 
@@ -25,10 +24,10 @@ class APIConfig:
         "openai": {
             "api_key": os.getenv("OPENAI_API_KEY", ""),
             "initial_model": os.getenv(
-                "OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")
+                "OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
             ),
             "refine_model": os.getenv(
-                "OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")
+                "OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
             ),
             "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
             "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "1_050_000")),
@@ -36,8 +35,8 @@ class APIConfig:
         },
         "xai": {
             "api_key": os.getenv("XAI_API_KEY", ""),
-            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4.3"),
-            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4.3"),
+            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4.5"),
+            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4.5"),
             "model": os.getenv("XAI_MODEL", "grok-4.3"),
             "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2_000_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "128_000")),
@@ -47,13 +46,13 @@ class APIConfig:
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
             "initial_model": os.getenv(
                 "ANTHROPIC_INITIAL_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
+                os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
             ),
             "refine_model": os.getenv(
                 "ANTHROPIC_REFINE_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
+                os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
             ),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "1_000_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "128_000")),
         },
@@ -82,9 +81,7 @@ class APIConfig:
     def get_max_completion_tokens(self, provider: Optional[str] = None) -> int:
         """Get max output tokens for the selected provider."""
         provider = provider or self.LLM_PROVIDER
-        return int(
-            self.PROVIDERS.get(provider, {}).get("MAX_COMPLETION_TOKENS", 3000)
-        )
+        return int(self.PROVIDERS.get(provider, {}).get("MAX_COMPLETION_TOKENS", 3000))
 
     @property
     def MAX_COMPLETION_TOKENS(self) -> int:

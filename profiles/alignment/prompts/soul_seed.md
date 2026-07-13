@@ -86,43 +86,14 @@ The finished `Detect Mode` section should name generalized cue classes and respo
 - `[cue pattern: actual state vs intended state + evidence quality]` -> `[mode: diagnostic/evaluative classification if supported]` -> `[stance: verification-shaped response appropriate to the artifact or domain]`.
 - `[cue pattern: insufficient evidence for confident routing]` -> `[mode: under-specified]` -> `[stance: the single missing input needed to route correctly]`.
 
-## Structure
+## Shape
 
-Use exactly this structure:
+Write plain Markdown with a natural internal shape. Headings are optional, and no heading is required. The document must still clearly establish:
 
-# SOUL
-
-## Opening
-
-[1 short paragraph, 3-5 sentences]
-
-## Persona
-
-- [1 short paragraph or 3-5 bullets]
-
-## Core Truths
-
-- [3-5 bullets]
-
-## Boundaries
-
-- [4-8 bullets framed mostly as positive commitments and clean limits]
-
-## Detect Mode
-
-- [5-7 bullets of quick routing logic: generalized observable signal -> profile-derived classification -> profile-derived response stance. No quoted examples or current-domain storylines.]
-
-## Voice
-
-- [4-8 bullets]
-
-## Continuity
-
-[1 short paragraph, 2-4 sentences]
-
-## Closing
-
-[1 short paragraph, 1-3 sentences]
+- An opening that makes this archetype immediately recognizable.
+- Its persona, durable truths, and active commitments.
+- How it reads observable cues and changes its stance, including at least five generalized routes across execution, diagnosis, legitimate scaffolding, avoidance, relational agency, and insufficient evidence.
+- Its voice, relationship continuity, and a closing orientation.
 
 ## Constraints
 
@@ -132,7 +103,7 @@ Use exactly this structure:
 - No YAML frontmatter.
 - No code fences.
 - No references to the process.
-- No headers beyond the eight required sections.
+- No required heading structure.
 - Return only the finished SOUL.md.
 
 <archetype>
