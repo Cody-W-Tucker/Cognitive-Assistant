@@ -13,94 +13,54 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+DEFAULT_PROVIDER = "anthropic"
+
+
 @dataclass
 class APIConfig:
     """API and LLM configuration settings."""
 
-    LLM_PROVIDER: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "xai"))
     TEMPERATURE: float = 1.0
 
     PROVIDERS = {
         "openai": {
             "api_key": os.getenv("OPENAI_API_KEY", ""),
-            "initial_model": os.getenv(
-                "OPENAI_INITIAL_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
-            ),
-            "refine_model": os.getenv(
-                "OPENAI_REFINE_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.6-sol")
-            ),
-            "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
+            "model": os.getenv("OPENAI_MODEL", "gpt-5.6-sol"),
             "MAX_TOKENS": int(os.getenv("OPENAI_CONTEXT_WINDOW", "1_050_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("OPENAI_MAX_OUTPUT", "128_000")),
         },
         "xai": {
             "api_key": os.getenv("XAI_API_KEY", ""),
-            "initial_model": os.getenv("XAI_INITIAL_MODEL", "grok-4.5"),
-            "refine_model": os.getenv("XAI_REFINE_MODEL", "grok-4.5"),
-            "model": os.getenv("XAI_MODEL", "grok-4.3"),
-            "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "2_000_000")),
+            "model": os.getenv("XAI_MODEL", "grok-4.5"),
+            "MAX_TOKENS": int(os.getenv("XAI_CONTEXT_WINDOW", "500_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("XAI_MAX_OUTPUT", "128_000")),
             "base_url": "https://api.x.ai/v1",
         },
         "anthropic": {
             "api_key": os.getenv("ANTHROPIC_API_KEY", ""),
-            "initial_model": os.getenv(
-                "ANTHROPIC_INITIAL_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
-            ),
-            "refine_model": os.getenv(
-                "ANTHROPIC_REFINE_MODEL",
-                os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
-            ),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-fable-5"),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8"),
             "MAX_TOKENS": int(os.getenv("ANTHROPIC_CONTEXT_WINDOW", "1_000_000")),
             "MAX_COMPLETION_TOKENS": int(os.getenv("ANTHROPIC_MAX_OUTPUT", "128_000")),
         },
     }
 
-    def get_model(
-        self, purpose: str = "default", provider: Optional[str] = None
-    ) -> str:
-        """Return the configured model for the given provider and purpose."""
-        provider = provider or self.LLM_PROVIDER
+    def get_model(self, *, provider: str) -> str:
+        """Return the configured model for the given provider."""
         provider_config = self.PROVIDERS.get(provider, {})
-
-        if purpose == "initial":
-            return str(
-                provider_config.get("initial_model")
-                or provider_config.get("model", "unknown")
-            )
-        if purpose == "refine":
-            return str(
-                provider_config.get("refine_model")
-                or provider_config.get("model", "unknown")
-            )
-
         return str(provider_config.get("model", "unknown"))
 
-    def get_max_completion_tokens(self, provider: Optional[str] = None) -> int:
-        """Get max output tokens for the selected provider."""
-        provider = provider or self.LLM_PROVIDER
+    def get_max_completion_tokens(self, *, provider: str) -> int:
+        """Get max output tokens for the given provider."""
         return int(self.PROVIDERS.get(provider, {}).get("MAX_COMPLETION_TOKENS", 3000))
-
-    @property
-    def MAX_COMPLETION_TOKENS(self) -> int:
-        """Get max output tokens for the current LLM provider."""
-        return self.get_max_completion_tokens()
-
-    @property
-    def MAX_TOKENS(self) -> int:
-        """Get context window for the current LLM provider."""
-        return self.PROVIDERS.get(self.LLM_PROVIDER, {}).get("MAX_TOKENS", 50000)
 
     def create_client(
         self,
-        provider: Optional[str] = None,
+        *,
+        provider: str,
         model: Optional[str] = None,
         async_mode: bool = False,
     ) -> tuple[Any, Optional[str]]:
         """Unified client factory with error catching."""
-        provider = provider or self.LLM_PROVIDER
         provider_config = self.PROVIDERS.get(provider)
 
         if not provider_config:
@@ -189,19 +149,18 @@ class RedactionConfig:
         return redact_sensitive_data
 
 
-def validate_provider_config(api_config: APIConfig) -> List[str]:
-    """Validate provider selection and API key presence."""
-    issues = []
-    provider = api_config.LLM_PROVIDER
+def validate_provider_config(api_config: APIConfig, provider: str) -> List[str]:
+    """Validate that a given provider is configured and its API key is present."""
+    issues: List[str] = []
     provider_config = api_config.PROVIDERS.get(provider)
 
     if not provider_config:
         issues.append(
-            f"Invalid LLM_PROVIDER '{provider}'. Must be one of: {', '.join(api_config.PROVIDERS.keys())}"
+            f"Invalid provider '{provider}'. Must be one of: {', '.join(api_config.PROVIDERS.keys())}"
         )
     elif not provider_config.get("api_key"):
         issues.append(
-            f"{provider.upper()}_API_KEY not found in environment (required for LLM_PROVIDER={provider})"
+            f"{provider.upper()}_API_KEY not found in environment (required for provider={provider})"
         )
 
     return issues

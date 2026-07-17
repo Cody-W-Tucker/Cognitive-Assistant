@@ -14,13 +14,9 @@ The LLM integration layer provides a unified abstraction for multi-provider acce
 
 The `APIConfig` class serves as the central authority for LLM settings, model selection, and client instantiation. It supports a provider map that defines context windows, output limits, and specific model versions for different stages of the pipeline.
 
-### Model Selection by Purpose
+### Model Selection
 
-The system distinguishes between different task "purposes" to allow for cost and performance optimization:
-
-- **Initial**: Used for drafting or broad synthesis (e.g., `XAI_INITIAL_MODEL`).
-- **Refine**: Used for iterative improvements or synthesis of multiple drafts (e.g., `XAI_REFINE_MODEL`).
-- **Default**: The fallback model for general tasks.
+Each provider has a single configured `model`. Callers select the model directly via `get_model(provider=...)`. All callers must supply an explicit provider.
 
 ### Supported Providers
 
@@ -104,7 +100,7 @@ To ensure the system is correctly configured before starting long-running pipeli
 
 `validate_provider_config` checks for:
 
-1. The presence of the required API key for the selected `LLM_PROVIDER`.
+1. The presence of the required API key for the given provider.
 2. The availability of the necessary Python packages (`openai` or `anthropic`).
 
 ### Health Check Integration
@@ -123,11 +119,9 @@ Title: "Provider and RLM Configuration Relationships"
 ```mermaid
 classDiagram
     class APIConfig {
-        +LLM_PROVIDER: str
         +PROVIDERS: dict
-        +MAX_TOKENS: int
-        +get_model(purpose)
-        +create_client(async_mode)
+        +get_model(provider: str)
+        +create_client(provider: str, async_mode: bool)
     }
     class LayerProfile {
         +name: str
@@ -153,7 +147,7 @@ classDiagram
 The `PROVIDERS` dictionary in `APIConfig` contains the following schema for each provider:
 
 - `api_key`: Fetched from environment variables (e.g., `XAI_API_KEY`).
-- `initial_model` / `refine_model`: Specific model identifiers.
+- `model`: The configured model identifier for the provider.
 - `MAX_TOKENS`: The context window limit used for truncation logic.
 - `MAX_COMPLETION_TOKENS`: The limit for the generated response.
 - `base_url`: (Optional) Custom endpoint for OpenAI-compatible APIs like xAI.

@@ -41,11 +41,11 @@ def check_script_imports(script_modules: Iterable[str]) -> List[str]:
 
 
 def check_provider_setup(
-    *, config, create_client: Callable, providers: Iterable[str] | None = None
+    *, config, create_client: Callable, providers: Iterable[str]
 ) -> List[str]:
     """Verify provider environment variables, packages, and client creation."""
     issues: List[str] = []
-    provider_names = list(providers or [config.api.LLM_PROVIDER])
+    provider_names = list(providers)
 
     for provider in provider_names:
         provider_config = config.api.PROVIDERS.get(provider)

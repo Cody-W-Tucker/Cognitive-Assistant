@@ -106,7 +106,7 @@ def load_dataset_context(config: Config) -> str:
 
 
 async def _call_llm(
-    config: Config, handle: LLMHandle, prompt: str, max_tokens: int = None
+    config: Config, handle: LLMHandle, prompt: str, *, max_tokens: int
 ) -> str:
     """Generate text for a prompt using the shared async helper."""
     try:
@@ -115,7 +115,7 @@ async def _call_llm(
             handle,
             user_prompt=prompt,
             temperature=config.api.TEMPERATURE,
-            max_output_tokens=max_tokens or config.api.MAX_COMPLETION_TOKENS,
+            max_output_tokens=max_tokens,
         )
         print(
             f"Info: {handle.provider.upper()} response successful "
@@ -144,13 +144,8 @@ def validate_prompt_creator_config(config: Config) -> List[str]:
     if not config.paths.QUESTIONS_CSV.exists():
         issues.append(f"Questions CSV not found at {config.paths.QUESTIONS_CSV}")
 
-    original_provider = config.api.LLM_PROVIDER
-    try:
-        for provider in get_prompt_creator_providers():
-            config.api.LLM_PROVIDER = provider
-            issues.extend(validate_provider_config(config.api))
-    finally:
-        config.api.LLM_PROVIDER = original_provider
+    for provider in get_prompt_creator_providers():
+        issues.extend(validate_provider_config(config.api, provider))
 
     return list(dict.fromkeys(issues))
 
@@ -160,7 +155,7 @@ async def _generate_draft(config: Config, provider: str, prompt: str) -> DraftRe
     handle = create_client(
         config.api,
         provider=provider,
-        model=config.api.get_model("initial", provider=provider),
+        model=config.api.get_model(provider=provider),
         async_mode=True,
     )
 
@@ -234,7 +229,7 @@ async def _process_dataset(config: Config) -> int:
     synthesis_handle = create_client(
         config.api,
         provider=ENSEMBLE_SYNTHESIS_PROVIDER,
-        model=config.api.get_model("refine", provider=ENSEMBLE_SYNTHESIS_PROVIDER),
+        model=config.api.get_model(provider=ENSEMBLE_SYNTHESIS_PROVIDER),
         async_mode=True,
     )
     try:

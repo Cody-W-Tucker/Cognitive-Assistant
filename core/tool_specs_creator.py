@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from core.config import Config
+from lib.config import DEFAULT_PROVIDER
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
@@ -27,7 +28,8 @@ class ToolSpecsCreator:
         self.config = config
         self.handle: LLMHandle = create_client(
             config.api,
-            model=config.api.get_model("refine"),
+            provider=DEFAULT_PROVIDER,
+            model=config.api.get_model(provider=DEFAULT_PROVIDER),
             async_mode=True,
         )
 

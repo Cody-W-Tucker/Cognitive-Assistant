@@ -491,16 +491,21 @@ class Config:
 
     # ----- validation --------------------------------------------------------
 
-    def validate(self) -> List[str]:
+    def validate(self, providers: Optional[List[str]] = None) -> List[str]:
         """Validate provider config and required profile inputs."""
-        issues = validate_provider_config(self.api)
+        target_providers = providers or [
+            "xai", "anthropic", "openai",
+        ]
+        issues: List[str] = []
+        for provider in target_providers:
+            issues.extend(validate_provider_config(self.api, provider))
         if not self.paths.QUESTIONS_CSV.exists():
             issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
         return issues
 
-    def validate_llm_access(self) -> List[str]:
-        """Validate just provider/LLM access (for scripts that don't need RLM)."""
-        return validate_provider_config(self.api)
+    def validate_llm_access(self, provider: str = "anthropic") -> List[str]:
+        """Validate just provider/LLM access for scripts that use a single model."""
+        return validate_provider_config(self.api, provider)
 
     def validate_question_answering(self) -> List[str]:
         """Validate everything required to run the RLM-backed question loop."""

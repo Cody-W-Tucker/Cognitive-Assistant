@@ -15,7 +15,7 @@ from core.skill_engine import (
     repo_root,
     validate_skill_slug,
 )
-from lib.config import APIConfig, validate_provider_config
+from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
 from lib.llm import close_client_async, create_client
 
 
@@ -237,7 +237,8 @@ async def _enhance_async(
 ) -> str:
     handle = create_client(
         api,
-        model=api.get_model("refine"),
+        provider=DEFAULT_PROVIDER,
+        model=api.get_model(provider=DEFAULT_PROVIDER),
         async_mode=True,
     )
     try:
@@ -300,7 +301,7 @@ def _run_single_skill(skill_name: str, hermes_path: Path | None, apply: bool) ->
         return 0
 
     api = APIConfig()
-    issues = validate_provider_config(api)
+    issues = validate_provider_config(api, DEFAULT_PROVIDER)
     if issues:
         print("Error: Configuration issues found")
         for issue in issues:

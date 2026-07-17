@@ -30,8 +30,6 @@ class FakeAsyncClient:
 class LLMHelperTests(unittest.TestCase):
     def test_create_client_keeps_requested_provider_metadata(self) -> None:
         class FakeAPIConfig:
-            LLM_PROVIDER = "openai"
-
             def create_client(self, **kwargs: Any) -> tuple[str, str]:
                 self.kwargs = kwargs
                 return "client", "grok-test"

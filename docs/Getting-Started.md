@@ -35,7 +35,6 @@ Create a `.env` file in the root directory. This file is ignored by git [[.gitig
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `LLM_PROVIDER` | Primary provider (`xai`, `openai`, `anthropic`) | `xai` |
 | `XAI_API_KEY` | API Key for xAI Grok | - |
 | `ANTHROPIC_API_KEY` | API Key for Anthropic Claude | - |
 | `OPENAI_API_KEY` | API Key for OpenAI GPT | - |

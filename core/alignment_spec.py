@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from core.config import ROOT_DIR
 from core.skills_creator import canonical_skills_root
-from lib.config import APIConfig, validate_provider_config
+from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
@@ -85,7 +85,8 @@ class AlignmentSpecCreator:
         self.api = APIConfig()
         self.handle: LLMHandle = create_client(
             self.api,
-            model=self.api.get_model("refine"),
+            provider=DEFAULT_PROVIDER,
+            model=self.api.get_model(provider=DEFAULT_PROVIDER),
             async_mode=True,
         )
 
@@ -191,7 +192,7 @@ async def _async_run(output_path: Optional[Path]) -> int:
 def run(*, output_path: Optional[Path] = None) -> int:
     """Synchronous entry point for CLI use."""
     api = APIConfig()
-    issues = validate_provider_config(api)
+    issues = validate_provider_config(api, DEFAULT_PROVIDER)
     if issues:
         print("Error: Configuration issues found")
         for issue in issues:

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from core.config import Config, SkillSpec
+from lib.config import DEFAULT_PROVIDER
 from core.skill_engine import (
     canonical_skills_root,
     create_declared_skill_document,
@@ -40,7 +41,8 @@ class SkillsCreator:
         self.config = config
         self.handle: LLMHandle = create_client(
             config.api,
-            model=config.api.get_model("refine"),
+            provider=DEFAULT_PROVIDER,
+            model=config.api.get_model(provider=DEFAULT_PROVIDER),
             async_mode=True,
         )
 

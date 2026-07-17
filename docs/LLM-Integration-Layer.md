@@ -86,11 +86,9 @@ flowchart LR
         GC["create_client()"]
     end
     subgraph subGraph0 ["Environment Space (.env)"]
-        ENV_PROV["LLM_PROVIDER"]
         ENV_KEY["XAI_API_KEY"]
         ENV_MODEL["XAI_MODEL"]
     end
-    ENV_PROV --> AC
     ENV_KEY --> PROVIDERS
     ENV_MODEL --> PROVIDERS
     PROVIDERS --> GM
@@ -104,10 +102,10 @@ flowchart LR
 
 The integration layer supports the following providers out of the box, managed via `APIConfig.PROVIDERS`[lib/config.py24-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L24-L60):
 
-| Provider | Client Class | Default Model | Purpose-Specific Models |
-| --- | --- | --- | --- |
-| **xAI** | `OpenAI` (Compatible) | `grok-4.3` | `initial_model`, `refine_model` |
-| **OpenAI** | `OpenAI` | `gpt-5.5` | `initial_model`, `refine_model` |
-| **Anthropic** | `Anthropic` | `claude-opus-4-8` | `initial_model`, `refine_model` |
+| Provider | Client Class | Default Model |
+| --- | --- | --- |
+| **xAI** | `OpenAI` (Compatible) | `grok-4.5` |
+| **OpenAI** | `OpenAI` | `gpt-5.6-sol` |
+| **Anthropic** | `Anthropic` | `claude-fable-5` |
 
 **Sources:**[lib/config.py24-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L24-L60)[lib/config.py118-132](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L118-L132)

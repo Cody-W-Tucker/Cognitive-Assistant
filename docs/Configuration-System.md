@@ -64,7 +64,7 @@ flowchart LR
 
 ### Sub-Config Roles
 
-- **APIConfig**: Manages LLM provider selection (`LLM_PROVIDER`), model mapping (initial vs. refine), and context window limits [lib/config.py18-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L18-L60) It includes the `create_client` factory for generating `OpenAI` or `Anthropic` clients [lib/config.py99-148](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L99-L148)
+- **APIConfig**: Stores per-provider configuration (API keys, model names, context windows) and exposes `create_client` for generating provider-specific clients. Callers always pass an explicit provider. [lib/config.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/main/lib/config.py)
 - **PathConfig**: Derives absolute paths for the pipeline. It handles the `BASE_DIR` and ensures runtime directories (like `READY_DIR` or `ARTIFACTS_DIR`) exist [lib/config.py149-167](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L149-L167)
 - **RedactionConfig**: Stores regex patterns for PII removal. It provides a `get_redaction_function` used during the prompt synthesis stage to scrub sensitive data [lib/config.py169-193](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/lib/config.py#L169-L193)
 
