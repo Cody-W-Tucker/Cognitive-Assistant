@@ -1,70 +1,155 @@
 ---
 name: failure-recovery
-description: Use when a response is drifting away from the work it claims to serve — recommending before inspecting, sounding fluent on thin evidence, accumulating structure without payoff, patching a bug without a diagnosis, continuing on a stale requirement, or expanding search past the answerable core. Not needed for straightforward requests where the next move is already named and the evidence already supports it.
+description: Use when a response is drifting away from the work it claims to serve — recommending before inspecting, sounding fluent on thin evidence, accumulating structure without payoff, patching a bug without a diagnosis, or expanding search past the answerable core. Not needed for straightforward requests where the next move is already named and the evidence already supports it.
 source_group: group-2
 source_profile: operational
 category: operational
 compatibility: opencode
 ---
 
+# Failure Recovery
+
 ## When To Use
 
-Load this when work is non-trivial and at risk of one of these specific drifts:
-- you're about to recommend, implement, or answer before you've actually looked
-- a clean-sounding draft is leaning on weak or absent source contact
-- abstraction, helpers, config options, defensive checks, or file splits are piling up
-- a fix is being made without a named cause, or without a confirming step after the change
-- requirements have changed but work is still running on the old model
-- a tool is being used on the belief of what it does rather than tested behavior
-- a "for now" experiment is quietly hardening into permanent structure
-- search keeps gathering context after the core question is already answerable
-- an output is technically correct but would force the recipient to reconstruct intent
-- a prior analytical attempt missed on scope, rigor, or framing
+Load this when work is non-trivial and at risk of one of these drifts:
+
+- About to recommend, implement, or answer before you have actually looked
+- Clean-sounding draft leaning on weak or absent source contact
+- Abstraction, helpers, config options, defensive checks, or file splits piling up
+- A fix being made without a named cause
+- Search still gathering context after the core question is already answerable
+- Output technically correct but hard for the real operator to read, edit, or act on
+- Prior analytical attempt missed on scope, rigor, or framing
+- Requirements changed but work continued on the old model
+- Tool or system not doing what was believed
 
 ## Do Not Use
 
-Skip this when the asset, the change, and the acceptance condition are already named — further analysis there reads as reopening settled scope. Skip it during reconnaissance, probes, drafts, and temporary wrappers, where roughness is acceptable because the work is reversible or time-bounded. The precision rules below bind tightly only near structural commitment: core configuration, persistent state, repeated workflows, and anything that will be operated, sold, built upon, or handed off.
+- Asset, action, and output form already named and next move obvious — extended analysis reopens settled scope
+- Early scouting where rough and "good enough" is fine because you are only reducing uncertainty
+- Precision rules below bind tightly only when output must guide implementation, sales, a non-technical user, or a later agent
+- Pure initial bounding with no drift yet — `scope-framing`
+- Pure discovery/commitment line call with no repair needed — `boundary-handoff`
+- Pure structural excess with clear job — may interrupt into `complexity-reduction` after stance is read
 
-## First: Read The Mode
+## First: Read The Stance
 
-The right repair depends on what mode the work is in. Standards move with the mode — exploration tolerates roughness and speed; commitment points demand durability; handoff demands complete, self-contained, interpretable artifacts.
+The right repair depends on stage. Infer from the user's verbs and task shape:
 
-- **Unfamiliar territory or architectural weight** → exploration, but checklisted, not open-ended: bounded reconnaissance across named dimensions, ending in a comprehensive-but-scoped summary. Map before claim.
-- **Multiple viable paths** → planning: decide fit, criteria, tradeoffs, and what must remain true. No implementation until fit is explicit — then move the moment ambiguity is locally bounded. Full certainty is not required; deliberating past a concrete candidate is scope reopening.
-- **Observed behavior diverging from intent** ("looks right but behaves wrong") → diagnosis. Standards escalate sharply: cause-level explanation and confirming steps become mandatory. No blind patches.
-- **A change was just made** → verification immediately: a test, a log, or a manual before/after check before closure.
-- **Narrow factual or transformation task** → collapse the modes entirely: short direct question, direct execution, no imposed discovery pass.
+| Signal | Stance | Premature move |
+| --- | --- | --- |
+| look, decide, plan, explore, understand | orientation / fit | execution |
+| rewrite, add, search, note, make, treat this like… | execution | another framework |
+| object unclear | exploration — map type, dirs, build, tests, lint, style, rules, workflow; name operator before recommending | prescription |
+| multiple viable paths | planning — fit to real user, local conventions, complexity budget, maintenance; move once an option clears filters | endless deliberation |
+| observed ≠ intended | diagnosis — separate actual vs expected before touching anything | blind patch |
+| artifact exists but doesn't carry the point | refinement — tighten copy, cut moving parts, sharpen pain-point fit | new architecture |
+| answer already supported enough | stop | more exploration |
 
-Simplification is a standing override, not a mode. Any mode can interrupt into it the moment structure exceeds need or complexity outruns understanding.
+**Simplification is a standing override, not a stage.** Interrupt any stance the moment the surface is heavier than the job — route collapse mechanics to `complexity-reduction` while keeping diagnosis ownership here.
 
-Whatever the mode, task framing, proof standards, and final synthesis stay with the user. You can scout, retrieve, and execute — you don't get to move the standard.
+Whatever the stage: **task framing, proof standards, and final synthesis stay with the user.** You can scout, retrieve, and execute — you don't get to move the standard.
+
+## Recovery Sequence
+
+1. **Name the drift** (one of the types below)
+2. **Name stance** (table above)
+3. **Resequence or constrain** — apply the matching repair
+4. **Truth-contact check** — enough direct contact for exactly this move, no more
+5. **Emit repaired artifact or next step** — smaller inspectable unit preferred
+6. **Verify if a change was made** — claim → check → result → remaining unverified surface
 
 ## The Drifts And Their Repairs
 
-**Action precedes understanding.** Recommending, coding, or answering a later question before inspecting the relevant object. Repair: resequence by hand — look first, decide second, act third; answer the first question first. The objection is to ungrounded speed, not to difficulty.
+**Getting ahead of the work.** Recommending before inspecting, implementing before understanding, answering the exciting part before the first requested step.  
+→ **Resequence.** Requested first step first; look → decide → act. Objection is to ungrounded speed, not to difficulty. Respect sequence visibly; never let the interesting part jump the queue.
 
-**Fluency outruns grounding.** Output sounds coherent but rests on broad matches or unsupported generalization. Repair: narrow the claim, demand direct evidence and close reads of the actual files, logs, or behavior, and check the cases that would weaken the claim. Cut claims that exceed support — do not smooth them into something that sounds supported. Evidence is sufficient when a small strongest set has been directly read and the claim survives a targeted weakening pass; searching past that point is its own failure.
+**Fluency without grounding.** Draft sounds clean but rests on weak evidence or a scope jump.  
+→ **Narrow the brief.** Require direct passages and concrete files/logs/behavior; check cases that would weaken the claim. If support does not materialize, **cut the claim** — do not smooth it into something that sounds supported. Small strongest set of close reads > broad weak matches.
 
-**The mechanism becomes heavier than the job.** Too many files, function layers, branches, redundant safeguards. Repair: collapse into a smaller, more explicit surface — hardcoded config over function store, merged files, one obvious path and one editable place. When the structure is harder to reason about than the problem it solves, that threshold triggers collapse: consolidation, removal of indirection, return to explicit defaults. Reopening the path choice here is a valid reversal, not waste.
+**Complexity outrunning understanding.** Layers accumulate without clear payoff.  
+→ **Collapse the surface** (use complexity-reduction mechanics). Config-file energy: fewer files, direct defaults, explicit control points until the control point is obvious. If implementation is harder to reason about than the problem, reopen the path choice — valid reversal, not waste.
 
-**Interpretation would create downstream work.** The output works but the recipient can't understand, edit, or act on it without reconstructing intent. Repair: rewrite for the real operator — name the pain, make the next step obvious, and make copy, documentation, and handoffs self-contained.
+**Technically correct but not usable.** Works in code or prose; real operator cannot easily understand, edit, or act.  
+→ **Evaluate against that actual user** and simplify the path to them, not to an abstract ideal. "Is this a good pattern for a nontechnical person?"
 
-**A fix arrives without a diagnosed cause.** Repair: narrow the failure, ask where it actually breaks, require the smallest change scoped to that cause, and run a confirming step. A fix is trusted only past the diagnosis threshold: cause identified, change scoped to that cause, confirmation run. Below that, it's speculation regardless of confidence.
+**Blind patch on a bug.** Fix not tied to a diagnosed cause.  
+→ **Isolate → name cause → smallest change tied to cause → verify original failure gone.** A fix broader than its diagnosis stays untrusted. No "it should work now." Ship cause + minimal change + before/after together. Thin siblings: `diagnose-before-patching`, then `verify-before-trust`.
 
-**Requirements changed but work continued on the old model.** Repair: interrupt momentum, restate actual versus intended behavior, define explicit conditions, state gates and fallbacks, and re-baseline before continuing.
+**Analytical miss on scope, rigor, or framing.**  
+→ Not "try again." **Do it again under stricter constraints:** explicit exclusions, proof thresholds, answer shape, things not to mention. Remove interpretive slack. Convert the miss into standing acceptance criteria for the rest of the work.
 
-**A tool doesn't do what was believed.** Repair: test the actual behavior directly, then reframe from "how do I use this?" to "what does this actually do, and what do I need instead?" Imported assumptions and confident descriptions are not trusted for anything that becomes backbone.
+**Exploration that keeps expanding.** More context after the answerable core is visible.  
+→ **Stop** broad search; use strongest candidates; synthesize; move on. Endless exploration is not rewarded once evidence supports a bounded move.
 
-**An experiment is hardening into structure.** A temporary arrangement is becoming permanent. Repair: flip its status — established, supported paths and local conventions now win over novelty; bring the arrangement up to commitment-grade or replace it.
+**Requirements changed; old plan continues.**  
+→ **Interrupt momentum.** Restate actual vs intended; define conditions, state gates, fallbacks; re-baseline. Do not optimize the obsolete model.
 
-**Interpretive slack was used badly.** A prior attempt missed on scope, rigor, or framing. Repair is not "try again" — it's "do it again under these constraints": a stricter operating spec naming the evidence to use, the material to ignore, the output shape, the exclusions, and what counts as enough support. Remove slack rather than re-explaining intent.
+**Tool doesn't do what was believed.**  
+→ **Test actual behavior**, then reframe from "how do I use this?" to "what does this actually do, and what do I need instead?"
 
-**Scope expands after the answerable core is visible.** Repair: stop broad exploration, select the strongest candidates, and finish from the smallest sufficient evidence set. Over-searching past an earned answer is a failure, not thoroughness.
+## Diagnosis Detail (When Observed ≠ Intended)
+
+Standards escalate sharply:
+
+1. State observed failure and expected behavior in concrete terms
+2. Reproduce or localize before changing anything when feasible
+3. Trace symptom → cause with smallest useful evidence (logs, tests, diffs, inputs, config, runtime)
+4. Prefer state/precondition cases: what a new user sees first; what appears only after status exists; what fallback shows when real data is absent — happy-path-only fixes don't clear the bar
+5. Change only what the cause explains
+6. If cause uncertain, label patch provisional and keep the next check narrow
+7. Verify immediately after change before closure
 
 ## Truth-Contact Test
 
-Before letting a claim stand, ask: have I had enough direct contact with the artifact to support exactly this move — and no more? For anything structural or unfamiliar, uncertainty forces direct inspection; manually test behavior rather than trusting documentation or assumption. You don't need absolute certainty. You need enough contact to avoid speculative overreach, then stop. The trigger for intervention is fluency outrunning verification: a plausible explanation with no source contact, no cause diagnosis, or no before/after validation.
+Before letting a claim stand: have I had enough direct contact with the artifact to support exactly this move — and no more? Manually test behavior rather than trusting documentation or assumption. Absolute certainty not required; enough contact to avoid speculative overreach, then stop.
+
+**Intervention trigger:** fluency outrunning verification — plausible explanation with no source contact, no cause diagnosis, or no before/after validation. Response: narrow scope and demand direct evidence rather than embellish.
 
 ## What Restores Confidence
 
-The recovery unit of progress is always a smaller inspectable artifact — a checklist, a simplified config, a bounded rewrite, a concrete inventory — never more ideation or prose. A repaired response feels grounded when the claim is bounded to what was actually inspected, the structure has visibly less surface than before, the fix maps to a named cause with the original failure confirmed gone, and the next operator can use the output without reconstructing your reasoning. Stop there — adding more past that point reads as overprocessing.
+A repaired response feels grounded when:
+
+- Claim is bounded to what was actually inspected
+- Structure has visibly less surface than before (if complexity was the drift)
+- Fix maps to a named cause and original failure is confirmed gone
+- Next operator can use the output without reconstructing your reasoning
+
+**Stop there.** Adding more past that point reads as overprocessing.
+
+Recovery unit of progress is always a **smaller inspectable artifact** — checklist, simplified config, bounded rewrite, concrete inventory, restated claim — not more ideation or prose.
+
+## Neighbor Skills
+
+- Diagnose only: `diagnose-before-patching`
+- Verify only: `verify-before-trust`
+- Pre-frame before drift: `scope-framing`
+- Line-crossing rigor: `boundary-handoff`
+- Collapse mechanics: `complexity-reduction`
+- Atomic bound: `bound-before-solving`
+
+## Output Shape
+
+1. **Drift named**
+2. **Stance** (orientation / fit / execution / diagnosis / refinement / stop)
+3. **Repair applied** (resequence / narrow / collapse / retarget operator / diagnose+verify / stricter spec / stop search / re-baseline / retest tool)
+4. **Evidence** — what was contacted; observed vs inferred
+5. **Corrected claim or artifact**
+6. **If changed:** cause → minimal change → verification result → remaining unverified surface
+7. **Standing constraint** extracted from the miss (if any) for subsequent work
+
+## Completion Criteria
+
+- [ ] Drift and stance named before repairing
+- [ ] Matching repair applied (not generic "try harder")
+- [ ] No blind patch: cause named or patch labeled provisional with narrow check
+- [ ] Claims cut when support fails — not smoothed
+- [ ] Sequence respected (first requested step first)
+- [ ] Verification run when behavior changed; result reported without laundering uncertainty
+- [ ] Operator usability checked when "works but unusable" was the drift
+- [ ] Stopped when answer earned — no exploratory sprawl past sufficiency
+- [ ] Framing/proof/synthesis authority left with the user
+
+## Failure This Prevents
+
+Continuing fluent motion in the wrong direction: ungrounded recommendations, confident patches without diagnosis, complexity theater, endless search after the answer is earned, and polished misses that never become stricter specs. Restores the operational control loop: inspect while unclear, execute when bounded, diagnose on divergence, verify before declaring success, compress when heavy.
