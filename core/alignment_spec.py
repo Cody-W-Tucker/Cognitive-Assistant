@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Generate a personalized alignment verification spec from unified skills.
+"""Generate a personalized alignment verification spec from skills and agent souls.
 
-Reads skills from the unified `workspaces/skills` store, combines them with the
-alignment seed template, and produces a single alignment spec that downstream
-tools (verify-alignment) can use to evaluate any output.
+Reads skills from the unified `workspaces/skills` store and agent souls from
+`workspaces/alignment/artifacts/agents/` (validated against the persona map),
+combines them with the alignment seed template, and produces a single alignment
+spec that downstream tools (verify-alignment) can use to evaluate any output.
+
+Skills provide reusable operating procedures generated per profile. Agent souls
+provide distinct persona identity documents declared in the persona map. Both
+sources feed the alignment spec.
 
 This command sits above the profile system: it reads from both registered
 profiles but does not belong to either. It is invoked without --profile.
@@ -16,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -30,8 +36,16 @@ from lib.llm import LLMHandle, close_client_async, create_client, generate_text_
 SEED_PATH = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
 OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
 OUTPUT_FILE = OUTPUT_DIR / "alignment_spec.md"
+AGENTS_DIR = OUTPUT_DIR / "agents"
+PERSONA_MAP_FILE = OUTPUT_DIR / "persona_map.md"
 
 UNIFIED_SKILLS_DIR = canonical_skills_root()
+
+SKILLS_PLACEHOLDER = "{skills_content}"
+AGENT_SOULS_PLACEHOLDER = "{agent_souls_content}"
+SLUG_LINE_PATTERN = re.compile(
+    r"^- \*\*Slug:\*\* `([a-z][a-z0-9\-]{1,39})`$", re.MULTILINE
+)
 
 # Static sections — not recomputed by the LLM.
 SPEC_PREAMBLE = """\
@@ -78,8 +92,42 @@ Verdict logic:
 """
 
 
+def load_declared_agent_slugs(persona_map_path: Path) -> List[str]:
+    """Parse the persona map and return its declared agent slugs.
+
+    The persona map is the authoritative source for which agent souls
+    the alignment spec should load. Each persona is declared with a
+    line like ``- **Slug:** `agent-slug```.
+
+    Raises:
+        FileNotFoundError: if the persona map is missing.
+        ValueError: if the map is malformed or declares no slugs, or if
+            a slug appears more than once.
+    """
+    if not persona_map_path.exists():
+        raise FileNotFoundError(
+            f"Persona map not found at {persona_map_path}. "
+            "Run build-agents first."
+        )
+    content = persona_map_path.read_text(encoding="utf-8")
+    slugs = SLUG_LINE_PATTERN.findall(content)
+    if not slugs:
+        raise ValueError(
+            f"Persona map at {persona_map_path} declares no agent slugs. "
+            "Run build-agents to regenerate."
+        )
+    seen: set[str] = set()
+    for slug in slugs:
+        if slug in seen:
+            raise ValueError(
+                f"Persona map declares duplicate slug: '{slug}'."
+            )
+        seen.add(slug)
+    return slugs
+
+
 class AlignmentSpecCreator:
-    """Generate a personalized alignment spec from unified skills."""
+    """Generate a personalized alignment spec from skills and agent souls."""
 
     def __init__(self) -> None:
         self.api = APIConfig()
@@ -94,8 +142,10 @@ class AlignmentSpecCreator:
         """Generate the alignment spec and write to disk."""
         seed_content = self._load_seed()
         skills_content = self._load_all_skills()
+        agent_souls_content = self._load_declared_agent_souls()
 
-        prompt = seed_content.replace("{skills_content}", skills_content)
+        prompt = seed_content.replace(SKILLS_PLACEHOLDER, skills_content)
+        prompt = prompt.replace(AGENT_SOULS_PLACEHOLDER, agent_souls_content)
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,
@@ -113,10 +163,18 @@ class AlignmentSpecCreator:
         return resolved_output
 
     def _load_seed(self) -> str:
-        """Load the seed methodology template."""
+        """Load the seed methodology template and validate its placeholders."""
         if not SEED_PATH.exists():
             raise FileNotFoundError(f"Alignment seed not found at {SEED_PATH}")
-        return SEED_PATH.read_text(encoding="utf-8")
+        content = SEED_PATH.read_text(encoding="utf-8")
+        for placeholder in (SKILLS_PLACEHOLDER, AGENT_SOULS_PLACEHOLDER):
+            count = content.count(placeholder)
+            if count != 1:
+                raise ValueError(
+                    f"Alignment seed must contain placeholder "
+                    f"'{placeholder}' exactly once; found {count}."
+                )
+        return content
 
     def _load_all_skills(self) -> str:
         """Load all unified skills into a tagged document."""
@@ -125,7 +183,6 @@ class AlignmentSpecCreator:
             raise FileNotFoundError(
                 "No skills found in workspaces/skills. Run build-skills or import skills first."
             )
-
         return "\n\n".join(sections)
 
     def _load_skills_from_root(self, skills_dir: Path) -> List[str]:
@@ -152,6 +209,31 @@ class AlignmentSpecCreator:
 
         return skills
 
+    def _load_declared_agent_souls(self) -> str:
+        """Load only the agent souls declared in the persona map."""
+        slugs = load_declared_agent_slugs(PERSONA_MAP_FILE)
+        sections: List[str] = []
+        for slug in slugs:
+            soul_path = AGENTS_DIR / f"{slug}.md"
+            if not soul_path.exists():
+                raise FileNotFoundError(
+                    f"Declared agent soul missing: {soul_path}. "
+                    f"Persona map declares slug '{slug}' but no matching "
+                    "file exists in agents/."
+                )
+            content = soul_path.read_text(encoding="utf-8").strip()
+            if not content:
+                raise ValueError(
+                    f"Declared agent soul is empty: {soul_path}"
+                )
+            sections.append(
+                f'<agent_soul slug="{slug}">\n'
+                f"{content}\n"
+                f"</agent_soul>"
+            )
+        print(f"Info: Loaded {len(sections)} declared agent souls")
+        return "\n\n".join(sections)
+
     def _extract_spec(self, response: str) -> str:
         """Extract the alignment spec from the LLM response.
 
@@ -161,9 +243,9 @@ class AlignmentSpecCreator:
         text = response.strip()
         # Remove markdown code fences if present
         if text.startswith("```markdown"):
-            text = text[len("```markdown") :].strip()
+            text = text[len("```markdown"):].strip()
         elif text.startswith("```md"):
-            text = text[len("```md") :].strip()
+            text = text[len("```md"):].strip()
         elif text.startswith("```"):
             text = text[3:].strip()
 
@@ -206,6 +288,13 @@ def run(*, output_path: Optional[Path] = None) -> int:
         )
         return 1
 
+    if not PERSONA_MAP_FILE.exists():
+        print(
+            f"Error: Persona map not found at {PERSONA_MAP_FILE}. "
+            "Run build-agents first."
+        )
+        return 1
+
     try:
         return asyncio.run(_async_run(output_path))
     except Exception as exc:
@@ -213,4 +302,8 @@ def run(*, output_path: Optional[Path] = None) -> int:
         return 1
 
 
-__all__ = ["AlignmentSpecCreator", "run"]
+__all__ = [
+    "AlignmentSpecCreator",
+    "load_declared_agent_slugs",
+    "run",
+]

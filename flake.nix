@@ -37,6 +37,8 @@
         {
           inherit humanProfile;
         };
+
+      # --- Skills ---
       skillsDir = ./workspaces/skills;
       skillCategories = builtins.attrNames (
         nixpkgs.lib.filterAttrs (_: fileType: fileType == "directory") (builtins.readDir skillsDir)
@@ -64,6 +66,22 @@
           value = builtins.readFile entry.path;
         }) skillEntries
       );
+
+      # --- Agent souls ---
+      agentsDir = ./workspaces/alignment/artifacts/agents;
+      agentFilesRaw = if builtins.pathExists agentsDir then builtins.readDir agentsDir else { };
+      agentSoulEntries = builtins.filter
+        (entry: entry.type == "regular" && builtins.match ".*\\.md$" entry.name != null && entry.name != "README.md")
+        (nixpkgs.lib.mapAttrsToList (name: type: { inherit name type; }) agentFilesRaw);
+      agentSoulsByName = builtins.listToAttrs (
+        map
+          (entry: {
+            name = builtins.replaceStrings [ ".md" ] [ "" ] entry.name;
+            value = builtins.readFile (agentsDir + "/${entry.name}");
+          })
+          agentSoulEntries
+      );
+
       existential = mkLayerExports "existential" ./workspaces/existential;
       operational = (mkLayerExports "operational" ./workspaces/operational) // {
         toolSpecs = {
@@ -77,7 +95,11 @@
         artifacts = {
           alignment = {
             spec = ./workspaces/alignment/artifacts/alignment_spec.md;
-            soulFile = ./workspaces/alignment/artifacts/SOUL.md;
+            personaMap = ./workspaces/alignment/artifacts/persona_map.md;
+            translationLayer = ./workspaces/alignment/artifacts/SOUL.md;
+            translationArchetype = ./workspaces/alignment/artifacts/SOUL_ARCHETYPE.md;
+            agentSouls = agentSoulsByName;
+            agentSoulNames = builtins.attrNames agentSoulsByName;
             toolSpecs = {
               verifyAlignment = ./workspaces/alignment/artifacts/tool_specs/verify_alignment.md;
             };

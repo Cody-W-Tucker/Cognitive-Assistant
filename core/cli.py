@@ -9,8 +9,10 @@ Subcommands:
   build-skills       Generate canonical skills from latest human_profile.md
   enhance-skill      Enhance a skill from source material
   build-tool-specs   Generate tool_specs/ from latest human_profile.md (gated)
-  build-soul         Generate SOUL.md from existential and operational profile artifacts
-  update             Run build-prompts, build-skills, and build-tool-specs
+  build-translation-layer  Generate SOUL_ARCHETYPE.md and SOUL.md from both profiles
+  build-agents       Discover agent personas and generate per-agent soul documents
+  build-alignment-spec  Generate alignment verification spec from skills and agent souls
+  update             Run build-prompts, build-skills, build-translation-layer, build-agents, build-alignment-spec, and build-tool-specs
   health-check       Validate prompts, paths, provider access, RLM availability
 
 Common flags:
@@ -67,7 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output directory for JSONL packets (default: workspaces/<profile>/data/ready/substrate)",
     )
 
-    ask_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "ask-questions",
         help="Run RLM against the profile's questions.csv.",
     )
@@ -123,7 +125,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     update_parser = subparsers.add_parser(
         "update",
-        help="Chain build-prompts, build-skills, and build-tool-specs for one or all profiles.",
+        help="Run build-prompts, build-skills, build-translation-layer, build-agents, build-alignment-spec, and build-tool-specs for one or all profiles.",
     )
     update_parser.add_argument(
         "--skip-tool-specs",
@@ -143,7 +145,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     alignment_parser = subparsers.add_parser(
         "build-alignment-spec",
-        help="Generate alignment verification spec from both profile layers.",
+        help="Generate alignment verification spec from skills and agent souls.",
     )
     alignment_parser.add_argument(
         "--output",
@@ -152,15 +154,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output path for the alignment spec (default: workspaces/alignment/artifacts/alignment_spec.md)",
     )
 
-    soul_parser = subparsers.add_parser(
-        "build-soul",
-        help="Generate SOUL.md from the existential and operational human profiles.",
+    subparsers.add_parser(
+        "build-agents",
+        help="Discover agent personas and generate per-agent soul documents from the translation layer.",
     )
-    soul_parser.add_argument(
-        "--output",
-        type=Path,
-        dest="output_path",
-        help="Output path for SOUL.md (default: workspaces/alignment/artifacts/SOUL.md)",
+
+    subparsers.add_parser(
+        "build-translation-layer",
+        help="Generate SOUL_ARCHETYPE.md and SOUL.md from both profile layers.",
     )
 
     return parser
@@ -189,11 +190,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return alignment_spec.run(output_path=args.output_path)
 
-    if args.command == "build-soul":
-        from core import soul_creator
-
-        return soul_creator.run(output_path=args.output_path)
-
     if args.command == "enhance-skill":
         from core import skill_enhancer
 
@@ -202,6 +198,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             hermes_path=Path(args.hermes_path).expanduser() if args.hermes_path else None,
             apply=args.apply,
         )
+
+    if args.command == "build-agents":
+        from core import soul_creator
+
+        return soul_creator.run()
+
+    if args.command == "build-translation-layer":
+        from core import translation_layer_creator
+
+        return translation_layer_creator.run()
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":
@@ -252,7 +258,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if args.command == "update":
-        from core import prompt_creator, skills_creator, tool_specs_creator
+        from core import (
+            alignment_spec,
+            prompt_creator,
+            skills_creator,
+            soul_creator,
+            tool_specs_creator,
+            translation_layer_creator,
+        )
 
         def _update_single_profile(cfg: Config, skip_tool_specs: bool) -> int:
             print(f"\n{'=' * 50}")
@@ -298,8 +311,31 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cfg = Config.from_profile(profile_name)
                 exit_code = _update_single_profile(cfg, args.skip_tool_specs)
                 if exit_code != 0:
-                    print(f"\nError: Update failed for profile '{profile_name}'")
+                    print(f"\nError: Update failed for profile '{cfg.profile.name}'")
                     return exit_code
+
+        # Cross-profile stages: translation layer, then agent souls, then alignment spec
+        print(f"\n{'=' * 50}")
+        print("Running cross-profile stages")
+        print(f"{'=' * 50}")
+
+        print("\n>>> Running build-translation-layer...")
+        exit_code = translation_layer_creator.run()
+        if exit_code != 0:
+            print("Error: build-translation-layer failed")
+            return exit_code
+
+        print("\n>>> Running build-agents...")
+        exit_code = soul_creator.run()
+        if exit_code != 0:
+            print("Error: build-agents failed")
+            return exit_code
+
+        print("\n>>> Running build-alignment-spec...")
+        exit_code = alignment_spec.run()
+        if exit_code != 0:
+            print("Error: build-alignment-spec failed")
+            return exit_code
 
         print(f"\n{'=' * 50}")
         print("Update complete for all requested profiles")

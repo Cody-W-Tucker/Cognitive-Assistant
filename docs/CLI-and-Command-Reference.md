@@ -97,11 +97,24 @@ Generates `tool_specs/` (e.g., `memory.md`, `tasks.md`) from the profile.
 
 ### Alignment and Meta-Commands
 
-#### `build-soul`
+#### `build-translation-layer`
 
-Synthesizes the `SOUL.md` artifact by combining outputs from both the existential and operational profiles [core/cli.py155-158](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/cli.py#L155-L158)
+Synthesizes the orchestrator translation-layer artifacts
+(`SOUL_ARCHETYPE.md` and `SOUL.md`) by combining outputs from both the
+existential and operational profiles. This is the cross-profile bridge
+between raw profile data and the specialist agent system.
 
-- **Sources**: [core/cli.py159-164](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/cli.py#L159-L164)
+- **Flags**: *(none — writes to canonical paths under `workspaces/alignment/artifacts/`)*
+- **Sources**: `core/translation_layer_creator.py`
+
+#### `build-agents`
+
+Discovers distinct agent personas from the translation layer and
+bounded profile evidence, then generates one soul document per persona.
+Specialist agents inherit the orchestrator constitution rather than
+re-deriving the user from raw psychometric profile material.
+
+- **Sources**: `core/soul_creator.py`
 
 #### `build-alignment-spec`
 
@@ -178,7 +191,8 @@ flowchart TD
 | `ask-questions` | Yes | `answers.csv` | `core.question_asker` |
 | `build-prompts` | Yes | `human_profile.md` | `core.prompt_creator` |
 | `build-skills` | Yes | `SKILL.md` files | `core.skills_creator` |
-| `build-soul` | No | `SOUL.md` | `core.soul_creator` |
+| `build-translation-layer` | No | `SOUL.md`, `SOUL_ARCHETYPE.md` | `core.translation_layer_creator` |
+| `build-agents` | No | `persona_map.md`, `agents/<slug>.md` | `core.soul_creator` |
 | `build-alignment-spec` | No | `alignment_spec.md` | `core.alignment_spec` |
 | `health-check` | Yes | Console Report | `core.health_check` |
 

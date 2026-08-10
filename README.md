@@ -14,17 +14,22 @@ This internal monologue annotates dataset with reasoning traces to introspect be
 ## Nix Flake Outputs
 
 Skills are unified under `workspaces/skills` and exposed in two downstream skill
-shapes, alongside tool-spec and alignment outputs:
+shapes, alongside agent-soul and alignment outputs:
 
 | Output                                               | Purpose                                                   |
 | ---------------------------------------------------- | --------------------------------------------------------- |
 | `lib.artifacts.skills.files.<skill-name>`            | Flat skill content keyed by skill name                    |
 | `lib.artifacts.skills.names`                         | Available skill names                                     |
 | `lib.artifacts.skills.categorized`                   | Categorized skill tree shaped as `<category>/<skill>/...` |
+| `lib.artifacts.alignment.spec`                       | Generated alignment spec                                  |
+| `lib.artifacts.alignment.personaMap`                 | Persona map intermediate artifact                         |
+| `lib.artifacts.alignment.translationLayer`           | Generated translation-layer orchestrator soul (SOUL.md)   |
+| `lib.artifacts.alignment.translationArchetype`       | Generated translation-layer archetype (SOUL_ARCHETYPE.md) |
+| `lib.artifacts.alignment.agentSouls`                 | Per-agent soul documents keyed by slug                    |
+| `lib.artifacts.alignment.agentSoulNames`             | Available agent soul names                                |
+| `lib.artifacts.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                       |
 | `lib.artifacts.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                    |
 | `packages.<system>.verify-alignment`                 | Alignment verifier package                                |
-| `lib.artifacts.alignment.spec`                       | Generated alignment spec                                  |
-| `lib.artifacts.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                       |
 
 ## Downstream Usage
 
@@ -51,6 +56,9 @@ in
     # Alignment verifier tool spec.
     verifyAlignment = builtins.readFile alignment.toolSpecs.verifyAlignment;
   };
+
+  # Access individual agent souls.
+  # alignment.agentSouls."<slug>" contains the soul markdown.
 
   # Alignment spec and package for verifying generated artifacts.
   environment.sessionVariables.ALIGNMENT_SPEC = "${alignment.spec}";
@@ -88,8 +96,9 @@ python -m core --profile operational build-tool-specs
 
 # Cross-profile / shared commands
 python -m core enhance-skill
+python -m core build-translation-layer
+python -m core build-agents
 python -m core build-alignment-spec
-python -m core build-soul
 ```
 
 `build-skills` reads the active profile's latest `human_profile*.md`, but writes
@@ -97,10 +106,27 @@ to the unified skill store. Cross-system consumers should read skills only from
 `workspaces/skills` or `lib.artifacts.skills.*`, not from profile artifact
 directories.
 
-Generated canonical skills currently land at:
+Generated canonical skills land at:
+`workspaces/skills/<profile>/<skill-name>/SKILL.md`
+
+`build-agents` reads the latest `human_profile*.md` from both profiles,
+discovers a set of distinct agent personas, and generates one soul document
+per persona. Outputs land at:
+`workspaces/alignment/artifacts/persona_map.md`
+`workspaces/alignment/artifacts/agents/<slug>.md`
+
+`build-translation-layer` reads both profile artifacts and produces the
+orchestrator translation layer: the archetype inference and the durable soul
+that specialist agents inherit. Outputs land at:
+`workspaces/alignment/artifacts/SOUL_ARCHETYPE.md`
+`workspaces/alignment/artifacts/SOUL.md`
 
 ```text
 workspaces/skills/<profile>/<skill-name>/SKILL.md
+workspaces/alignment/artifacts/SOUL_ARCHETYPE.md
+workspaces/alignment/artifacts/SOUL.md
+workspaces/alignment/artifacts/persona_map.md
+workspaces/alignment/artifacts/agents/<slug>.md
 ```
 
 Use profile folders when the generator does not yet have a better stable
@@ -109,12 +135,13 @@ category. Do not write generated skills into opaque folders like `group-1`.
 ## Alignment Verification
 
 The alignment command sits above both profiles. It reads unified skills from
-`workspaces/skills` and writes a workspace artifact verification spec — a personalized
-production-readiness checklist that a downstream verifier (`rlm`) uses to
-score AI-generated artifacts.
+`workspaces/skills` and agent souls from
+`workspaces/alignment/artifacts/agents/` and writes a workspace artifact
+verification spec — a personalized production-readiness checklist that a
+downstream verifier (`rlm`) uses to score AI-generated artifacts.
 
 ```bash
-# Build the spec (requires build-skills to have been run for at least one profile)
+# Build the spec (requires build-skills and build-agents to have been run)
 python -m core build-alignment-spec
 
 # Verify an artifact against the spec
@@ -123,6 +150,6 @@ scripts/verify_alignment.sh --stdin < artifact.md
 ```
 
 The verifier returns `VERDICT: SHIP | TIGHTEN | REWORK` with per-item scores
-and corrections. Regenerate the spec whenever skills change. See
+and corrections. Regenerate the spec whenever skills or agent souls change. See
 [`profiles/alignment/README.md`](profiles/alignment/README.md) for architecture
 and details.

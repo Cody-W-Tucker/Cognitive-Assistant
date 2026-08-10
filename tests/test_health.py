@@ -14,6 +14,7 @@ import unittest
 
 from core.config import Config, list_profiles
 from core.health_check import (
+    check_alignment_prompt_rendering,
     check_prompt_rendering,
     check_required_paths,
 )
@@ -26,14 +27,18 @@ SCRIPT_MODULES = [
     "core.prompt_loader",
     "core.prompt_creator",
     "core.skills_creator",
+    "core.skill_enhancer",
     "core.question_asker",
     "core.ingest_substrate",
     "core.health_check",
     "core.cli",
     "core.soul_creator",
+    "core.translation_layer_creator",
+    "core.alignment_spec",
 ]
 
 SKILLS_DIR = Path("workspaces/skills")
+AGENTS_DIR = Path("workspaces/alignment/artifacts/agents")
 
 
 class ProfileHealthTests(unittest.TestCase):
@@ -62,6 +67,9 @@ class ProfileHealthTests(unittest.TestCase):
     def test_modules_import(self) -> None:
         self.assertEqual(check_script_imports(SCRIPT_MODULES), [])
 
+    def test_alignment_prompts_render(self) -> None:
+        self.assertEqual(check_alignment_prompt_rendering(), [])
+
     def test_workspace_skill_slugs_are_globally_unique(self) -> None:
         skill_paths = sorted(SKILLS_DIR.glob("*/*/SKILL.md"))
         slugs_by_path: dict[str, list[str]] = defaultdict(list)
@@ -74,6 +82,23 @@ class ProfileHealthTests(unittest.TestCase):
         }
 
         self.assertEqual(duplicates, {})
+
+    def test_agents_directory_is_valid(self) -> None:
+        """If the agents directory exists, all entries must be .md files with safe slugs."""
+        if not AGENTS_DIR.exists():
+            return  # Not yet generated; acceptable pre-build state.
+        for entry in AGENTS_DIR.iterdir():
+            if entry.is_file():
+                self.assertTrue(
+                    entry.suffix == ".md",
+                    f"Unexpected file in agents dir: {entry}",
+                )
+                slug = entry.stem
+                self.assertTrue(
+                    slug.replace("-", "").isalnum() and slug[0].isalpha(),
+                    f"Unsafe slug in agents dir: {slug}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

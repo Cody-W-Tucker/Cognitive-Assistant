@@ -4,7 +4,7 @@
 Gated on `profile.has_tool_specs`. Reads the latest `human_profile*.md` from the
 profile's artifacts directory, combines it with the profile's seed exemplar
 documents (e.g. memory.md, tasks.md from prompts/), and asks the LLM to
-produce a JSON map of {filename: SKILL.md content}, one entry per supported tool.
+produce a JSON map of {filename: tool spec content}, one entry per supported tool.
 """
 
 from __future__ import annotations

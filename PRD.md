@@ -6,14 +6,14 @@ Portable Agent Bootstrap for Cognitive Assistant
 
 ## Summary
 
-Cognitive Assistant currently generates high-value alignment artifacts: profile outputs, skills, tool specs, and soul-layer identity. The next product step is to turn those artifacts into a portable agent runtime that can be installed on any Nix-enabled system with one command.
+Cognitive Assistant currently generates high-value alignment artifacts: profile outputs, skills, tool specs, and agent soul-layer identity. The next product step is to turn those artifacts into a portable agent runtime that can be installed on any Nix-enabled system with one command.
 
 This project will extend the current synthesis pipeline into a bootstrap and packaging pipeline. The system will:
 
 1. Build compressed identity and operational artifacts up front.
 2. Import user-preconfigured harnesses like Opencode and Hermes into this flake.
-3. Wire in bridge resources like skills, docs, memories, calendars, and tasks.
-4. Export installable harness packages with prompts, skills, and tool specs preconnected.
+3. Wire in bridge resources like skills, agent souls, docs, memories, calendars, and tasks.
+4. Export installable harness packages with prompts, skills, agent souls, and tool specs preconnected.
 5. Support one-command bootstrap on a fresh machine.
 
 The product outcome is not just better prompts. It is a portable, reproducible, user-shaped agent system.
@@ -26,6 +26,7 @@ The repo is already strong at generating the mind of the agent:
 - operational profile for tactics and tool behavior
 - soul and alignment artifacts for coherence
 - skill and tool-spec generation for downstream use
+- agent-soul and alignment generation for downstream use
 
 What is missing is a durable way to rehydrate the whole system on a new machine without manually reconstructing:
 
@@ -80,7 +81,10 @@ The current repo generates compressed reminder artifacts that tell the agent who
 The resulting system will have four layers:
 
 1. Identity layer
-   `SOUL.md`, `SOUL_ARCHETYPE.md`, `human_profile.md`, related prompts.
+   `SOUL.md` (orchestrator translation-layer constitution),
+   `SOUL_ARCHETYPE.md` (inferred archetype), `persona_map.md`,
+   per-agent souls in `agents/<slug>.md`, `alignment_spec.md`, related
+   prompts.
 2. Operational layer
    Generated skills, tool specs, operational human profile, action patterns.
 3. Bootstrap layer
@@ -91,16 +95,16 @@ The resulting system will have four layers:
 ## UX Flow
 
 1. The project builds bootstrap artifacts up front.
-   Outputs include soul, human profiles, skills, tool specs, and a machine-readable bootstrap manifest.
+   Outputs include agent souls, skills, human profiles, tool specs, and a machine-readable bootstrap manifest.
 
 2. The flake imports user-preconfigured harnesses.
    Harnesses like Opencode and Hermes bring minimal mutable config plus batteries-included support for auth, MCPs, CLI tools, and provider wiring.
 
 3. The system binds bridge resources.
-   Skills, external docs, memories, calendars, and task systems form the user-agent bridge. Some are read-only; some are read/write.
+   Skills, agent souls, external docs, memories, calendars, and task systems form the user-agent bridge. Some are read-only; some are read/write.
 
 4. The flake exports harness packages.
-   Each exported package has prompts, skills, tool specs, and bridge bindings wired into the target harness shape.
+   Each exported package has prompts, skills, agent souls, tool specs, and bridge bindings wired into the target harness shape.
 
 5. On any compatible system, the user installs Nix and runs one command.
    The command installs or activates the packaged agent runtime, verifies the environment, and reports any missing secrets or mounts.
@@ -141,6 +145,7 @@ Harness packages must support:
 
 - prompt injection or attachment
 - skill mounting
+- agent soul mounting
 - tool spec mounting
 - bridge resource mounting
 - minimal mutable local config
@@ -213,6 +218,7 @@ The product must document and implement what happens when:
 - soul changes
 - human profiles change
 - skills are regenerated
+- agent souls are regenerated
 - tool specs change
 - harness packages update
 - mutable bridge data changes
@@ -223,10 +229,12 @@ The expected behavior is selective rebuild, not full destructive replacement.
 
 ### Generated artifacts
 
-- `workspaces/alignment/artifacts/SOUL.md`
 - `workspaces/alignment/artifacts/SOUL_ARCHETYPE.md`
+- `workspaces/alignment/artifacts/SOUL.md`
+- `workspaces/alignment/artifacts/persona_map.md`
+- `workspaces/alignment/artifacts/agents/<slug>.md`
+- `workspaces/skills/<profile>/<skill>/SKILL.md`
 - `workspaces/<profile>/artifacts/human_profile*.md`
-- `workspaces/skills/.../SKILL.md`
 - `workspaces/operational/artifacts/tool_specs/*.md`
 
 ### New bootstrap artifacts
@@ -259,6 +267,7 @@ The exact schema can evolve, but V1 should include:
     "humanProfiles": ["path-or-store-ref"]
   },
   "operational": {
+    "agentSoulsDir": "path-or-store-ref",
     "skillsRoot": "path-or-store-ref",
     "toolSpecs": {
       "memory": "path-or-store-ref",
@@ -347,6 +356,7 @@ Each harness package should expose:
 
 - generated prompts or prompt attachments
 - mounted skill tree
+- mounted agent soul tree
 - tool specs
 - harness-specific config fragments
 - bootstrap metadata
@@ -379,6 +389,7 @@ Examples:
 - soul
 - human profiles
 - skills
+- agent souls
 - tool specs
 - bootstrap manifest
 - package assembly metadata
@@ -399,7 +410,7 @@ The system must not blur these layers.
 ### Product success
 
 1. A fresh Nix-enabled machine can install and activate a packaged harness in one command.
-2. The installed harness can access generated prompts, skills, and tool specs without manual copying.
+2. The installed harness can access generated prompts, skills, agent souls, and tool specs without manual copying.
 3. The system reports exactly what is missing when not ready.
 4. Rebuilding identity artifacts does not destroy mutable bridge state.
 5. At least one harness target works end to end in V1.
@@ -430,7 +441,7 @@ The system must not blur these layers.
 ### Milestone 3: First harness target
 
 - implement Opencode package export
-- mount prompts, skills, and tool specs
+- mount prompts, skills, agent souls, and tool specs
 - verify end-to-end bootstrap on a fresh machine
 
 ### Milestone 4: Second harness target
@@ -474,6 +485,7 @@ The repo already knows how to synthesize:
 - operational patterns
 - alignment
 - skill outputs
+- agent soul outputs
 - tool specs
 
 The new work adds the missing deployment layer:

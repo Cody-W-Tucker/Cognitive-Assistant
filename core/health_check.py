@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
-from core.config import Config
+from core.config import ROOT_DIR, Config
 from core.prompt_creator import get_prompt_creator_providers
 from core.prompt_loader import load_prompt_for_profile
 from lib.health import (
@@ -22,9 +23,12 @@ SCRIPT_MODULES = [
     "core.prompt_loader",
     "core.prompt_creator",
     "core.skills_creator",
+    "core.skill_enhancer",
     "core.question_asker",
     "core.health_check",
     "core.soul_creator",
+    "core.translation_layer_creator",
+    "core.alignment_spec",
 ]
 
 
@@ -41,6 +45,11 @@ _PLACEHOLDER_FIXTURES = {
     "grouped_bio_content": "<skill_group name=\"group-1\">sample bio</skill_group>",
     "supported_tools": "- `memory.md`: Memory agent",
     "seed_documents": "sample seed",
+    "profile_sources": "<profile_source layer=\"existential\">sample</profile_source>",
+    "archetype": "sample archetype",
+    "translation_layer": "sample translation layer",
+    "profile_evidence": "<profile_source layer=\"existential\">sample evidence</profile_source>",
+    "persona_definition": "Name: Agent\nSlug: agent\nArchetype: T\nResponsibility: R\nBoundary: B\nFit rationale: F",
 }
 
 
@@ -89,6 +98,41 @@ def check_required_paths(config: Config) -> List[str]:
     return issues
 
 
+# Alignment prompts live outside the profile system; render them separately
+# so health checks cover the restored translation-layer seeds.
+_ALIGNMENT_PROMPT_FIXTURES = {
+    "soul_archetype_seed.md": ["profile_sources"],
+    "soul_seed.md": ["profile_sources", "archetype"],
+    "persona_discovery_seed.md": [
+        "translation_layer",
+        "archetype",
+        "profile_evidence",
+    ],
+    "agent_soul_seed.md": ["persona_definition", "translation_layer"],
+}
+
+
+def check_alignment_prompt_rendering() -> List[str]:
+    """Verify alignment prompts render with their declared placeholders."""
+    issues: List[str] = []
+    prompts_dir = ROOT_DIR / "profiles" / "alignment" / "prompts"
+    for filename, placeholders in _ALIGNMENT_PROMPT_FIXTURES.items():
+        prompt_path = prompts_dir / filename
+        if not prompt_path.exists():
+            issues.append(f"Missing alignment prompt: {prompt_path}")
+            continue
+        try:
+            template = prompt_path.read_text(encoding="utf-8")
+            fixture = {
+                name: _PLACEHOLDER_FIXTURES.get(name, "sample")
+                for name in placeholders
+            }
+            template.format(**fixture)
+        except Exception as exc:
+            issues.append(f"Failed to render {filename}: {exc}")
+    return issues
+
+
 def run_health_checks(config: Config) -> List[str]:
     """Run all non-network health checks for a profile and return any issues."""
     issues: List[str] = []
@@ -101,6 +145,7 @@ def run_health_checks(config: Config) -> List[str]:
     )
     issues.extend(check_prompt_rendering(config))
     issues.extend(check_required_paths(config))
+    issues.extend(check_alignment_prompt_rendering())
     issues.extend(check_script_imports(SCRIPT_MODULES))
     issues.extend(
         check_provider_setup(
