@@ -25,6 +25,14 @@ from core.agent_plan_validator import (
     parse_candidate_agent_plan,
     parse_closed_object,
     parse_domain_policy,
+    parse_typed_input_ref,
+    parse_claim_source_ref,
+    parse_evidence_ref,
+    parse_source_identity,
+    parse_stakeholder_source_ref,
+    parse_action_ref,
+    parse_provenance_source,
+    parse_aggregation_input_ref,
     validate_agent_plan,
     validate_candidate_plan,
 )
@@ -643,6 +651,149 @@ class SemanticValidationTests(unittest.TestCase):
         plan["trigger_evaluations"] = []
         with self.assertRaises(ValidationError):
             validate_agent_plan_semantics(plan, self.catalog, self.domain_policy)
+
+
+# ---------------------------------------------------------------------------
+# Tagged-union closed-form tests
+# ---------------------------------------------------------------------------
+
+
+class TaggedUnionTests(unittest.TestCase):
+    # --- TypedInputRef -----------------------------------------------------
+    def test_typed_input_ref_all_kinds_accepted(self) -> None:
+        parse_typed_input_ref({"kind": "context", "key": "k1"})
+        parse_typed_input_ref({"kind": "node_output", "node_id": "n1", "output": "o"})
+        parse_typed_input_ref({"kind": "external_source", "source_id": "s1"})
+
+    def test_typed_input_ref_context_source_rejected(self) -> None:
+        # context_source is NOT a TypedInputRef member.
+        with self.assertRaises(ValidationError):
+            parse_typed_input_ref({"kind": "context_source", "key": "k1"})
+
+    def test_typed_input_ref_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_typed_input_ref({"kind": "ghost", "x": 1})
+
+    def test_typed_input_ref_missing_field_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_typed_input_ref({"kind": "node_output", "node_id": "n1"})  # missing output
+
+    def test_typed_input_ref_unknown_key_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_typed_input_ref({"kind": "context", "key": "k1", "extra": 1})
+
+    # --- ClaimSourceRef ---------------------------------------------------
+    def test_claim_source_ref_all_kinds_accepted(self) -> None:
+        parse_claim_source_ref({"kind": "provenance_source", "source_id": "s1"})
+        parse_claim_source_ref({"kind": "human_source", "source_id": "h1"})
+        parse_claim_source_ref({"kind": "context_source", "key": "k1"})
+        parse_claim_source_ref({"kind": "agent_output", "node_id": "n1", "output": "o"})
+
+    def test_claim_source_ref_context_rejected(self) -> None:
+        # context is NOT a ClaimSourceRef member; only context_source is.
+        with self.assertRaises(ValidationError):
+            parse_claim_source_ref({"kind": "context", "key": "k1"})
+
+    def test_claim_source_ref_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_claim_source_ref({"kind": "context_source_x", "key": "k1"})
+
+    def test_claim_source_ref_unknown_key_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_claim_source_ref({"kind": "human_source", "source_id": "h1", "extra": 1})
+
+    # --- EvidenceRef ------------------------------------------------------
+    def test_evidence_ref_all_kinds_accepted(self) -> None:
+        parse_evidence_ref({"kind": "context", "key": "k1"})
+        parse_evidence_ref({"kind": "profile", "evidence_id": "e1"})
+        parse_evidence_ref({"kind": "domain_assessment", "index": 0})
+        parse_evidence_ref({"kind": "node_output", "node_id": "n1", "output": "o"})
+
+    def test_evidence_ref_context_source_rejected(self) -> None:
+        # context_source belongs only to claim_provenance.sources, not EvidenceRef.
+        with self.assertRaises(ValidationError):
+            parse_evidence_ref({"kind": "context_source", "key": "k1"})
+
+    def test_evidence_ref_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_evidence_ref({"kind": "nope", "x": 1})
+
+    def test_evidence_ref_missing_field_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_evidence_ref({"kind": "domain_assessment"})  # missing index
+
+    # --- SourceIdentity ---------------------------------------------------
+    def test_source_identity_all_kinds_accepted(self) -> None:
+        parse_source_identity({"kind": "agent", "id": "a1", "disclosure": "d"})
+        parse_source_identity({"kind": "external_system", "id": "x", "disclosure": "d"})
+        parse_source_identity({"kind": "human", "id": "h1", "disclosure": None})
+        parse_source_identity({"kind": "synthetic_perspective", "id": "s1"})
+
+    def test_source_identity_human_disclosure_must_be_null(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_source_identity({"kind": "human", "id": "h1", "disclosure": "x"})
+
+    def test_source_identity_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_source_identity({"kind": "ghost", "id": "g"})
+
+    # --- StakeholderSourceRef --------------------------------------------
+    def test_stakeholder_source_ref_all_kinds_accepted(self) -> None:
+        parse_stakeholder_source_ref({"kind": "human_source", "source_id": "h1"})
+        parse_stakeholder_source_ref({"kind": "profile_evidence", "evidence_id": "e1"})
+
+    def test_stakeholder_source_ref_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_stakeholder_source_ref({"kind": "context", "key": "k1"})
+
+    # --- ActionRef (exact closed object, not a union) --------------------
+    def test_action_ref_exact_accepted(self) -> None:
+        parse_action_ref({"role_slug": "judge", "action_id": "a1"})
+
+    def test_action_ref_unknown_key_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_action_ref({"role_slug": "judge", "action_id": "a1", "extra": 1})
+
+    def test_action_ref_bad_slug_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_action_ref({"role_slug": "ghost", "action_id": "a1"})
+
+
+class AggregationInputTests(unittest.TestCase):
+    def test_aggregation_input_node_output_accepted(self) -> None:
+        parse_aggregation_input_ref({"kind": "node_output", "node_id": "n1", "output": "o"})
+
+    def test_aggregation_input_context_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_aggregation_input_ref({"kind": "context", "key": "k1"})
+
+    def test_aggregation_input_external_source_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_aggregation_input_ref({"kind": "external_source", "source_id": "s1"})
+
+    def test_aggregation_input_unknown_kind_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_aggregation_input_ref({"kind": "context_source", "key": "k1"})
+
+
+class ProvenanceSourceNullableTests(unittest.TestCase):
+    def test_paired_null_accepted(self) -> None:
+        out = parse_provenance_source({"id": "s1", "label": "L"})
+        self.assertIsNone(out.get("path"))
+        self.assertIsNone(out.get("sha256"))
+
+    def test_paired_present_accepted(self) -> None:
+        out = parse_provenance_source(
+            {"id": "s1", "label": "L", "path": "p/s.json", "sha256": SHA}
+        )
+        self.assertEqual(out["path"], "p/s.json")
+        self.assertEqual(out["sha256"], SHA)
+
+    def test_one_null_one_value_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_provenance_source({"id": "s1", "label": "L", "path": "p/s.json", "sha256": None})
+        with self.assertRaises(ValidationError):
+            parse_provenance_source({"id": "s1", "label": "L", "path": None, "sha256": SHA})
 
 
 if __name__ == "__main__":

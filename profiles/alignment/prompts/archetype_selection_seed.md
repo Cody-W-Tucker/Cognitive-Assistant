@@ -94,6 +94,84 @@ Assemble complementary coverage, not a roster.
   registry. When `not_applicable` is false there must be at least one ref from
   each profile and `not_applicable_rationale` must be null.
 
+## Closed unions (exact and non-interchangeable)
+
+Every selector-facing tagged union below is a closed set of `kind` members. A
+`kind` that is not listed for that union rejects the whole plan, and every member
+object must carry exactly its listed fields (no extras, no missing). These unions
+are distinct from one another: a member of one union is never valid in another.
+
+Graph typed inputs (`TypedInputRef`) appear in agent node `visible_inputs`,
+human-gate `required_inputs`, and `aggregation` inputs. They resolve against the
+supplied registries:
+
+- `TypedInputRef`:
+  - `{{"kind":"context","key":"<context_registry key>"}}` — resolves to a context registry entry.
+  - `{{"kind":"node_output","node_id":"<agent node id>","output":"<declared output>"}}` — resolves to an upstream agent node's declared output.
+  - `{{"kind":"external_source","source_id":"<provenance_policy source id>"}}` — resolves to a provenance policy source.
+
+`ClaimSourceRef` appears only inside `claim_provenance.sources`. Its members are
+distinct from the graph typed inputs and are not interchangeable with them:
+
+- `ClaimSourceRef`:
+  - `{{"kind":"provenance_source","source_id":"<provenance_policy source id>"}}`
+  - `{{"kind":"human_source","source_id":"<human_source_registry id>"}}`
+  - `{{"kind":"context_source","key":"<context_registry key>"}}` — VALID ONLY inside `claim_provenance.sources`.
+  - `{{"kind":"agent_output","node_id":"<agent node id>","output":"<declared output>"}}`
+
+`EvidenceRef` is used in `trigger_evaluations[].evidence_refs`. It is a fourth,
+separate union:
+
+- `EvidenceRef`:
+  - `{{"kind":"context","key":"<context_registry key>"}}`
+  - `{{"kind":"profile","evidence_id":"<profile_evidence_registry id>"}}`
+  - `{{"kind":"domain_assessment","index":<non-negative integer>}}`
+  - `{{"kind":"node_output","node_id":"<agent node id>","output":"<declared output>"}}`
+
+`SourceIdentity` (agent node `source_identity`, context entry `source_identity`):
+
+- `{{"kind":"agent","id":"<agent id>","disclosure":"<non-empty disclosure>"}}`
+- `{{"kind":"external_system","id":"<id>","disclosure":"<non-empty disclosure>"}}`
+- `{{"kind":"human","id":"<id>","disclosure":null}}` — human disclosure must be null.
+- `{{"kind":"synthetic_perspective","id":"<synthetic registry id>"}}` — no label or disclosure.
+
+`StakeholderSourceRef` (stakeholder `source_ref`):
+
+- `{{"kind":"human_source","source_id":"<human_source_registry id>"}}`
+- `{{"kind":"profile_evidence","evidence_id":"<profile_evidence_registry id>"}}`
+
+`ActionRef` is an exact closed object, not a union:
+
+- `{{"role_slug":"<active role slug>","action_id":"<catalog authority action id>"}}`
+
+Graph node `kind` is exactly `agent` or `human_gate`. Graph edge `kind` is
+exactly `sequential` or `parallel`.
+
+### context vs context_source — the critical distinction
+
+`{{"kind":"context","key":"..."}}` references a context registry entry for
+graph/gate/aggregation typed inputs and for evidence. `{{"kind":"context_source","key":"..."}}`
+is a *different* member of `ClaimSourceRef` and is permitted only inside
+`claim_provenance.sources`. They are not interchangeable: a graph/gate/
+aggregation typed input must never use `context_source`, and a claim source must
+never use `context`. Both `key` values must resolve in the context registry.
+
+`aggregation` inputs are `node_output` refs only. They may never be `context` or
+`external_source` refs; each must name a real declared output of an upstream
+agent node.
+
+Invalid cross-union examples (each rejects the whole plan):
+
+- A graph node `visible_inputs` using context_source instead of context:
+  `{{"kind":"context_source","key":"k1"}}`  -> WRONG; use `{{"kind":"context","key":"k1"}}`.
+- A `claim_provenance.sources` entry using context instead of context_source:
+  `{{"kind":"context","key":"k1"}}`  -> WRONG; use `{{"kind":"context_source","key":"k1"}}`.
+- An `aggregation` input that is not a node_output ref:
+  `{{"kind":"context","key":"k1"}}` or `{{"kind":"external_source","source_id":"s1"}}`
+  -> WRONG; aggregation inputs must be `{{"kind":"node_output","node_id":"n1","output":"..."}}`.
+- A `node_output` ref missing its `output` field:
+  `{{"kind":"node_output","node_id":"n1"}}` -> WRONG; both `node_id` and `output` required.
+
 ## Timelessness filter
 
 Convert source-specific situations into durable patterns in calibration text:

@@ -359,12 +359,17 @@ def parse_provenance_source(data: object, path: str = "provenance_source") -> Di
         required={
             "id": as_id,
             "label": as_text,
-            "path": as_path,
-            "sha256": as_sha256,
+        },
+        optional={
+            # path and sha256 are a paired nullable pair: both null (registry
+            # entry with no on-disk artifact) or both present. Mixed states are
+            # rejected below.
+            "path": lambda v, p: None if v is None else as_path(v, p),
+            "sha256": lambda v, p: None if v is None else as_sha256(v, p),
         },
         path=path,
     )
-    if (raw["path"] is None) != (raw["sha256"] is None):
+    if (raw.get("path") is None) != (raw.get("sha256") is None):
         raise ValidationError(f"{path}: path and sha256 must be both null or both non-null")
     return raw
 
@@ -841,6 +846,25 @@ def parse_typed_input_ref(data: object, path: str = "typed_input_ref") -> Dict[s
     raise ValidationError(f"{path}: unknown TypedInputRef kind {kind!r}")
 
 
+def parse_aggregation_input_ref(data: object, path: str = "aggregation_input_ref") -> Dict[str, object]:
+    """Aggregation inputs are ``node_output`` refs only (normative rule).
+
+    Unlike a general ``TypedInputRef``, an aggregation input may never be a
+    ``context`` or ``external_source`` ref. It always references an upstream
+    agent node's declared output.
+    """
+    if not isinstance(data, dict):
+        raise ValidationError(f"{path}: expected object")
+    kind = data.get("kind")
+    if kind == "node_output":
+        return parse_closed_object(
+            data,
+            required={"kind": _const("node_output"), "node_id": as_id, "output": as_text},
+            path=path,
+        )
+    raise ValidationError(f"{path}: aggregation input must be node_output, got kind {kind!r}")
+
+
 def parse_agent_node(data: object, path: str = "agent_node") -> Dict[str, object]:
     return parse_closed_object(
         data,
@@ -921,7 +945,7 @@ def parse_interaction_graph(data: object, path: str = "interaction_graph") -> Di
                     required={
                         "id": as_id,
                         "aggregator_node_id": as_id,
-                        "inputs": lambda x, r: as_unique_list(x, parse_typed_input_ref, r),
+                        "inputs": lambda x, r: as_unique_list(x, parse_aggregation_input_ref, r),
                         "output": as_text,
                         "destination_gate_id": as_id,
                         "preserve_unresolved_disagreement": as_boolean,
@@ -1682,8 +1706,21 @@ def _validate_graph(plan: Dict[str, object], tier: Dict[str, object], catalog: D
                     adj[ref["node_id"]].add(n["id"])  # type: ignore[assignment]
     for agg in graph["aggregation"]:  # type: ignore[assignment]
         for ref in agg["inputs"]:  # type: ignore[assignment]
-            if ref["kind"] == "node_output" and ref["node_id"] in node_by_id:  # type: ignore[assignment,index]
-                adj[ref["node_id"]].add(agg["id"])  # type: ignore[assignment]
+            # The union is already constrained to node_output at parse time;
+            # here we additionally resolve the ref to a real declared output of
+            # an agent node.
+            if ref["kind"] != "node_output":  # type: ignore[index]
+                raise ValidationError(f"graph: aggregation input must be node_output, got {ref['kind']}")  # type: ignore[index]
+            node = node_by_id.get(ref["node_id"])  # type: ignore[index]
+            if node is None or node["kind"] != "agent":  # type: ignore[index]
+                raise ValidationError(
+                    f"graph: aggregation input node {ref['node_id']} unresolved or not an agent node"  # type: ignore[index]
+                )
+            if ref["output"] not in set(node["declared_outputs"]):  # type: ignore[assignment,index]
+                raise ValidationError(
+                    f"graph: aggregation input output {ref['output']} not declared by node {ref['node_id']}"  # type: ignore[assignment,index]
+                )
+            adj[ref["node_id"]].add(agg["id"])  # type: ignore[assignment]
         if agg["destination_gate_id"] in node_by_id:  # type: ignore[assignment,index]
             adj[agg["id"]].add(agg["destination_gate_id"])  # type: ignore[assignment]
 
@@ -1842,6 +1879,7 @@ __all__ = [
     "parse_trigger_evaluation",
     "parse_evidence_ref",
     "parse_typed_input_ref",
+    "parse_aggregation_input_ref",
     "parse_interaction_graph",
     "parse_interaction_posture_snapshot",
     "parse_projection_hashes",
