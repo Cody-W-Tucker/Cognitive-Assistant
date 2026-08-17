@@ -98,10 +98,7 @@
   },
   "composition": {
     "primary_compatible_secondary": [
-      "model",
-      "criteria-applicator",
-      "second-opinion",
-      "formalizer"
+      "criteria-applicator"
     ],
     "prerequisite_groups": [],
     "conflicts": [

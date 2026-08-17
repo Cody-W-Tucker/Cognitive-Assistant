@@ -94,8 +94,6 @@
   },
   "composition": {
     "primary_compatible_secondary": [
-      "criteria-applicator",
-      "knowledge-checker",
       "formalizer",
       "communicator"
     ],

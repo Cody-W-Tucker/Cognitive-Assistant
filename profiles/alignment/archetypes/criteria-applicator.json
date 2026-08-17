@@ -86,10 +86,7 @@
   },
   "composition": {
     "primary_compatible_secondary": [
-      "formalizer",
-      "knowledge-checker",
-      "judge",
-      "decision-scaffolder"
+      "knowledge-checker"
     ],
     "prerequisite_groups": [
       [

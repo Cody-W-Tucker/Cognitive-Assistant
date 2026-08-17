@@ -92,8 +92,7 @@
   "composition": {
     "primary_compatible_secondary": [
       "alternative-perspectives",
-      "second-opinion",
-      "knowledge-checker"
+      "second-opinion"
     ],
     "prerequisite_groups": [
       [

@@ -34,6 +34,7 @@ from core.agent_plan_validator import (
     parse_action_ref,
     parse_provenance_source,
     parse_aggregation_input_ref,
+    recompute_resolved_settings,
     validate_agent_plan,
     validate_candidate_plan,
 )
@@ -1200,6 +1201,89 @@ class PromptContractTests(unittest.TestCase):
             "agreement_disagreement",
         ]:
             self.assertIn(marker, contract, f"selector contract missing reference to {marker!r}")
+
+
+# ---------------------------------------------------------------------------
+# Resolved-settings inconsistency regression
+# ---------------------------------------------------------------------------
+# The strict resolver (recompute_resolved_settings) must reject any agent whose
+# active role set yields an empty knowledge-mode or decision-control
+# intersection. This is the exact gate the selector preflight (see
+# archetype_selection_seed.md) references: an inconsistent candidate plan must
+# be rejected, never emitted. These tests lock that behavior in so a future
+# catalog edit cannot silently reintroduce an unresolvable pairing.
+
+
+def _role_spec(kmodes: list, dc_allowed: list, dc_default: str = "human",
+               social_override: object = None) -> dict:
+    return {
+        "decision_control": {"allowed": list(dc_allowed), "default": dc_default},
+        "knowledge": {"allowed_modes": list(kmodes), "default_mode": kmodes[0],
+                      "provenance_required": True, "citations_required_for_external": True},
+        "verification_diversity": {"orientation": "check", "obligations": []},
+        "cognitive": {"supported_modes": ["direct"], "forcing_triggers": []},
+        "social": {"default_position": "peer", "role_override": social_override},
+        "group": {"group_facing": False, "independence_required": False,
+                  "source_disclosure_required": True, "consensus_requirements": []},
+        "agreement_disagreement": {"supported_modes": ["none"], "required_triggers": []},
+    }
+
+
+def _agent(primary_slug: str, secondary_slugs: list) -> dict:
+    return {
+        "primary_role": {"slug": primary_slug, "variant": None},
+        "secondary_roles": [{"slug": s} for s in secondary_slugs],
+    }
+
+
+class ResolvedSettingsInconsistencyTests(unittest.TestCase):
+    def test_resolver_rejects_empty_knowledge_intersection(self) -> None:
+        catalog = {
+            "external-only": _role_spec(["external"], ["human"]),
+            "internal-only": _role_spec(["internal"], ["human"]),
+        }
+        tier = {"decision_control_levels": ["human"]}
+        agent = _agent("external-only", ["internal-only"])
+        with self.assertRaises(ValidationError):
+            recompute_resolved_settings(agent, catalog, tier)
+
+    def test_resolver_rejects_empty_decision_control_intersection(self) -> None:
+        # Both roles allow only "shared"; the tier permits only "human" ->
+        # the active-role/tier intersection is empty and must be rejected.
+        catalog = {
+            "a": _role_spec(["internal"], ["shared"], dc_default="shared"),
+            "b": _role_spec(["internal"], ["shared"], dc_default="shared"),
+        }
+        tier = {"decision_control_levels": ["human"]}
+        agent = _agent("a", ["b"])
+        with self.assertRaises(ValidationError):
+            recompute_resolved_settings(agent, catalog, tier)
+
+    def test_resolver_accepts_consistent_intersection(self) -> None:
+        catalog = {
+            "a": _role_spec(["internal", "either"], ["human", "shared"], dc_default="shared"),
+            "b": _role_spec(["internal", "either"], ["human", "shared"], dc_default="shared"),
+        }
+        tier = {"decision_control_levels": ["human", "shared"]}
+        agent = _agent("a", ["b"])
+        settings = recompute_resolved_settings(agent, catalog, tier)
+        self.assertIn(settings["decision_control"], {"human", "shared"})
+        self.assertTrue(settings["knowledge"]["mode"])
+
+    def test_candidate_with_incompatible_secondary_rejected(self) -> None:
+        # role-taker's compatible secondaries are internal/either roles only; an
+        # external-only role (knowledge-checker) is not a declared edge and must
+        # be rejected. This guards that the catalog's removed edges stay enforced
+        # by the validator and cannot be smuggled back into a candidate plan.
+        plan = _minimal_candidate()
+        agent = plan["agents"][0]
+        agent["secondary_roles"] = [{"slug": "knowledge-checker"}]
+        agent["resolved_design_settings"]["knowledge"] = {
+            "mode": "external", "provenance_required": True,
+            "citations_required_for_external": True,
+        }
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
 
 
 if __name__ == "__main__":

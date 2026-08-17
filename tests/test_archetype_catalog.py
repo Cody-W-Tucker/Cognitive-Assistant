@@ -285,5 +285,64 @@ class DomainPolicyTests(unittest.TestCase):
             parse_domain_policy(tampered)
 
 
+class CatalogCompositionIntersectionTests(unittest.TestCase):
+    """Every declared primary->secondary relation must resolve under policy.
+
+    A relation is resolvably composable only if the primary and secondary share
+    at least one knowledge mode, and only if the active role set keeps a
+    non-empty decision-control intersection at every impact tier. These are the
+    exact conditions the strict resolver enforces (see
+    ``recompute_resolved_settings``); the canonical ledger must never offer a
+    relation that would fail them.
+    """
+
+    def test_every_relation_has_nonempty_knowledge_intersection(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            for sec in spec["composition"]["primary_compatible_secondary"]:
+                sec_spec = catalog[sec]
+                km = set(spec["knowledge"]["allowed_modes"]) & set(
+                    sec_spec["knowledge"]["allowed_modes"]
+                )
+                self.assertTrue(
+                    km, f"{slug} -> {sec}: empty resolved knowledge-mode intersection"
+                )
+
+    def test_every_relation_has_nonempty_decision_control_per_tier(self) -> None:
+        catalog = load_archetype_catalog()
+        policy = load_domain_policy()
+        tiers = policy["impact_tiers"]
+        for slug, spec in catalog.items():
+            for sec in spec["composition"]["primary_compatible_secondary"]:
+                sec_spec = catalog[sec]
+                dc = set(spec["decision_control"]["allowed"]) & set(
+                    sec_spec["decision_control"]["allowed"]
+                )
+                self.assertTrue(dc, f"{slug} -> {sec}: empty decision_control intersection")
+                for tier_name, tier in tiers.items():
+                    levels = set(tier["decision_control_levels"])
+                    self.assertTrue(
+                        dc & levels,
+                        f"{slug} -> {sec}: empty decision_control intersection at tier {tier_name}",
+                    )
+
+    def test_no_external_only_crossed_with_internal_either(self) -> None:
+        catalog = load_archetype_catalog()
+        external_only = {
+            s
+            for s, spec in catalog.items()
+            if spec["knowledge"]["allowed_modes"] == ["external"]
+        }
+        internal_either = set(catalog) - external_only
+        for slug, spec in catalog.items():
+            for sec in spec["composition"]["primary_compatible_secondary"]:
+                pair = {slug, sec}
+                crossed = (pair & external_only) and (pair & internal_either)
+                self.assertFalse(
+                    crossed,
+                    f"{slug} -> {sec}: external-only role crossed with internal/either role",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
