@@ -172,6 +172,13 @@ Return exactly one JSON object with exactly these top-level keys and no others:
 Hard rules:
 
 - All ids match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. All strings are strict ASCII.
+- `primary_role` and every entry of `secondary_roles` is a `RoleAssignment`
+  with exactly `slug` and `variant`. `variant` MUST be the selected catalog
+  variant's scalar `id` string (e.g. `"internal-knowledge"`) or `null`. It is
+  NEVER a variant object: do not copy a catalog variant record
+  (`{{"id": "...", "label": "...", "provenance_mode": "..."}}`) as the value.
+  A full object at `agents[i].primary_role.variant` or
+  `agents[i].secondary_roles[j].variant` rejects the whole plan.
 - Every listed key is required. Any extra key rejects the plan.
 - Do NOT output `generated_at`, `domain_policy_ref`, `interaction_posture`,
   `projection_hashes`, `social_positions_by_role` at agent level,

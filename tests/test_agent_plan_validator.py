@@ -294,6 +294,47 @@ class CandidatePlanTests(unittest.TestCase):
     def test_validate_candidate_plan_returns_dict(self) -> None:
         self.assertIsInstance(validate_candidate_plan(_minimal_candidate()), dict)
 
+    def test_scalar_variant_accepted(self) -> None:
+        # A selected catalog variant's scalar id string is accepted.
+        plan = _minimal_candidate()
+        plan["agents"][0]["primary_role"] = {"slug": "knowledge-checker",
+                                             "variant": "internal-knowledge"}
+        parsed = parse_candidate_agent_plan(plan)
+        self.assertEqual(parsed["agents"][0]["primary_role"]["variant"], "internal-knowledge")  # type: ignore[union-attr,index]
+
+    def test_object_variant_in_primary_role_rejected(self) -> None:
+        # A copied catalog variant record (full object) must reject, and the
+        # error must name the precise schema path agents[i].primary_role.variant.
+        plan = _minimal_candidate()
+        plan["agents"][0]["primary_role"]["variant"] = {
+            "id": "internal-knowledge",
+            "label": "Internal Knowledge Checker",
+            "provenance_mode": "internal-knowledge",
+        }
+        with self.assertRaises(ValidationError) as ctx:
+            parse_candidate_agent_plan(plan)
+        msg = str(ctx.exception)
+        self.assertIn("agents[0].primary_role.variant", msg)
+        self.assertIn("invalid Id", msg)
+
+    def test_object_variant_in_secondary_roles_rejected(self) -> None:
+        # Same rule applies to secondary role assignments.
+        plan = _minimal_candidate()
+        plan["agents"][0]["secondary_roles"] = [{
+            "slug": "knowledge-checker",
+            "variant": {
+                "id": "internal-knowledge",
+                "label": "Internal Knowledge Checker",
+                "provenance_mode": "internal-knowledge",
+            },
+        }]
+        with self.assertRaises(ValidationError) as ctx:
+            parse_candidate_agent_plan(plan)
+        msg = str(ctx.exception)
+        self.assertIn("agents[0].secondary_roles[0].variant", msg)
+        self.assertIn("invalid Id", msg)
+
+
 
 class FinalPlanTests(unittest.TestCase):
     def test_valid_final_parses(self) -> None:
