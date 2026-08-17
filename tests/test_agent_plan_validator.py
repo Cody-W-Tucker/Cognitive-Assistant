@@ -1048,6 +1048,117 @@ class IndependenceBoundaryTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Implicit-reasoner trigger contract: forcing_triggers vs required_triggers
+# ---------------------------------------------------------------------------
+
+
+class ImplicitReasonerTriggerContractTests(unittest.TestCase):
+    """A valid-vocabulary cognitive forcing trigger must not be accepted as a
+    required-trigger evaluation; only entries in the required-trigger union are.
+    """
+
+    def setUp(self) -> None:
+        self.catalog = load_archetype_catalog()
+        self.domain_policy = load_domain_policy()
+        self.posture = _posture()
+
+    def _enrich(self, candidate, souls):
+        return enrich_candidate_to_planned(
+            candidate, self.catalog, self.domain_policy,
+            posture_snapshot=self.posture,
+            generation_provenance=_gen_prov(self.posture),
+            domain_policy_ref={"path": "p/dp.json", "sha256": SHA},
+            generated_at="2026-08-17T12:34:56Z",
+            soul_markdown_by_id=souls,
+        )
+
+    @staticmethod
+    def _ir_agent() -> dict:
+        return {
+            "id": "ir1",
+            "primary_role": {"slug": "implicit-reasoner", "variant": None},
+            "secondary_roles": [{"slug": "decision-scaffolder", "variant": None}],
+            "profile_rationale": {"evidence_refs": ["e1", "e2"], "not_applicable": False,
+                                   "not_applicable_rationale": None, "selection_reason": "r",
+                                   "calibration_effect": "c"},
+            "calibration": {"posture": "p", "notes": [], "constraints": []},
+            "skills": ["decision-calibration", "bound-before-solving"],
+            "resolved_design_settings": _settings_placeholder(),
+            "claim_provenance": None,
+            "graph_participation": {"node_id": "nir"},
+        }
+
+    def _ir_candidate(self, trigger_evaluations) -> dict:
+        return {
+            "schema_version": "1.0-proposed",
+            "context_registry": {"entries": [
+                {"key": "k1", "content": "ctx", "sha256": SHA,
+                 "source_identity": {"kind": "human", "id": "h1", "disclosure": None}},
+            ]},
+            "human_source_registry": {"sources": [{"id": "h1", "label": "Operator"}]},
+            "stakeholder_registry": {"entries": []},
+            "profile_evidence_registry": {"entries": [
+                {"id": "e1", "profile": "existential", "excerpt": "x", "path": "p/e1", "sha256": SHA},
+                {"id": "e2", "profile": "operational", "excerpt": "y", "path": "p/e2", "sha256": SHA},
+            ]},
+            "synthetic_perspective_registry": {"entries": []},
+            "domain_assessment": {"tier": "medium", "evidence": ["e1"]},
+            "provenance_policy": {"sources": []},
+            "agents": [self._ir_agent()],
+            "final_authority": {
+                "agent_id": None, "action_refs": [], "domain_scope": "scope",
+                "decision_control": "human", "terminal_gate_id": "gir", "rationale": "r",
+            },
+            "trigger_evaluations": trigger_evaluations,
+            "interaction_graph": {
+                "nodes": [
+                    {"id": "nir", "kind": "agent", "agent_id": "ir1", "role": "implicit-reasoner",
+                     "visible_inputs": [],
+                     "source_identity": {"kind": "agent", "id": "ir1", "disclosure": "agent-generated input"},
+                     "phase": 0, "exec_group": "g",
+                     "declared_outputs": ["inferred considerations", "uncertainty labels",
+                                          "options", "tradeoffs", "next decision"]},
+                    {"id": "gir", "kind": "human_gate", "mode": "approval", "condition": "c",
+                     "decision_owner": "operator", "required_inputs": [{"kind": "context", "key": "k1"}],
+                     "continuation": "end", "phase": 1},
+                ],
+                "edges": [{"from": "nir", "to": "gir", "kind": "sequential", "handoff": "h"}],
+                "independent_opinion_boundaries": [],
+                "aggregation": [],
+                "unresolved_disagreement": {"triggered": False, "reason": None,
+                                            "gate_id": None, "output": None},
+            },
+        }
+
+    def test_forcing_trigger_without_required_membership_rejected(self) -> None:
+        # `unstated-constraint-suspected` is valid vocabulary (a cognitive
+        # forcing trigger) but is NOT in the agreement/disagreement required
+        # trigger union for this portfolio; it must be rejected.
+        candidate = self._ir_candidate([
+            {"trigger_id": "unstated-constraint-suspected",
+             "evidence_refs": [{"kind": "context", "key": "k1"}],
+             "result": False, "rationale": "n/a"},
+        ])
+        plan = self._enrich(candidate, {"ir1": "# Soul\n"})
+        with self.assertRaises(ValidationError):
+            validate_agent_plan_semantics(plan, self.catalog, self.domain_policy)
+
+    def test_required_trigger_evaluation_accepted(self) -> None:
+        # The portfolio's required-trigger union is {uncertainty, high-impact};
+        # `uncertainty` is among the accepted required evaluations.
+        candidate = self._ir_candidate([
+            {"trigger_id": "uncertainty",
+             "evidence_refs": [{"kind": "context", "key": "k1"}],
+             "result": False, "rationale": "n/a"},
+            {"trigger_id": "high-impact",
+             "evidence_refs": [{"kind": "context", "key": "k1"}],
+             "result": False, "rationale": "n/a"},
+        ])
+        plan = self._enrich(candidate, {"ir1": "# Soul\n"})
+        validate_agent_plan_semantics(plan, self.catalog, self.domain_policy)
+
+
+# ---------------------------------------------------------------------------
 # Prompt contract test: the seed documents the exact closed shapes
 # ---------------------------------------------------------------------------
 
@@ -1073,6 +1184,20 @@ class PromptContractTests(unittest.TestCase):
             "Registries record shapes",
             "decision_control",
             "external-citation condition",
+        ]:
+            self.assertIn(marker, contract, f"selector contract missing reference to {marker!r}")
+
+    def test_seed_distinguishes_forcing_from_required_triggers(self) -> None:
+        path = Path(__file__).resolve().parent.parent / "profiles" / "alignment" / "prompts" / "archetype_selection_seed.md"
+        contract = path.read_text(encoding="utf-8")
+        # The selector contract must make the forcing_triggers vs required_triggers
+        # distinction explicit: a cognitive forcing trigger (e.g.
+        # unstated-constraint-suspected) is not a valid stand-alone evaluation.
+        for marker in [
+            "forcing_triggers",
+            "required_triggers",
+            "unstated-constraint-suspected",
+            "agreement_disagreement",
         ]:
             self.assertIn(marker, contract, f"selector contract missing reference to {marker!r}")
 

@@ -72,10 +72,18 @@ Assemble complementary coverage, not a roster.
 - Every role that requires independence must appear in at least one
   `independent_opinion_boundaries` entry, and an isolated agent must not receive
   a blocked output, directly or transitively, before `release_phase`.
-- Provide exactly one `trigger_evaluations` entry for every trigger required by
-  any active role, and no unrelated trigger ids. When a required trigger is
-  true, the dissenting role it demands must exist and its output must reach a
-  terminal gate.
+- Exactly one `trigger_evaluations` entry per trigger in the union of every
+   active role's `agreement_disagreement.required_triggers`. The evaluated
+   `trigger_id` set must equal that union exactly: a missing required trigger
+   rejects the plan, and any `trigger_id` outside the union rejects the plan. A
+   cognitive `forcing_triggers` id (for example `unstated-constraint-suspected`)
+   is never a stand-alone valid evaluation: an entry whose `trigger_id` is in a
+   role's cognitive `forcing_triggers` is rejected unless that same id also
+   appears in the `agreement_disagreement.required_triggers` union. The
+   required-trigger union and the cognitive forcing-trigger set are distinct
+   vocabularies; do not confuse them. When a required trigger is true, the
+   dissenting role it demands must exist and its output must reach a terminal
+   gate.
 
 ## Registry discipline
 
