@@ -359,12 +359,17 @@ def parse_provenance_source(data: object, path: str = "provenance_source") -> Di
         required={
             "id": as_id,
             "label": as_text,
-            "path": as_path,
-            "sha256": as_sha256,
+        },
+        optional={
+            # path and sha256 are a paired nullable pair: both null (registry
+            # entry with no on-disk artifact) or both present. Mixed states are
+            # rejected below.
+            "path": lambda v, p: None if v is None else as_path(v, p),
+            "sha256": lambda v, p: None if v is None else as_sha256(v, p),
         },
         path=path,
     )
-    if (raw["path"] is None) != (raw["sha256"] is None):
+    if (raw.get("path") is None) != (raw.get("sha256") is None):
         raise ValidationError(f"{path}: path and sha256 must be both null or both non-null")
     return raw
 
@@ -378,6 +383,7 @@ def parse_provenance_policy(data: object, path: str = "provenance_policy") -> Di
         path=path,
     )
     _check_unique_ids(raw["sources"], "provenance_policy.sources", "id")  # type: ignore[arg-type]
+    _check_unique_labels(raw["sources"], "provenance_policy.sources")  # type: ignore[arg-type]
     return raw
 
 
@@ -396,6 +402,7 @@ def parse_human_source_registry(data: object, path: str = "human_source_registry
         path=path,
     )
     _check_unique_ids(raw["sources"], "human_source_registry.sources", "id")  # type: ignore[arg-type]
+    _check_unique_labels(raw["sources"], "human_source_registry.sources")  # type: ignore[arg-type]
     return raw
 
 
@@ -792,7 +799,7 @@ def parse_trigger_evaluation(data: object, path: str = "trigger_evaluation") -> 
     return parse_closed_object(
         data,
         required={
-            "trigger_id": as_id,
+            "trigger_id": lambda v, p: as_enum(v, TRIGGER_IDS, p, "trigger_id"),
             "evidence_refs": lambda v, p: as_unique_list(v, parse_evidence_ref, p),
             "result": as_boolean,
             "rationale": as_text,
@@ -841,6 +848,25 @@ def parse_typed_input_ref(data: object, path: str = "typed_input_ref") -> Dict[s
     raise ValidationError(f"{path}: unknown TypedInputRef kind {kind!r}")
 
 
+def parse_aggregation_input_ref(data: object, path: str = "aggregation_input_ref") -> Dict[str, object]:
+    """Aggregation inputs are ``node_output`` refs only (normative rule).
+
+    Unlike a general ``TypedInputRef``, an aggregation input may never be a
+    ``context`` or ``external_source`` ref. It always references an upstream
+    agent node's declared output.
+    """
+    if not isinstance(data, dict):
+        raise ValidationError(f"{path}: expected object")
+    kind = data.get("kind")
+    if kind == "node_output":
+        return parse_closed_object(
+            data,
+            required={"kind": _const("node_output"), "node_id": as_id, "output": as_text},
+            path=path,
+        )
+    raise ValidationError(f"{path}: aggregation input must be node_output, got kind {kind!r}")
+
+
 def parse_agent_node(data: object, path: str = "agent_node") -> Dict[str, object]:
     return parse_closed_object(
         data,
@@ -880,7 +906,7 @@ def parse_interaction_graph(data: object, path: str = "interaction_graph") -> Di
     return parse_closed_object(
         data,
         required={
-            "nodes": lambda v, p: as_unique_list(v, _parse_graph_node, p),
+            "nodes": _parse_graph_nodes,
             "edges": lambda v, p: as_unique_list(
                 v,
                 lambda w, q: parse_closed_object(
@@ -921,7 +947,7 @@ def parse_interaction_graph(data: object, path: str = "interaction_graph") -> Di
                     required={
                         "id": as_id,
                         "aggregator_node_id": as_id,
-                        "inputs": lambda x, r: as_unique_list(x, parse_typed_input_ref, r),
+                        "inputs": lambda x, r: as_unique_list(x, parse_aggregation_input_ref, r),
                         "output": as_text,
                         "destination_gate_id": as_id,
                         "preserve_unresolved_disagreement": as_boolean,
@@ -1021,9 +1047,9 @@ def _candidate_common() -> Dict[str, FieldParser]:
         "synthetic_perspective_registry": parse_synthetic_perspective_registry,
         "domain_assessment": parse_domain_assessment,
         "provenance_policy": parse_provenance_policy,
-        "agents": lambda v, p: as_unique_list(v, parse_candidate_agent, p, empty_ok=False),
+        "agents": lambda v, p: _parse_agents_list(v, parse_candidate_agent, p, "candidate_agent"),
         "final_authority": parse_final_authority,
-        "trigger_evaluations": lambda v, p: as_unique_list(v, parse_trigger_evaluation, p),
+        "trigger_evaluations": _parse_trigger_evaluations,
         "interaction_graph": parse_interaction_graph,
     }
 
@@ -1044,7 +1070,7 @@ def parse_candidate_agent_plan(data: object, path: str = "") -> Dict[str, object
 
 def parse_agent_plan(data: object, path: str = "") -> Dict[str, object]:
     common = _candidate_common()
-    common["agents"] = lambda v, p: as_unique_list(v, parse_planned_agent, p, empty_ok=False)
+    common["agents"] = lambda v, p: _parse_agents_list(v, parse_planned_agent, p, "agent")
     common["generated_at"] = as_generated_at
     common["domain_policy_ref"] = parse_hash_ref
     common["interaction_posture"] = parse_interaction_posture_snapshot
@@ -1200,6 +1226,36 @@ def _check_unique_ids(entries: List[object], path: str, id_key: str) -> None:
         if key in seen:
             raise ValidationError(f"{path}: duplicate {id_key} {key!r}")
         seen.add(key)
+
+
+def _check_unique_field(entries: List[object], path: str, field: str) -> None:
+    """Reject duplicate values of an arbitrary scalar field (e.g. trigger_id)."""
+    seen: Set[object] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or field not in entry:
+            raise ValidationError(f"{path}: entry missing {field}")
+        key = entry[field]
+        if key in seen:
+            raise ValidationError(f"{path}: duplicate {field} {key!r}")
+        seen.add(key)
+
+
+def _parse_agents_list(value: object, item_parser: FieldParser, path: str, what: str) -> List[object]:
+    agents = as_unique_list(value, item_parser, path, empty_ok=False)
+    _check_unique_ids(agents, f"{path}", "id")  # type: ignore[arg-type]
+    return agents
+
+
+def _parse_graph_nodes(value: object, path: str) -> List[object]:
+    nodes = as_unique_list(value, _parse_graph_node, path)
+    _check_unique_ids(nodes, f"{path}", "id")  # type: ignore[arg-type]
+    return nodes
+
+
+def _parse_trigger_evaluations(value: object, path: str) -> List[object]:
+    evals = as_unique_list(value, parse_trigger_evaluation, path)
+    _check_unique_field(evals, f"{path}", "trigger_id")  # type: ignore[arg-type]
+    return evals
 
 
 def _check_unique_labels(entries: List[object], path: str) -> None:
@@ -1682,8 +1738,21 @@ def _validate_graph(plan: Dict[str, object], tier: Dict[str, object], catalog: D
                     adj[ref["node_id"]].add(n["id"])  # type: ignore[assignment]
     for agg in graph["aggregation"]:  # type: ignore[assignment]
         for ref in agg["inputs"]:  # type: ignore[assignment]
-            if ref["kind"] == "node_output" and ref["node_id"] in node_by_id:  # type: ignore[assignment,index]
-                adj[ref["node_id"]].add(agg["id"])  # type: ignore[assignment]
+            # The union is already constrained to node_output at parse time;
+            # here we additionally resolve the ref to a real declared output of
+            # an agent node.
+            if ref["kind"] != "node_output":  # type: ignore[index]
+                raise ValidationError(f"graph: aggregation input must be node_output, got {ref['kind']}")  # type: ignore[index]
+            node = node_by_id.get(ref["node_id"])  # type: ignore[index]
+            if node is None or node["kind"] != "agent":  # type: ignore[index]
+                raise ValidationError(
+                    f"graph: aggregation input node {ref['node_id']} unresolved or not an agent node"  # type: ignore[index]
+                )
+            if ref["output"] not in set(node["declared_outputs"]):  # type: ignore[assignment,index]
+                raise ValidationError(
+                    f"graph: aggregation input output {ref['output']} not declared by node {ref['node_id']}"  # type: ignore[assignment,index]
+                )
+            adj[ref["node_id"]].add(agg["id"])  # type: ignore[assignment]
         if agg["destination_gate_id"] in node_by_id:  # type: ignore[assignment,index]
             adj[agg["id"]].add(agg["destination_gate_id"])  # type: ignore[assignment]
 
@@ -1734,6 +1803,7 @@ def _validate_graph(plan: Dict[str, object], tier: Dict[str, object], catalog: D
         if g["mode"] not in tier["terminal_gate_modes"]:  # type: ignore[assignment,index]
             raise ValidationError(f"graph: gate {g['id']} mode '{g['mode']}' not permitted by tier")  # type: ignore[assignment,index]
 
+    _validate_independence_boundaries(plan, node_by_id, adj, declared_outputs)
     _validate_trigger_evaluations(plan, catalog)
 
 
@@ -1742,6 +1812,89 @@ def _is_terminal(plan: Dict[str, object], gate: Dict[str, object]) -> bool:
         if e["from"] == gate["id"]:  # type: ignore[index]
             return False
     return True
+
+
+def _reaches(adj: Dict[str, set], src: str, dst: str) -> bool:
+    """True if ``dst`` is reachable from ``src`` following adjacency edges."""
+    if src == dst:
+        return True
+    seen: Set[str] = {src}
+    stack = [src]
+    while stack:
+        cur = stack.pop()
+        for nxt in adj.get(cur, ()):
+            if nxt in seen:
+                continue
+            if nxt == dst:
+                return True
+            seen.add(nxt)
+            stack.append(nxt)
+    return False
+
+
+def _validate_independence_boundaries(
+    plan: Dict[str, object],
+    node_by_id: Dict[str, object],
+    adj: Dict[str, set],
+    declared_outputs: Dict[str, set],
+) -> None:
+    """Resolve every ``independent_opinion_boundaries`` entry.
+
+    Each ``isolated_agent_ids`` entry must map to a real agent and its graph
+    node; each ``blocked_node_outputs`` entry must resolve to a real agent
+    node's declared output. An isolated agent must not receive a blocked output,
+    directly or transitively, before ``release_phase``.
+    """
+    graph = plan["interaction_graph"]  # type: ignore[assignment]
+    nodes = graph["nodes"]  # type: ignore[assignment]
+    boundaries = graph["independent_opinion_boundaries"]  # type: ignore[assignment]
+    if not boundaries:
+        return
+    agent_ids = {a["id"] for a in plan["agents"]}  # type: ignore[assignment]
+    agent_node_by_agent = {
+        n["agent_id"]: n for n in nodes if n["kind"] == "agent"  # type: ignore[assignment,index]
+    }
+    for bi, b in enumerate(boundaries):
+        iso_ids = b["isolated_agent_ids"]  # type: ignore[assignment]
+        if not iso_ids:
+            raise ValidationError(
+                f"graph.independent_opinion_boundaries[{bi}]: isolated_agent_ids must be non-empty"
+            )
+        iso_nodes = []
+        for aid in iso_ids:
+            if aid not in agent_ids:
+                raise ValidationError(
+                    f"graph.independent_opinion_boundaries[{bi}]: isolated_agent_id '{aid}' is not a real agent id"
+                )
+            node = agent_node_by_agent.get(aid)
+            if node is None:
+                raise ValidationError(
+                    f"graph.independent_opinion_boundaries[{bi}]: isolated agent '{aid}' has no agent graph node"
+                )
+            iso_nodes.append(node)
+        for bo in b["blocked_node_outputs"]:  # type: ignore[assignment]
+            src = node_by_id.get(bo["node_id"])  # type: ignore[assignment,index]
+            if src is None or src["kind"] != "agent":  # type: ignore[assignment,index]
+                raise ValidationError(
+                    f"graph.independent_opinion_boundaries[{bi}]: blocked output node {bo['node_id']} is not an agent node"  # type: ignore[index]
+                )
+            if bo["output"] not in set(src["declared_outputs"]):  # type: ignore[assignment,index]
+                raise ValidationError(
+                    f"graph.independent_opinion_boundaries[{bi}]: blocked output {bo['output']} not declared by node {bo['node_id']}"  # type: ignore[index]
+                )
+        release = b["release_phase"]  # type: ignore[assignment]
+        for iso in iso_nodes:
+            iso_id = iso["id"]  # type: ignore[index]
+            iso_phase = iso["phase"]  # type: ignore[assignment,index]
+            iso_aid = iso["agent_id"]  # type: ignore[assignment,index]
+            for bo in b["blocked_node_outputs"]:  # type: ignore[assignment]
+                src = node_by_id.get(bo["node_id"])  # type: ignore[assignment,index]
+                if src is None:
+                    continue
+                if _reaches(adj, src["id"], iso_id) and iso_phase < release:  # type: ignore[assignment,index]
+                    raise ValidationError(
+                        f"graph.independent_opinion_boundaries[{bi}]: isolated agent '{iso_aid}' receives blocked output '{bo['output']}' before release_phase {release}"  # type: ignore[index]
+                    )
 
 
 def _validate_trigger_evaluations(plan: Dict[str, object], catalog: Dict[str, dict]) -> None:
@@ -1842,6 +1995,7 @@ __all__ = [
     "parse_trigger_evaluation",
     "parse_evidence_ref",
     "parse_typed_input_ref",
+    "parse_aggregation_input_ref",
     "parse_interaction_graph",
     "parse_interaction_posture_snapshot",
     "parse_projection_hashes",

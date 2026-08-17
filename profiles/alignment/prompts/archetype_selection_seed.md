@@ -72,10 +72,18 @@ Assemble complementary coverage, not a roster.
 - Every role that requires independence must appear in at least one
   `independent_opinion_boundaries` entry, and an isolated agent must not receive
   a blocked output, directly or transitively, before `release_phase`.
-- Provide exactly one `trigger_evaluations` entry for every trigger required by
-  any active role, and no unrelated trigger ids. When a required trigger is
-  true, the dissenting role it demands must exist and its output must reach a
-  terminal gate.
+- Exactly one `trigger_evaluations` entry per trigger in the union of every
+   active role's `agreement_disagreement.required_triggers`. The evaluated
+   `trigger_id` set must equal that union exactly: a missing required trigger
+   rejects the plan, and any `trigger_id` outside the union rejects the plan. A
+   cognitive `forcing_triggers` id (for example `unstated-constraint-suspected`)
+   is never a stand-alone valid evaluation: an entry whose `trigger_id` is in a
+   role's cognitive `forcing_triggers` is rejected unless that same id also
+   appears in the `agreement_disagreement.required_triggers` union. The
+   required-trigger union and the cognitive forcing-trigger set are distinct
+   vocabularies; do not confuse them. When a required trigger is true, the
+   dissenting role it demands must exist and its output must reach a terminal
+   gate.
 
 ## Registry discipline
 
@@ -94,6 +102,84 @@ Assemble complementary coverage, not a roster.
   registry. When `not_applicable` is false there must be at least one ref from
   each profile and `not_applicable_rationale` must be null.
 
+## Closed unions (exact and non-interchangeable)
+
+Every selector-facing tagged union below is a closed set of `kind` members. A
+`kind` that is not listed for that union rejects the whole plan, and every member
+object must carry exactly its listed fields (no extras, no missing). These unions
+are distinct from one another: a member of one union is never valid in another.
+
+Graph typed inputs (`TypedInputRef`) appear in agent node `visible_inputs`,
+human-gate `required_inputs`, and `aggregation` inputs. They resolve against the
+supplied registries:
+
+- `TypedInputRef`:
+  - `{{"kind":"context","key":"<context_registry key>"}}` — resolves to a context registry entry.
+  - `{{"kind":"node_output","node_id":"<agent node id>","output":"<declared output>"}}` — resolves to an upstream agent node's declared output.
+  - `{{"kind":"external_source","source_id":"<provenance_policy source id>"}}` — resolves to a provenance policy source.
+
+`ClaimSourceRef` appears only inside `claim_provenance.sources`. Its members are
+distinct from the graph typed inputs and are not interchangeable with them:
+
+- `ClaimSourceRef`:
+  - `{{"kind":"provenance_source","source_id":"<provenance_policy source id>"}}`
+  - `{{"kind":"human_source","source_id":"<human_source_registry id>"}}`
+  - `{{"kind":"context_source","key":"<context_registry key>"}}` — VALID ONLY inside `claim_provenance.sources`.
+  - `{{"kind":"agent_output","node_id":"<agent node id>","output":"<declared output>"}}`
+
+`EvidenceRef` is used in `trigger_evaluations[].evidence_refs`. It is a fourth,
+separate union:
+
+- `EvidenceRef`:
+  - `{{"kind":"context","key":"<context_registry key>"}}`
+  - `{{"kind":"profile","evidence_id":"<profile_evidence_registry id>"}}`
+  - `{{"kind":"domain_assessment","index":<non-negative integer>}}`
+  - `{{"kind":"node_output","node_id":"<agent node id>","output":"<declared output>"}}`
+
+`SourceIdentity` (agent node `source_identity`, context entry `source_identity`):
+
+- `{{"kind":"agent","id":"<agent id>","disclosure":"<non-empty disclosure>"}}`
+- `{{"kind":"external_system","id":"<id>","disclosure":"<non-empty disclosure>"}}`
+- `{{"kind":"human","id":"<id>","disclosure":null}}` — human disclosure must be null.
+- `{{"kind":"synthetic_perspective","id":"<synthetic registry id>"}}` — no label or disclosure.
+
+`StakeholderSourceRef` (stakeholder `source_ref`):
+
+- `{{"kind":"human_source","source_id":"<human_source_registry id>"}}`
+- `{{"kind":"profile_evidence","evidence_id":"<profile_evidence_registry id>"}}`
+
+`ActionRef` is an exact closed object, not a union:
+
+- `{{"role_slug":"<active role slug>","action_id":"<catalog authority action id>"}}`
+
+Graph node `kind` is exactly `agent` or `human_gate`. Graph edge `kind` is
+exactly `sequential` or `parallel`.
+
+### context vs context_source — the critical distinction
+
+`{{"kind":"context","key":"..."}}` references a context registry entry for
+graph/gate/aggregation typed inputs and for evidence. `{{"kind":"context_source","key":"..."}}`
+is a *different* member of `ClaimSourceRef` and is permitted only inside
+`claim_provenance.sources`. They are not interchangeable: a graph/gate/
+aggregation typed input must never use `context_source`, and a claim source must
+never use `context`. Both `key` values must resolve in the context registry.
+
+`aggregation` inputs are `node_output` refs only. They may never be `context` or
+`external_source` refs; each must name a real declared output of an upstream
+agent node.
+
+Invalid cross-union examples (each rejects the whole plan):
+
+- A graph node `visible_inputs` using context_source instead of context:
+  `{{"kind":"context_source","key":"k1"}}`  -> WRONG; use `{{"kind":"context","key":"k1"}}`.
+- A `claim_provenance.sources` entry using context instead of context_source:
+  `{{"kind":"context","key":"k1"}}`  -> WRONG; use `{{"kind":"context_source","key":"k1"}}`.
+- An `aggregation` input that is not a node_output ref:
+  `{{"kind":"context","key":"k1"}}` or `{{"kind":"external_source","source_id":"s1"}}`
+  -> WRONG; aggregation inputs must be `{{"kind":"node_output","node_id":"n1","output":"..."}}`.
+- A `node_output` ref missing its `output` field:
+  `{{"kind":"node_output","node_id":"n1"}}` -> WRONG; both `node_id` and `output` required.
+
 ## Timelessness filter
 
 Convert source-specific situations into durable patterns in calibration text:
@@ -103,6 +189,110 @@ Convert source-specific situations into durable patterns in calibration text:
 - `[current specific conflict or tension]` -> `[durable pattern]`.
 - `[current specific feeling or loop]` -> `[durable pattern]`.
 - `[present-season logistics or biography]` -> `[remove unless it reveals a durable preference, constraint, or failure mode]`.
+
+## Exact record-shape reference (closed, mandatory)
+
+All nested objects below are exact and closed: required keys only, no extras,
+no missing. Scalar rules first, then each record. This section is the canonical
+shape contract the selector must satisfy before generation.
+
+### Scalar rules (concise)
+
+- ids / keys (`agent id`, `node_id`, `gate id`, `source_id`, `key`, `variant`,
+  `path` basename): match `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
+- `sha256`: exactly 64 lowercase hex chars.
+- `path`: relative, no `..` segments, no NUL, strict ASCII.
+- every string is strict ASCII and non-empty, except where a field is explicitly
+  `null`.
+
+### Registries record shapes
+
+- `context_registry`:
+  `{{"entries":[{{"key":<id>,"content":<ascii>,"sha256":<sha256>,"source_identity":<SourceIdentity>}}]}}`
+  — `key` unique.
+- `human_source_registry`:
+  `{{"sources":[{{"id":<id>,"label":<ascii>}}]}}` — `id` unique AND `label` unique.
+- `stakeholder_registry`:
+  `{{"entries":[{{"id":<id>,"label":<ascii>,"source_ref":<StakeholderSourceRef>}}]}}`
+  — `id` unique AND `label` unique.
+- `profile_evidence_registry`:
+  `{{"entries":[{{"id":<id>,"profile":"existential"|"operational","excerpt":<ascii>,"path":<path>,"sha256":<sha256>}}]}}`
+  — `id` unique.
+- `synthetic_perspective_registry`:
+  `{{"entries":[{{"id":<id>,"label":<ascii>,"disclosure":<ascii; must state synthetic>}}]}}`
+  — `id` unique AND `label` unique.
+- `provenance_policy`:
+  `{{"sources":[{{"id":<id>,"label":<ascii>,"path":<path|null>,"sha256":<sha256|null>}}]}}`
+  — `path` and `sha256` are a paired nullable pair (both null or both present);
+  `id` unique AND `label` unique.
+
+### ClaimProvenance plus external-citation condition
+
+- `claim_provenance` is `null` or exactly:
+  `{{"mode":<"internal"|"external"|"either">,"sources":[<ClaimSourceRef>],"unsupported_label":<ascii>,"citations":[<ascii>]}}`.
+- CONDITION: if `mode` is `"external"` then `citations` MUST be non-empty; an
+  external `claim_provenance` with empty `citations` rejects the whole plan.
+
+### Candidate agent scalar / cap constraints
+
+- `id` is unique across `agents` (a duplicate agent id rejects).
+- `primary_role` and each `secondary_roles[]` is a `RoleAssignment`:
+  `{{"slug":<RoleSlug>,"variant":<catalog variant id string|null>}}`. `variant`
+  is the selected catalog variant's scalar `id` string or `null`; it is NEVER a
+  variant object. At most three secondary roles.
+- `skills`: unique ids from the active roles' `canonical_skills`.
+- `profile_rationale.evidence_refs`: unique ids; `not_applicable` boolean; when
+  false there must be at least one ref from each profile.
+- `resolved_design_settings`: the seven closed sub-objects exactly (no extras).
+
+### Settings enum vocabularies (exact allowed values)
+
+- `decision_control`: `human` | `shared` | `agent`
+- `knowledge.mode`: `internal` | `external` | `either`
+- `verification_diversity.orientation`: `none` | `check` | `independent` | `adversarial` | `plural` | `consensus` | `formal` | `criteria` | `data`
+- `cognitive.modes`: `direct` | `model` | `scaffold` | `implicit` | `counterfactual` | `formal` | `criteria` | `compute`
+- `social_positions_by_role` values: `peer` | `service` | `advocate`
+- `agreement_disagreement.modes`: `none` | `align` | `second-opinion` | `alternatives` | `counterargument` | `consensus` | `minority` | `adjudicate`
+- `group.*`: all booleans.
+
+### DomainAssessment evidence strings
+
+- `{{"tier":<"unknown"|"high"|"medium"|"low">,"evidence":[<ascii string>]}}`
+  — `evidence` is a non-empty list of strict-ASCII, non-empty strings.
+
+### Graph agent / human-gate / edge records
+
+- agent node:
+  `{{"id":<id>,"kind":"agent","agent_id":<agent id>,"role":<RoleSlug>,"visible_inputs":[<TypedInputRef>],"source_identity":{{"kind":"agent","id":<agent id>,"disclosure":<non-empty>}},"phase":<non-neg int>,"exec_group":<ascii>,"declared_outputs":[<ascii>]}}`
+- human_gate node:
+  `{{"id":<id>,"kind":"human_gate","mode":<"approval"|"review"|"notification">,"condition":<ascii>,"decision_owner":<ascii>,"required_inputs":[<TypedInputRef>],"continuation":"end","phase":<non-neg int>}}`
+- edge:
+  `{{"from":<node id>,"to":<node id>,"kind":<"sequential"|"parallel">,"handoff":<ascii>}}`
+- node `id` is unique across all nodes (a duplicate node id rejects); every edge
+  `from`/`to` must name an existing node.
+
+### independent_opinion_boundaries (exact) + agent-id mapping
+
+- `{{"isolated_agent_ids":[<agent id>],"blocked_node_outputs":[{{"node_id":<agent node id>,"output":<declared output>}}],"release_phase":<non-neg int>}}`
+- AGENT-ID MAPPING: `isolated_agent_ids` are AGENT ids equal to `agents[].id`,
+  NOT node ids. Each must resolve to exactly one agent graph node.
+  `blocked_node_outputs[].node_id` is an agent NODE id whose `declared_outputs`
+  contains `output`. An isolated agent must NOT receive a blocked output,
+  directly or transitively, before `release_phase`; violating this rejects.
+
+### aggregation exact record (no extraneous fields)
+
+- `{{"id":<id>,"aggregator_node_id":<agent node id>,"inputs":[<node_output ref>],"output":<ascii>,"destination_gate_id":<gate id>,"preserve_unresolved_disagreement":<bool>}}`
+- `inputs` are `TypedInputRef` of kind `node_output` ONLY — never `context` or
+  `external_source`. Each names a real declared output of an upstream agent node.
+
+### unresolved_disagreement true / false forms
+
+- false: `{{"triggered":false,"reason":null,"gate_id":null,"output":null}}`
+- true:
+  `{{"triggered":true,"reason":<ascii>,"gate_id":<gate id>,"output":{{"node_id":<agent node id>,"output":<declared output>}}}}`
+- mixed forms reject: `true` requires all three of `reason`/`gate_id`/`output`;
+  `false` requires all three null.
 
 ## Output contract
 
@@ -172,6 +362,13 @@ Return exactly one JSON object with exactly these top-level keys and no others:
 Hard rules:
 
 - All ids match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. All strings are strict ASCII.
+- `primary_role` and every entry of `secondary_roles` is a `RoleAssignment`
+  with exactly `slug` and `variant`. `variant` MUST be the selected catalog
+  variant's scalar `id` string (e.g. `"internal-knowledge"`) or `null`. It is
+  NEVER a variant object: do not copy a catalog variant record
+  (`{{"id": "...", "label": "...", "provenance_mode": "..."}}`) as the value.
+  A full object at `agents[i].primary_role.variant` or
+  `agents[i].secondary_roles[j].variant` rejects the whole plan.
 - Every listed key is required. Any extra key rejects the plan.
 - Do NOT output `generated_at`, `domain_policy_ref`, `interaction_posture`,
   `projection_hashes`, `social_positions_by_role` at agent level,
