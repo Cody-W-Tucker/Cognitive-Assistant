@@ -68,10 +68,11 @@ flowchart TD
 
 The specialist agent pipeline then consumes the translation layer.
 `core/soul_creator.py` uses `SOUL.md` and `SOUL_ARCHETYPE.md` — together
-with bounded profile evidence — to discover agent personas and generate
-per-agent soul documents. Specialist souls receive the persona
-definition and the translation layer as operational guidance, not the
-full raw psychometric profile sources.
+with bounded profile evidence and the predefined archetype catalog — to
+select applicable archetypes and generate per-agent soul documents.
+Specialist souls receive the full archetype contract, user calibration,
+the translation layer, and relevant skill material as operational
+guidance, not the full raw psychometric profile sources.
 
 **Sources:**[core/soul_creator.py64-84](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L64-L84)[core/soul_creator.py106-123](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L106-L123)
 
@@ -147,12 +148,20 @@ flowchart LR
 
 ### `SoulCreator` (`core/soul_creator.py`)
 
-- `generate_agents()`: Loads the translation layer, discovers personas
-  from it plus bounded profile evidence, then generates one soul
-  document per persona.
-- Specialist souls consume the persona definition and the translation
-  layer as operational guidance, not the full raw psychometric profile
-  sources.
+- `generate_agents()`: Loads the translation layer and the archetype
+  catalog, selects applicable archetypes from the catalog, calibrates
+  them to the user, then generates one soul document per selected
+  archetype.
+- Agent selection is constrained to the predefined catalog at
+  `profiles/alignment/archetypes/`. Unknown archetype slugs and unknown
+  skill slugs fail with clear errors.
+- Specialist souls consume the full archetype contract (purpose, scope,
+  authority, quality/evidence expectations, canonical skills), user
+  calibration, the translation layer, and scoped skill material — not
+  the full raw psychometric profile sources.
+- Runtime orchestration, tool access enforcement, agent-to-agent
+  routing, and trace logging are explicitly not implemented in this
+  stage.
 
 ### `AlignmentSpecCreator` ([core/alignment_spec.py81](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L81-L81))
 

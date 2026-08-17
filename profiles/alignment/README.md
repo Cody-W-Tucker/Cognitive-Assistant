@@ -26,16 +26,23 @@ The agent soul pipeline (cross-profile) works differently still:
    `SOUL_ARCHETYPE.md`, then both profile sources plus the archetype feed
    `soul_seed.md` to produce `SOUL.md` — the orchestrator constitution that
    specialist agents inherit.
-2. `profiles/alignment/prompts/persona_discovery_seed.md` instructs the LLM to
-   discover distinct agent personas from the translation layer, the inferred
-   archetype, and bounded profile evidence.
-3. `profiles/alignment/prompts/agent_soul_seed.md` defines the per-agent soul
-   target shape and compression rules. Specialist souls consume the
-   translation layer rather than re-deriving the user from raw profile
-   material.
-4. `core/soul_creator.py` runs two stages: persona discovery (producing
-   `persona_map.md`), then per-agent soul generation (one file per persona
-   under `agents/`).
+2. `profiles/alignment/archetypes/` contains the predefined archetype catalog.
+   Each archetype declares a stable slug, a real operating contract (purpose,
+   job-to-be-done, outcome, scope, authority, quality/evidence expectations),
+   and canonical skill assignments.
+3. `profiles/alignment/prompts/archetype_selection_seed.md` instructs the LLM
+   to select applicable archetypes from the catalog, calibrate them to the
+   user, and assign skills from each archetype's declared canonical set.
+   Unknown archetype slugs and unknown skill slugs fail with clear errors.
+4. `profiles/alignment/prompts/agent_soul_seed.md` defines the per-agent soul
+   target shape and compression rules. Specialist souls consume the full
+   archetype contract, user calibration, the translation layer, and scoped
+   skill material — not the full raw profile sources.
+5. `core/soul_creator.py` runs two stages: archetype selection (producing
+   `persona_map.md`), then per-agent soul generation (one file per selected
+   archetype under `agents/`).
+6. Runtime orchestration, tool access enforcement, agent-to-agent routing,
+   and trace logging are explicitly deferred and not implemented in this stage.
 
 ## Files
 
@@ -44,11 +51,13 @@ The agent soul pipeline (cross-profile) works differently still:
 | `profiles/alignment/prompts/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
 | `profiles/alignment/prompts/soul_archetype_seed.md` | Compiler instructions for inferring the orchestrator archetype from both profiles.                                                            |
 | `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating the orchestrator translation-layer soul from both profiles plus the archetype.                             |
-| `profiles/alignment/prompts/persona_discovery_seed.md` | Compiler instructions for discovering agent personas from the translation layer, archetype, and bounded profile evidence.                   |
-| `profiles/alignment/prompts/agent_soul_seed.md`    | Compiler instructions for generating a per-agent soul document from the persona definition and translation layer.                               |
+| `profiles/alignment/prompts/archetype_selection_seed.md` | Compiler instructions for selecting archetypes from the catalog, calibrating them to the user, and assigning skills. |
+| `profiles/alignment/prompts/agent_soul_seed.md`    | Compiler instructions for generating a per-agent soul document from the archetype contract, calibration, translation layer, and skill material. |
+| `profiles/alignment/archetypes/*.json`             | Predefined archetype catalog. Each file declares one archetype's operating contract and canonical skill assignments. |
 | `core/alignment_spec.py`                           | Loads unified skills from `workspaces/skills` and agent souls from `workspaces/alignment/artifacts/agents/`, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
 | `core/translation_layer_creator.py`                | Loads both profile human profiles, infers the archetype, generates the orchestrator soul, writes `SOUL_ARCHETYPE.md` and `SOUL.md`.             |
-| `core/soul_creator.py`                             | Loads the translation layer and bounded profile evidence, discovers personas, generates per-agent souls, writes persona_map.md and agents/<slug>.md. |
+| `core/soul_creator.py`                             | Loads the translation layer and archetype catalog, selects applicable archetypes, generates per-agent souls, writes persona_map.md and agents/<slug>.md. |
+| `core/archetype_catalog.py`                        | Loads and validates the predefined archetype catalog from `profiles/alignment/archetypes/`. |
 | `scripts/verify_alignment.sh`                      | Runtime tool. Passes the spec + an artifact to `rlm` for evaluation.                                                                            |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
 | `workspaces/alignment/artifacts/SOUL_ARCHETYPE.md` | The generated orchestrator archetype intermediate artifact.                                                                                     |
@@ -74,7 +83,9 @@ Output:
 
 Requires the translation layer to have been generated first and
 `build-prompts` to have been run for both profiles so the
-`human_profile.md` source files exist.
+`human_profile.md` source files exist. Also requires canonical skills
+in `workspaces/skills/` (from `build-skills`) since each archetype's
+canonical skill assignments must resolve.
 
 ```bash
 python -m core build-translation-layer
@@ -82,8 +93,8 @@ python -m core build-agents
 ```
 
 Output:
-- `workspaces/alignment/artifacts/persona_map.md` — intermediate, human-readable
-- `workspaces/alignment/artifacts/agents/<slug>.md` — one per discovered persona
+- `workspaces/alignment/artifacts/persona_map.md` — intermediate, human-readable; lists selected archetypes with calibrations and skill assignments
+- `workspaces/alignment/artifacts/agents/<slug>.md` — one per selected archetype
 
 ## Build the translation layer
 

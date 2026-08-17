@@ -57,8 +57,9 @@ fail with a clear error rather than silently no-op.
 `workspaces/skills/<profile>/<skill>/SKILL.md` for generated profile skills.
 Manual imports can still live under purpose categories like
 `workspaces/skills/workflow/<skill>/SKILL.md`.
-`build-agents` reads from both profiles and writes agent persona maps and
-per-agent soul documents to `workspaces/alignment/artifacts/`.
+`build-agents` reads from both profiles, selects applicable archetypes from
+the catalog at `profiles/alignment/archetypes/`, and writes agent persona maps
+and per-agent soul documents to `workspaces/alignment/artifacts/`.
 `build-translation-layer` reads from both profiles and writes the orchestrator
 translation layer (`SOUL_ARCHETYPE.md` and `SOUL.md`) to
 `workspaces/alignment/artifacts/`.

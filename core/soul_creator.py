@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""Persona discovery and per-agent soul generation.
+"""Catalog-constrained agent archetype selection and per-agent soul generation.
 
-Reads the generated translation layer and the latest existential and
-operational human profiles, discovers a set of distinct agent personas the
-user needs, then generates one soul document per persona.
+Reads the generated translation layer, the latest existential and operational
+human profiles, and the predefined archetype catalog, then selects applicable
+archetypes, calibrates them to the user, and generates one soul document per
+selected archetype.
 
 Pipeline:
-  1. Persona discovery — the LLM identifies distinct, non-redundant agent
-     personas using the translation layer as the orchestrator constitution,
-     the inferred archetype, and bounded profile evidence as the signal for
-     what specialist domains are needed. The result is a structured persona
-     map (JSON) plus a human-readable persona_map.md.
-  2. Per-agent soul generation — for each declared persona, the LLM writes
-     a first-person soul document consuming the persona definition and the
-     translation layer's operational guidance. Specialist souls inherit the
-     orchestrator constitution rather than re-deriving the user from raw
-     psychometric profile material.
+  1. Archetype selection — the LLM selects which predefined archetypes apply
+     to this user and produces a calibration for each: why this archetype is
+     needed, what user-specific patterns it addresses. The result is a
+     structured selection (JSON) plus a human-readable persona_map.md.
+  2. Per-agent soul generation — for each selected archetype, the LLM writes
+     a first-person soul document consuming the full archetype contract,
+     user calibration, translation layer, and relevant skill material.
 
 Outputs:
   workspaces/alignment/artifacts/persona_map.md   — intermediate, human-readable
-  workspaces/alignment/artifacts/agents/<slug>.md — one per persona
+  workspaces/alignment/artifacts/agents/<slug>.md — one per selected archetype
 
 This command sits above the profile system: it reads from both registered
 profiles but does not belong to either. It is invoked without --profile.
@@ -40,9 +38,17 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
+from core.archetype_catalog import (
+    ARCHETYPES_DIR,
+    ArchetypeSpec,
+    load_archetype_catalog,
+    validate_archetype_slugs,
+    validate_skill_assignments,
+)
 from core.config import ROOT_DIR
+from core.skill_engine import find_canonical_skill
 from core.translation_layer_creator import (
     _strip_code_fences,
     _validate_generated_content,
@@ -53,8 +59,8 @@ from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
-PERSONA_DISCOVERY_SEED_PATH = (
-    ROOT_DIR / "profiles" / "alignment" / "prompts" / "persona_discovery_seed.md"
+ARCHETYPE_SELECTION_SEED_PATH = (
+    ROOT_DIR / "profiles" / "alignment" / "prompts" / "archetype_selection_seed.md"
 )
 AGENT_SOUL_SEED_PATH = (
     ROOT_DIR / "profiles" / "alignment" / "prompts" / "agent_soul_seed.md"
@@ -64,46 +70,28 @@ OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
 PERSONA_MAP_FILE = OUTPUT_DIR / "persona_map.md"
 AGENTS_DIR = OUTPUT_DIR / "agents"
 
-MAX_PERSONAS = 8
-MIN_PERSONAS = 1
-SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9\-]{0,38}[a-z0-9]$")
 MAX_AGENT_SOUL_OUTPUT_TOKENS = 2400
-MAX_PERSONA_DISCOVERY_OUTPUT_TOKENS = 6000
+MAX_ARCHETYPE_SELECTION_OUTPUT_TOKENS = 6000
 
 
 @dataclass(frozen=True)
-class AgentPersona:
-    """One discovered agent persona."""
+class SelectedArchetype:
+    """One archetype selected from the catalog with user-specific calibration."""
 
-    name: str
     slug: str
-    archetype: str
-    responsibility: str
-    boundary: str
-    fit_rationale: str
+    calibration: str
+    skills: List[str]
 
 
-def sanitize_slug(raw: str) -> Optional[str]:
-    """Return a safe slug or None if the input cannot be made safe.
+def parse_archetype_selection_response(
+    response: str,
+    catalog: Dict[str, ArchetypeSpec],
+) -> List[SelectedArchetype]:
+    """Parse the JSON archetype selection from the LLM response.
 
-    Rules: lowercase ASCII letters, digits, hyphens only; 2-40 chars;
-    must start with a letter.
-    """
-    if not raw or not isinstance(raw, str):
-        return None
-    slug = raw.strip().lower()
-    slug = re.sub(r"[^a-z0-9\-]", "-", slug)
-    slug = re.sub(r"-+", "-", slug).strip("-")
-    if SLUG_PATTERN.match(slug):
-        return slug
-    return None
-
-
-def parse_persona_discovery_response(response: str) -> List[AgentPersona]:
-    """Parse the JSON persona map from the LLM response.
-
-    Handles responses with or without markdown code fences.
-    Raises ValueError on parse failure or validation failure.
+    Validates that every archetype slug is in the catalog and every skill
+    slug matches the archetype's declared canonical skills. Unknown slugs
+    fail with a clear error.
     """
     text = response.strip()
 
@@ -117,108 +105,157 @@ def parse_persona_discovery_response(response: str) -> List[AgentPersona]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Could not parse persona discovery response as JSON: {exc}") from exc
+        raise ValueError(f"Could not parse archetype selection response as JSON: {exc}") from exc
 
     if not isinstance(data, dict) or "agents" not in data:
-        raise ValueError("Persona discovery response missing 'agents' key")
+        raise ValueError("Archetype selection response missing 'agents' key")
 
     raw_agents = data["agents"]
     if not isinstance(raw_agents, list):
         raise ValueError("'agents' must be a list")
 
-    personas: List[AgentPersona] = []
+    if not raw_agents:
+        raise ValueError("Archetype selection returned 0 agents; minimum is 1")
+
+    selections: List[SelectedArchetype] = []
     seen_slugs: set[str] = set()
 
     for idx, raw in enumerate(raw_agents):
         if not isinstance(raw, dict):
             raise ValueError(f"Agent entry {idx} is not an object")
 
-        required_keys = {"name", "slug", "archetype", "responsibility", "boundary", "fit_rationale"}
+        required_keys = {"archetype", "calibration", "skills"}
         missing = required_keys - set(raw.keys())
         if missing:
             raise ValueError(f"Agent entry {idx} missing keys: {', '.join(sorted(missing))}")
 
-        slug = sanitize_slug(raw["slug"])
-        if slug is None:
+        if not isinstance(raw["archetype"], str):
+            raise ValueError(f"Agent entry {idx}: 'archetype' must be a string")
+        archetype_slug = raw["archetype"].strip()
+        if archetype_slug not in catalog:
+            available = ", ".join(sorted(catalog))
             raise ValueError(
-                f"Agent entry {idx} has invalid slug: {raw['slug']!r}"
+                f"Agent entry {idx}: unknown archetype '{archetype_slug}'. "
+                f"Available archetypes: {available}"
             )
-        if slug in seen_slugs:
-            raise ValueError(f"Duplicate slug: {slug}")
-        seen_slugs.add(slug)
+        if archetype_slug in seen_slugs:
+            raise ValueError(f"Duplicate archetype selection: {archetype_slug}")
+        seen_slugs.add(archetype_slug)
 
-        name = str(raw["name"]).strip()
-        if not name:
-            raise ValueError(f"Agent entry {idx} has empty name")
+        if not isinstance(raw["calibration"], str):
+            raise ValueError(f"Agent entry {idx}: 'calibration' must be a string")
+        calibration = raw["calibration"].strip()
+        if not calibration:
+            raise ValueError(f"Agent entry {idx}: empty calibration")
 
-        personas.append(
-            AgentPersona(
-                name=name,
-                slug=slug,
-                archetype=str(raw["archetype"]).strip(),
-                responsibility=str(raw["responsibility"]).strip(),
-                boundary=str(raw["boundary"]).strip(),
-                fit_rationale=str(raw["fit_rationale"]).strip(),
+        raw_skills = raw["skills"]
+        if not isinstance(raw_skills, list):
+            raise ValueError(f"Agent entry {idx}: 'skills' must be a list")
+        if not raw_skills:
+            raise ValueError(f"Agent entry {idx}: empty skills list")
+
+        if any(not isinstance(skill, str) or not skill.strip() for skill in raw_skills):
+            raise ValueError(
+                f"Agent entry {idx}: every skill identifier must be a non-empty string"
+            )
+        skill_slugs = [skill.strip() for skill in raw_skills]
+        duplicates = sorted({skill for skill in skill_slugs if skill_slugs.count(skill) > 1})
+        if duplicates:
+            raise ValueError(
+                f"Agent entry {idx}: duplicate skill identifier(s): {', '.join(duplicates)}"
+            )
+        archetype_spec = catalog[archetype_slug]
+
+        # Validate skills match the archetype's canonical skills
+        canonical_set = set(archetype_spec.canonical_skills)
+        unknown_skills = [s for s in skill_slugs if s not in canonical_set]
+        if unknown_skills:
+            raise ValueError(
+                f"Agent entry {idx} (archetype '{archetype_slug}'): "
+                f"unknown skill(s): {', '.join(unknown_skills)}. "
+                f"Canonical skills for this archetype: {', '.join(archetype_spec.canonical_skills)}"
+            )
+
+        selections.append(
+            SelectedArchetype(
+                slug=archetype_slug,
+                calibration=calibration,
+                skills=skill_slugs,
             )
         )
 
-    if len(personas) < MIN_PERSONAS:
-        raise ValueError(
-            f"Persona discovery returned {len(personas)} agents; minimum is {MIN_PERSONAS}"
-        )
-    if len(personas) > MAX_PERSONAS:
-        raise ValueError(
-            f"Persona discovery returned {len(personas)} agents; maximum is {MAX_PERSONAS}"
-        )
-
-    return personas
+    return selections
 
 
-def _format_persona_json(persona: AgentPersona) -> str:
-    """Format one persona as a JSON object for the persona map."""
-    return json.dumps(
-        {
-            "name": persona.name,
-            "slug": persona.slug,
-            "archetype": persona.archetype,
-            "responsibility": persona.responsibility,
-            "boundary": persona.boundary,
-            "fit_rationale": persona.fit_rationale,
-        },
-        indent=2,
+def _format_selected_archetype_for_persona_map(
+    selection: SelectedArchetype,
+    catalog: Dict[str, ArchetypeSpec],
+) -> str:
+    """Format one selected archetype for the persona map markdown."""
+    spec = catalog[selection.slug]
+    skills_list = ", ".join(f"`{s}`" for s in selection.skills)
+    return (
+        f"## {spec.name}\n"
+        f"- **Slug:** `{selection.slug}`\n"
+        f"- **Purpose:** {spec.purpose}\n"
+        f"- **Calibration:** {selection.calibration}\n"
+        f"- **Canonical skills:** {skills_list}\n"
     )
 
 
-def build_persona_map_markdown(personas: List[AgentPersona]) -> str:
+def build_persona_map_markdown(
+    selections: List[SelectedArchetype],
+    catalog: Dict[str, ArchetypeSpec],
+) -> str:
     """Build the human-readable persona_map.md content."""
     lines: List[str] = []
     lines.append("# Persona Map\n")
     lines.append(
-        f"Discovered {len(personas)} distinct agent personas from the "
-        "existential and operational profile artifacts.\n"
+        f"Selected {len(selections)} archetype(s) from the catalog and "
+        "calibrated them to the user.\n"
     )
 
-    for persona in personas:
-        lines.append(f"## {persona.name}")
-        lines.append(f"- **Slug:** `{persona.slug}`")
-        lines.append(f"- **Archetype:** {persona.archetype}")
-        lines.append(f"- **Responsibility:** {persona.responsibility}")
-        lines.append(f"- **Boundary:** {persona.boundary}")
-        lines.append(f"- **Fit rationale:** {persona.fit_rationale}")
-        lines.append("")
+    for selection in selections:
+        lines.append(
+            _format_selected_archetype_for_persona_map(selection, catalog)
+        )
 
     lines.append("## Agent Souls\n")
     lines.append(
-        "One soul document per persona lives in `agents/` alongside this file.\n"
+        "One soul document per selected archetype lives in `agents/` "
+        "alongside this file.\n"
     )
-    for persona in personas:
-        lines.append(f"- `{persona.slug}.md` — {persona.name}")
+    for selection in selections:
+        spec = catalog[selection.slug]
+        lines.append(f"- `{selection.slug}.md` — {spec.name}")
 
     return "\n".join(lines) + "\n"
 
 
+def _load_skill_material(skill_slugs: List[str]) -> str:
+    """Load canonical skill content for the listed skill slugs.
+
+    Returns a tagged document suitable for injection into the agent soul
+    prompt. Missing skills raise a clear error (should have been caught
+    earlier during validation).
+    """
+    sections: List[str] = []
+    for skill_slug in skill_slugs:
+        skill_path = find_canonical_skill(skill_slug)
+        if skill_path is None:
+            raise ValueError(
+                f"Skill '{skill_slug}' not found in canonical skill store. "
+                "Cannot generate agent soul without skill material."
+            )
+        content = skill_path.read_text(encoding="utf-8").strip()
+        sections.append(
+            f'<skill name="{skill_slug}">\n{content}\n</skill>'
+        )
+    return "\n\n".join(sections)
+
+
 class SoulCreator:
-    """Discover agent personas and generate per-agent soul documents."""
+    """Select archetypes from catalog and generate per-agent soul documents."""
 
     def __init__(self) -> None:
         self.api = APIConfig()
@@ -230,51 +267,60 @@ class SoulCreator:
         )
 
     async def generate_agents(self) -> Path:
-        """Run the full pipeline: persona discovery + per-agent souls."""
+        """Run the full pipeline: archetype selection + per-agent souls."""
         translation_layer, archetype = load_translation_layer()
         profile_evidence = load_profile_sources()
+        catalog = load_archetype_catalog()
 
-        personas = await self._discover_personas(
-            translation_layer, archetype, profile_evidence
+        # Validate all archetype skill assignments upfront
+        for spec in catalog.values():
+            validate_skill_assignments(spec.slug, spec.canonical_skills)
+
+        selections = await self._select_archetypes(
+            catalog, translation_layer, archetype, profile_evidence
         )
-        persona_map_content = build_persona_map_markdown(personas)
+
+        persona_map_content = build_persona_map_markdown(selections, catalog)
         self._write_artifact(PERSONA_MAP_FILE, persona_map_content)
         print(f"Info: Wrote persona map to {PERSONA_MAP_FILE}")
 
         AGENTS_DIR.mkdir(parents=True, exist_ok=True)
-        self._cleanup_stale_agents({p.slug for p in personas})
+        self._cleanup_stale_agents({s.slug for s in selections})
 
-        persona_definitions_text = "\n\n".join(
-            f"### {p.name} ({p.slug})\n"
-            f"- Archetype: {p.archetype}\n"
-            f"- Responsibility: {p.responsibility}\n"
-            f"- Boundary: {p.boundary}\n"
-            f"- Fit rationale: {p.fit_rationale}"
-            for p in personas
-        )
-
-        for persona in personas:
+        for selection in selections:
+            spec = catalog[selection.slug]
+            skill_material = _load_skill_material(selection.skills)
             soul_content = await self._generate_agent_soul(
-                persona, translation_layer, persona_definitions_text
+                spec, selection, translation_layer, skill_material
             )
             _validate_generated_content(
-                soul_content, artifact_label=f"agent soul for {persona.slug}"
+                soul_content, artifact_label=f"agent soul for {selection.slug}"
             )
-            agent_path = AGENTS_DIR / f"{persona.slug}.md"
+            agent_path = AGENTS_DIR / f"{selection.slug}.md"
             self._write_artifact(agent_path, soul_content)
             print(f"Info: Wrote agent soul to {agent_path}")
 
         return PERSONA_MAP_FILE
 
-    async def _discover_personas(
+    async def _select_archetypes(
         self,
+        catalog: Dict[str, ArchetypeSpec],
         translation_layer: str,
         archetype: str,
         profile_evidence: str,
-    ) -> List[AgentPersona]:
-        """Stage 1: LLM discovers the persona set from the translation layer."""
-        seed = self._load_text_file(PERSONA_DISCOVERY_SEED_PATH, "Persona discovery seed")
+    ) -> List[SelectedArchetype]:
+        """Stage 1: LLM selects applicable archetypes from the catalog."""
+        seed = self._load_text_file(
+            ARCHETYPE_SELECTION_SEED_PATH, "Archetype selection seed"
+        )
+
+        # Build catalog summary for the prompt
+        catalog_summary = "\n\n".join(
+            spec.contract_text() for spec in catalog.values()
+        )
+
         prompt = seed.format(
+            catalog=catalog_summary,
             translation_layer=translation_layer,
             archetype=archetype,
             profile_evidence=profile_evidence,
@@ -283,30 +329,34 @@ class SoulCreator:
             self.handle,
             user_prompt=prompt,
             temperature=self.api.TEMPERATURE,
-            max_output_tokens=MAX_PERSONA_DISCOVERY_OUTPUT_TOKENS,
+            max_output_tokens=MAX_ARCHETYPE_SELECTION_OUTPUT_TOKENS,
         )
-        return parse_persona_discovery_response(response)
+        return parse_archetype_selection_response(response, catalog)
 
     async def _generate_agent_soul(
         self,
-        persona: AgentPersona,
+        spec: ArchetypeSpec,
+        selection: SelectedArchetype,
         translation_layer: str,
-        persona_definitions_text: str,
+        skill_material: str,
     ) -> str:
         """Stage 2: LLM generates one agent's soul document."""
         seed = self._load_text_file(AGENT_SOUL_SEED_PATH, "Agent soul seed")
-        persona_definition = (
-            f"Name: {persona.name}\n"
-            f"Slug: {persona.slug}\n"
-            f"Archetype: {persona.archetype}\n"
-            f"Responsibility: {persona.responsibility}\n"
-            f"Boundary: {persona.boundary}\n"
-            f"Fit rationale: {persona.fit_rationale}\n\n"
-            f"All personas in this constellation:\n{persona_definitions_text}"
+
+        archetype_contract = spec.contract_text()
+        agent_definition = (
+            f"Name: {spec.name}\n"
+            f"Slug: {selection.slug}\n\n"
+            f"## Operating Contract\n\n{archetype_contract}\n\n"
+            f"## User Calibration\n\n{selection.calibration}\n\n"
+            f"## Assigned Skills\n\n"
+            f"Skills: {', '.join(selection.skills)}"
         )
+
         prompt = seed.format(
-            persona_definition=persona_definition,
+            agent_definition=agent_definition,
             translation_layer=translation_layer,
+            skill_material=skill_material,
         )
         response = await generate_text_async(
             self.handle,
@@ -317,7 +367,7 @@ class SoulCreator:
         return _strip_code_fences(response)
 
     def _cleanup_stale_agents(self, active_slugs: set[str]) -> None:
-        """Remove agent soul files that are no longer in the active persona set."""
+        """Remove agent soul files that are no longer in the active selection."""
         if not AGENTS_DIR.exists():
             return
         for agent_file in AGENTS_DIR.glob("*.md"):
@@ -364,9 +414,8 @@ def run() -> int:
 
 __all__ = [
     "SoulCreator",
-    "AgentPersona",
-    "sanitize_slug",
-    "parse_persona_discovery_response",
+    "SelectedArchetype",
+    "parse_archetype_selection_response",
     "build_persona_map_markdown",
     "run",
 ]

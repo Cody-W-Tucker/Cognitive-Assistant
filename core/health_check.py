@@ -26,6 +26,7 @@ SCRIPT_MODULES = [
     "core.skill_enhancer",
     "core.question_asker",
     "core.health_check",
+    "core.archetype_catalog",
     "core.soul_creator",
     "core.translation_layer_creator",
     "core.alignment_spec",
@@ -103,12 +104,13 @@ def check_required_paths(config: Config) -> List[str]:
 _ALIGNMENT_PROMPT_FIXTURES = {
     "soul_archetype_seed.md": ["profile_sources"],
     "soul_seed.md": ["profile_sources", "archetype"],
-    "persona_discovery_seed.md": [
+    "archetype_selection_seed.md": [
+        "catalog",
         "translation_layer",
         "archetype",
         "profile_evidence",
     ],
-    "agent_soul_seed.md": ["persona_definition", "translation_layer"],
+    "agent_soul_seed.md": ["agent_definition", "translation_layer", "skill_material"],
 }
 
 

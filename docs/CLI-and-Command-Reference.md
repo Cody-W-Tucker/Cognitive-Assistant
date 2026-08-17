@@ -109,12 +109,20 @@ between raw profile data and the specialist agent system.
 
 #### `build-agents`
 
-Discovers distinct agent personas from the translation layer and
-bounded profile evidence, then generates one soul document per persona.
+Selects applicable archetypes from the predefined catalog at
+`profiles/alignment/archetypes/`, calibrates them to the user, and
+generates one soul document per selected archetype. Each archetype
+carries a full operating contract (purpose, scope, authority,
+quality/evidence expectations, canonical skill assignments). Unknown
+archetype slugs and unknown skill slugs fail with clear errors.
 Specialist agents inherit the orchestrator constitution rather than
 re-deriving the user from raw psychometric profile material.
 
-- **Sources**: `core/soul_creator.py`
+Runtime orchestration, tool access enforcement, agent-to-agent routing,
+and trace logging are explicitly deferred and not implemented in this
+stage.
+
+- **Sources**: `core/soul_creator.py`, `core/archetype_catalog.py`
 
 #### `build-alignment-spec`
 

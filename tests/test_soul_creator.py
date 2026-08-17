@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for agent persona discovery and soul generation."""
+"""Tests for catalog-constrained agent archetype selection and soul generation."""
 
 from __future__ import annotations
 
@@ -8,179 +8,259 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Dict
 from unittest.mock import AsyncMock, patch
 
+from core.archetype_catalog import ArchetypeSpec, load_archetype_catalog
 from core.soul_creator import (
-    AgentPersona,
+    SelectedArchetype,
     SoulCreator,
     build_persona_map_markdown,
-    parse_persona_discovery_response,
-    sanitize_slug,
+    parse_archetype_selection_response,
 )
 
 
-class SanitizeSlugTests(unittest.TestCase):
-    def test_valid_slugs(self) -> None:
-        self.assertEqual(sanitize_slug("my-agent"), "my-agent")
-        self.assertEqual(sanitize_slug("agent123"), "agent123")
-        self.assertEqual(sanitize_slug("a-b"), "a-b")
+def _make_test_catalog() -> Dict[str, ArchetypeSpec]:
+    """Build a minimal test catalog."""
+    return {
+        "pattern-scout": ArchetypeSpec(
+            slug="pattern-scout",
+            name="Pattern Scout",
+            purpose="Own the possibility surface",
+            job_to_be_done="Make the adjacent possible legible",
+            outcome="The user sees the field more clearly",
+            scope_triggers=["An ambiguous situation"],
+            scope_outputs=["Pattern reads"],
+            out_of_scope=["Grounding claims in evidence"],
+            authority_can_decide=["How a situation is framed"],
+            authority_must_defer=["Whether a proposed frame is true"],
+            approval_boundaries="User decides what to move toward",
+            quality_expectations="Every pattern named must be recognizable",
+            evidence_expectations="Ground pattern reads in durable signals",
+            canonical_skills=["mode-detection", "scope-framing"],
+        ),
+        "constraint-reader": ArchetypeSpec(
+            slug="constraint-reader",
+            name="Constraint Reader",
+            purpose="Own the grounded surface",
+            job_to_be_done="Make the real object visible",
+            outcome="Next move is grounded in what is actually the case",
+            scope_triggers=["A failure where cause is unclear"],
+            scope_outputs=["Causal reads"],
+            out_of_scope=["Naming the frame or adjacent possibilities"],
+            authority_can_decide=["Whether diagnosis is sufficient"],
+            authority_must_defer=["Which frame best captures the situation"],
+            approval_boundaries="User decides what to do with the diagnosis",
+            quality_expectations="Every claim must trace to a source",
+            evidence_expectations="Ground in observable evidence",
+            canonical_skills=["diagnose-before-patching", "verify-before-trust"],
+        ),
+    }
 
-    def test_uppercase_normalized(self) -> None:
-        self.assertEqual(sanitize_slug("My-Agent"), "my-agent")
 
-    def test_spaces_and_special_chars_replaced(self) -> None:
-        self.assertEqual(sanitize_slug("my agent!"), "my-agent")
-        self.assertEqual(sanitize_slug("agent@#$name"), "agent-name")
+class ParseArchetypeSelectionResponseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.catalog = _make_test_catalog()
 
-    def test_rejected_slugs(self) -> None:
-        self.assertIsNone(sanitize_slug(""))
-        self.assertIsNone(sanitize_slug("1agent"))  # Starts with digit after sanitization
-        self.assertIsNone(sanitize_slug("---"))  # Empty after stripping
-        self.assertIsNone(sanitize_slug("a"))  # Too short
-        self.assertIsNone(sanitize_slug(None))  # type: ignore[arg-type]
-
-
-class ParsePersonaDiscoveryResponseTests(unittest.TestCase):
     def _make_response(self, agents: list) -> str:
         return json.dumps({"agents": agents})
 
-    def test_valid_single_agent(self) -> None:
+    def test_valid_single_selection(self) -> None:
         response = self._make_response([
             {
-                "name": "The Builder",
-                "slug": "the-builder",
-                "archetype": "A hands-on maker",
-                "responsibility": "Execution and shipping",
-                "boundary": "Does not handle strategy",
-                "fit_rationale": "User needs someone who ships",
+                "archetype": "pattern-scout",
+                "calibration": "User defaults to familiar frames",
+                "skills": ["mode-detection"],
             }
         ])
-        personas = parse_persona_discovery_response(response)
-        self.assertEqual(len(personas), 1)
-        self.assertEqual(personas[0].slug, "the-builder")
-        self.assertEqual(personas[0].name, "The Builder")
+        selections = parse_archetype_selection_response(response, self.catalog)
+        self.assertEqual(len(selections), 1)
+        self.assertEqual(selections[0].slug, "pattern-scout")
+        self.assertEqual(selections[0].skills, ["mode-detection"])
 
-    def test_multiple_agents(self) -> None:
+    def test_multiple_selections(self) -> None:
         response = self._make_response([
             {
-                "name": "Agent A",
-                "slug": "agent-a",
-                "archetype": "Type A",
-                "responsibility": "Domain A",
-                "boundary": "Not domain B",
-                "fit_rationale": "Because A",
+                "archetype": "pattern-scout",
+                "calibration": "User defaults to familiar frames",
+                "skills": ["mode-detection"],
             },
             {
-                "name": "Agent B",
-                "slug": "agent-b",
-                "archetype": "Type B",
-                "responsibility": "Domain B",
-                "boundary": "Not domain A",
-                "fit_rationale": "Because B",
+                "archetype": "constraint-reader",
+                "calibration": "User skips diagnosis",
+                "skills": ["diagnose-before-patching"],
             },
         ])
-        personas = parse_persona_discovery_response(response)
-        self.assertEqual(len(personas), 2)
-        slugs = {p.slug for p in personas}
-        self.assertEqual(slugs, {"agent-a", "agent-b"})
+        selections = parse_archetype_selection_response(response, self.catalog)
+        self.assertEqual(len(selections), 2)
+        slugs = {s.slug for s in selections}
+        self.assertEqual(slugs, {"pattern-scout", "constraint-reader"})
 
     def test_strips_code_fences(self) -> None:
         inner = self._make_response([
             {
-                "name": "Agent X",
-                "slug": "agent-x",
-                "archetype": "Type X",
-                "responsibility": "X work",
-                "boundary": "Not Y",
-                "fit_rationale": "Fit",
+                "archetype": "pattern-scout",
+                "calibration": "Fit",
+                "skills": ["mode-detection"],
             }
         ])
         response = f"```json\n{inner}\n```"
-        personas = parse_persona_discovery_response(response)
-        self.assertEqual(len(personas), 1)
+        selections = parse_archetype_selection_response(response, self.catalog)
+        self.assertEqual(len(selections), 1)
+
+    def test_rejects_unknown_archetype(self) -> None:
+        response = self._make_response([
+            {
+                "archetype": "unknown-archetype",
+                "calibration": "Fit",
+                "skills": ["mode-detection"],
+            }
+        ])
+        with self.assertRaises(ValueError) as ctx:
+            parse_archetype_selection_response(response, self.catalog)
+        self.assertIn("unknown archetype", str(ctx.exception).lower())
+        self.assertIn("unknown-archetype", str(ctx.exception))
+
+    def test_rejects_unknown_skill(self) -> None:
+        response = self._make_response([
+            {
+                "archetype": "pattern-scout",
+                "calibration": "Fit",
+                "skills": ["nonexistent-skill"],
+            }
+        ])
+        with self.assertRaises(ValueError) as ctx:
+            parse_archetype_selection_response(response, self.catalog)
+        self.assertIn("unknown skill", str(ctx.exception).lower())
+        self.assertIn("nonexistent-skill", str(ctx.exception))
+
+    def test_rejects_skill_not_in_archetype_canonical(self) -> None:
+        """Skills must be drawn from the archetype's declared canonical_skills."""
+        response = self._make_response([
+            {
+                "archetype": "pattern-scout",
+                "calibration": "Fit",
+                "skills": ["diagnose-before-patching"],  # belongs to constraint-reader
+            }
+        ])
+        with self.assertRaises(ValueError) as ctx:
+            parse_archetype_selection_response(response, self.catalog)
+        self.assertIn("unknown skill", str(ctx.exception).lower())
 
     def test_rejects_missing_keys(self) -> None:
-        response = self._make_response([{"name": "Agent", "slug": "agent"}])
+        response = self._make_response([{"archetype": "pattern-scout"}])
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response(response)
+            parse_archetype_selection_response(response, self.catalog)
 
-    def test_rejects_duplicate_slugs(self) -> None:
-        agent = {
-            "name": "A",
-            "slug": "same-slug",
-            "archetype": "T",
-            "responsibility": "R",
-            "boundary": "B",
-            "fit_rationale": "F",
+    def test_rejects_duplicate_archetypes(self) -> None:
+        entry = {
+            "archetype": "pattern-scout",
+            "calibration": "Fit",
+            "skills": ["mode-detection"],
         }
-        response = self._make_response([agent, agent])
+        response = self._make_response([entry, entry])
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response(response)
+            parse_archetype_selection_response(response, self.catalog)
 
     def test_rejects_empty_set(self) -> None:
         response = self._make_response([])
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response(response)
+            parse_archetype_selection_response(response, self.catalog)
 
     def test_rejects_invalid_json(self) -> None:
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response("not json at all")
+            parse_archetype_selection_response("not json at all", self.catalog)
 
     def test_rejects_missing_agents_key(self) -> None:
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response('{"other": []}')
+            parse_archetype_selection_response('{"other": []}', self.catalog)
 
-    def test_rejects_invalid_slug(self) -> None:
+    def test_rejects_empty_calibration(self) -> None:
         response = self._make_response([
             {
-                "name": "Bad",
-                "slug": "1invalid",
-                "archetype": "T",
-                "responsibility": "R",
-                "boundary": "B",
-                "fit_rationale": "F",
+                "archetype": "pattern-scout",
+                "calibration": "",
+                "skills": ["mode-detection"],
             }
         ])
         with self.assertRaises(ValueError):
-            parse_persona_discovery_response(response)
+            parse_archetype_selection_response(response, self.catalog)
+
+    def test_rejects_empty_skills(self) -> None:
+        response = self._make_response([
+            {
+                "archetype": "pattern-scout",
+                "calibration": "Fit",
+                "skills": [],
+            }
+        ])
+        with self.assertRaises(ValueError):
+            parse_archetype_selection_response(response, self.catalog)
+
+    def test_rejects_duplicate_or_empty_skill_identifiers(self) -> None:
+        for skills, message in ((["mode-detection", "mode-detection"], "duplicate"), ([""], "non-empty")):
+            response = self._make_response([{
+                "archetype": "pattern-scout",
+                "calibration": "Fit",
+                "skills": skills,
+            }])
+            with self.assertRaisesRegex(ValueError, message):
+                parse_archetype_selection_response(response, self.catalog)
 
 
 class BuildPersonaMapMarkdownTests(unittest.TestCase):
-    def test_markdown_contains_all_agents(self) -> None:
-        personas = [
-            AgentPersona(
-                name="Builder",
-                slug="builder",
-                archetype="A maker",
-                responsibility="Shipping",
-                boundary="Not strategy",
-                fit_rationale="User ships",
+    def setUp(self) -> None:
+        self.catalog = _make_test_catalog()
+
+    def test_markdown_contains_all_selected_archetypes(self) -> None:
+        selections = [
+            SelectedArchetype(
+                slug="pattern-scout",
+                calibration="User defaults to familiar frames",
+                skills=["mode-detection"],
             ),
-            AgentPersona(
-                name="Strategist",
-                slug="strategist",
-                archetype="A thinker",
-                responsibility="Strategy",
-                boundary="Not shipping",
-                fit_rationale="User plans",
+            SelectedArchetype(
+                slug="constraint-reader",
+                calibration="User skips diagnosis",
+                skills=["diagnose-before-patching"],
             ),
         ]
-        md = build_persona_map_markdown(personas)
+        md = build_persona_map_markdown(selections, self.catalog)
         self.assertIn("# Persona Map", md)
-        self.assertIn("## Builder", md)
-        self.assertIn("## Strategist", md)
-        self.assertIn("`builder.md`", md)
-        self.assertIn("`strategist.md`", md)
-        self.assertIn("Discovered 2 distinct agent personas", md)
+        self.assertIn("## Pattern Scout", md)
+        self.assertIn("## Constraint Reader", md)
+        self.assertIn("`pattern-scout.md`", md)
+        self.assertIn("`constraint-reader.md`", md)
+        self.assertIn("Selected 2 archetype(s)", md)
+        self.assertIn("User defaults to familiar frames", md)
+        self.assertIn("`mode-detection`", md)
+
+
+class ArchetypeCatalogLoadingTests(unittest.TestCase):
+    def test_load_real_catalog(self) -> None:
+        """Load the checked-in archetype catalog and verify basic structure."""
+        catalog = load_archetype_catalog()
+        self.assertIn("pattern-scout", catalog)
+        self.assertIn("constraint-reader", catalog)
+        self.assertIn("commitment-anchor", catalog)
+        for spec in catalog.values():
+            self.assertTrue(spec.slug)
+            self.assertTrue(spec.name)
+            self.assertTrue(spec.purpose)
+            self.assertTrue(spec.canonical_skills)
+
+    def test_catalog_filenames_match_slugs(self) -> None:
+        """Every catalog filename must match its declared slug."""
+        catalog = load_archetype_catalog()
+        for spec in catalog.values():
+            self.assertTrue(
+                spec.slug in str(spec.contract_text()),
+                f"Archetype {spec.name} slug mismatch",
+            )
 
 
 class SoulCreatorAgentSoulTests(unittest.TestCase):
-    """End-to-end mocked tests for ``SoulCreator.generate_agents``.
-
-    These tests verify that the specialist soul prompt receives the
-    translation-layer content (not the raw profile corpus) and that
-    generation fails clearly when translation artifacts are missing.
-    """
+    """End-to-end mocked tests for ``SoulCreator.generate_agents``."""
 
     def _run(self, coro):  # type: ignore[no-untyped-def]
         return asyncio.run(coro)
@@ -190,9 +270,11 @@ class SoulCreatorAgentSoulTests(unittest.TestCase):
             mock_create.return_value = AsyncMock()
             return SoulCreator()
 
-    def test_agent_soul_prompt_receives_translation_layer_not_profile_corpus(self) -> None:
-        """Stage 2 prompt must include the translation layer; it must NOT
-        include the raw profile corpus."""
+    def test_agent_soul_prompt_receives_translation_layer_and_skill_material(self) -> None:
+        """Stage 2 prompt must include the translation layer and skill material;
+        it must NOT include the raw profile corpus."""
+        catalog = _make_test_catalog()
+
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
             agents_dir = tmpdir / "agents"
@@ -201,14 +283,12 @@ class SoulCreatorAgentSoulTests(unittest.TestCase):
             translation_layer_content = "THE_TRANSLATION_LAYER_CONSTITUTION"
             archetype_content = "THE_ARCHETYPE"
             profile_evidence = "RAW_PROFILE_EVIDENCE_SHOULD_NOT_REACH_SOUL_PROMPT"
+            skill_content = "THE_SKILL_CONTENT_FOR_MODE_DETECTION"
 
-            persona = AgentPersona(
-                name="The Builder",
-                slug="the-builder",
-                archetype="A maker",
-                responsibility="Shipping",
-                boundary="Not strategy",
-                fit_rationale="User ships",
+            selection = SelectedArchetype(
+                slug="pattern-scout",
+                calibration="User defaults to familiar frames",
+                skills=["mode-detection"],
             )
 
             creator = self._make_creator()
@@ -217,23 +297,18 @@ class SoulCreatorAgentSoulTests(unittest.TestCase):
 
             async def fake_generate(handle, *, user_prompt, **kwargs):  # type: ignore[no-untyped-def]
                 call_count["n"] += 1
-                # Stage 1: persona discovery returns JSON
                 if call_count["n"] == 1:
                     return json.dumps({
                         "agents": [
                             {
-                                "name": persona.name,
-                                "slug": persona.slug,
-                                "archetype": persona.archetype,
-                                "responsibility": persona.responsibility,
-                                "boundary": persona.boundary,
-                                "fit_rationale": persona.fit_rationale,
+                                "archetype": selection.slug,
+                                "calibration": selection.calibration,
+                                "skills": selection.skills,
                             }
                         ]
                     })
-                # Stage 2: agent soul
                 captured_soul_prompts.append(user_prompt)
-                return f"# Soul of {persona.slug}"
+                return f"# Soul of {selection.slug}"
 
             with (
                 patch(
@@ -248,28 +323,42 @@ class SoulCreatorAgentSoulTests(unittest.TestCase):
                     "core.soul_creator.load_profile_sources",
                     return_value=profile_evidence,
                 ),
-                patch("core.soul_creator.AGENTS_DIR", agents_dir),
-                patch("core.soul_creator.PERSONA_MAP_FILE", persona_map_file),
+                patch(
+                    "core.soul_creator.load_archetype_catalog",
+                    return_value=catalog,
+                ),
+                patch(
+                    "core.soul_creator.find_canonical_skill",
+                    return_value=tmpdir / "skill.md",
+                ),
+                patch(
+                    "core.soul_creator.AGENTS_DIR",
+                    agents_dir,
+                ),
+                patch(
+                    "core.soul_creator.PERSONA_MAP_FILE",
+                    persona_map_file,
+                ),
             ):
+                # Write a fake skill file
+                (tmpdir / "skill.md").write_text(skill_content, encoding="utf-8")
                 self._run(creator.generate_agents())
 
-            # At least one soul prompt captured (one per persona).
             self.assertGreaterEqual(len(captured_soul_prompts), 1)
             for prompt in captured_soul_prompts:
                 self.assertIn(translation_layer_content, prompt)
+                self.assertIn(skill_content, prompt)
                 self.assertNotIn(profile_evidence, prompt)
 
     def test_generate_agents_fails_clearly_when_translation_artifacts_missing(self) -> None:
         """Without translation artifacts, generate_agents must raise
         FileNotFoundError with an actionable message."""
         creator = self._make_creator()
-        with (
-            patch(
-                "core.soul_creator.load_translation_layer",
-                side_effect=FileNotFoundError(
-                    "Translation layer SOUL.md not found. "
-                    "Run `python -m core build-translation-layer` first."
-                ),
+        with patch(
+            "core.soul_creator.load_translation_layer",
+            side_effect=FileNotFoundError(
+                "Translation layer SOUL.md not found. "
+                "Run `python -m core build-translation-layer` first."
             ),
         ):
             with self.assertRaises(FileNotFoundError) as cm:

@@ -56,7 +56,7 @@ Sources: [profiles/alignment/README.md24-32](https://github.com/Cody-W-Tucker/Co
 
 ## Identity Synthesis (SOUL)
 
-The system generates a durable identity in two stages: Archetype Inference and SOUL Composition. This process is managed by `core/soul_creator.py`.
+The system generates a durable identity in two stages: Archetype Inference and SOUL Composition. This process is managed by `core/translation_layer_creator.py`.
 
 ### 1. Archetype Inference
 
