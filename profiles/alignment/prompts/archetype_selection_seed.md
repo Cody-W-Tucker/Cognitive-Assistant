@@ -182,6 +182,110 @@ Convert source-specific situations into durable patterns in calibration text:
 - `[current specific feeling or loop]` -> `[durable pattern]`.
 - `[present-season logistics or biography]` -> `[remove unless it reveals a durable preference, constraint, or failure mode]`.
 
+## Exact record-shape reference (closed, mandatory)
+
+All nested objects below are exact and closed: required keys only, no extras,
+no missing. Scalar rules first, then each record. This section is the canonical
+shape contract the selector must satisfy before generation.
+
+### Scalar rules (concise)
+
+- ids / keys (`agent id`, `node_id`, `gate id`, `source_id`, `key`, `variant`,
+  `path` basename): match `^[a-z0-9]+(?:-[a-z0-9]+)*$`.
+- `sha256`: exactly 64 lowercase hex chars.
+- `path`: relative, no `..` segments, no NUL, strict ASCII.
+- every string is strict ASCII and non-empty, except where a field is explicitly
+  `null`.
+
+### Registries record shapes
+
+- `context_registry`:
+  `{{"entries":[{{"key":<id>,"content":<ascii>,"sha256":<sha256>,"source_identity":<SourceIdentity>}}]}}`
+  — `key` unique.
+- `human_source_registry`:
+  `{{"sources":[{{"id":<id>,"label":<ascii>}}]}}` — `id` unique AND `label` unique.
+- `stakeholder_registry`:
+  `{{"entries":[{{"id":<id>,"label":<ascii>,"source_ref":<StakeholderSourceRef>}}]}}`
+  — `id` unique AND `label` unique.
+- `profile_evidence_registry`:
+  `{{"entries":[{{"id":<id>,"profile":"existential"|"operational","excerpt":<ascii>,"path":<path>,"sha256":<sha256>}}]}}`
+  — `id` unique.
+- `synthetic_perspective_registry`:
+  `{{"entries":[{{"id":<id>,"label":<ascii>,"disclosure":<ascii; must state synthetic>}}]}}`
+  — `id` unique AND `label` unique.
+- `provenance_policy`:
+  `{{"sources":[{{"id":<id>,"label":<ascii>,"path":<path|null>,"sha256":<sha256|null>}}]}}`
+  — `path` and `sha256` are a paired nullable pair (both null or both present);
+  `id` unique AND `label` unique.
+
+### ClaimProvenance plus external-citation condition
+
+- `claim_provenance` is `null` or exactly:
+  `{{"mode":<"internal"|"external"|"either">,"sources":[<ClaimSourceRef>],"unsupported_label":<ascii>,"citations":[<ascii>]}}`.
+- CONDITION: if `mode` is `"external"` then `citations` MUST be non-empty; an
+  external `claim_provenance` with empty `citations` rejects the whole plan.
+
+### Candidate agent scalar / cap constraints
+
+- `id` is unique across `agents` (a duplicate agent id rejects).
+- `primary_role` and each `secondary_roles[]` is a `RoleAssignment`:
+  `{{"slug":<RoleSlug>,"variant":<catalog variant id string|null>}}`. `variant`
+  is the selected catalog variant's scalar `id` string or `null`; it is NEVER a
+  variant object. At most three secondary roles.
+- `skills`: unique ids from the active roles' `canonical_skills`.
+- `profile_rationale.evidence_refs`: unique ids; `not_applicable` boolean; when
+  false there must be at least one ref from each profile.
+- `resolved_design_settings`: the seven closed sub-objects exactly (no extras).
+
+### Settings enum vocabularies (exact allowed values)
+
+- `decision_control`: `human` | `shared` | `agent`
+- `knowledge.mode`: `internal` | `external` | `either`
+- `verification_diversity.orientation`: `none` | `check` | `independent` | `adversarial` | `plural` | `consensus` | `formal` | `criteria` | `data`
+- `cognitive.modes`: `direct` | `model` | `scaffold` | `implicit` | `counterfactual` | `formal` | `criteria` | `compute`
+- `social_positions_by_role` values: `peer` | `service` | `advocate`
+- `agreement_disagreement.modes`: `none` | `align` | `second-opinion` | `alternatives` | `counterargument` | `consensus` | `minority` | `adjudicate`
+- `group.*`: all booleans.
+
+### DomainAssessment evidence strings
+
+- `{{"tier":<"unknown"|"high"|"medium"|"low">,"evidence":[<ascii string>]}}`
+  — `evidence` is a non-empty list of strict-ASCII, non-empty strings.
+
+### Graph agent / human-gate / edge records
+
+- agent node:
+  `{{"id":<id>,"kind":"agent","agent_id":<agent id>,"role":<RoleSlug>,"visible_inputs":[<TypedInputRef>],"source_identity":{{"kind":"agent","id":<agent id>,"disclosure":<non-empty>}},"phase":<non-neg int>,"exec_group":<ascii>,"declared_outputs":[<ascii>]}}`
+- human_gate node:
+  `{{"id":<id>,"kind":"human_gate","mode":<"approval"|"review"|"notification">,"condition":<ascii>,"decision_owner":<ascii>,"required_inputs":[<TypedInputRef>],"continuation":"end","phase":<non-neg int>}}`
+- edge:
+  `{{"from":<node id>,"to":<node id>,"kind":<"sequential"|"parallel">,"handoff":<ascii>}}`
+- node `id` is unique across all nodes (a duplicate node id rejects); every edge
+  `from`/`to` must name an existing node.
+
+### independent_opinion_boundaries (exact) + agent-id mapping
+
+- `{{"isolated_agent_ids":[<agent id>],"blocked_node_outputs":[{{"node_id":<agent node id>,"output":<declared output>}}],"release_phase":<non-neg int>}}`
+- AGENT-ID MAPPING: `isolated_agent_ids` are AGENT ids equal to `agents[].id`,
+  NOT node ids. Each must resolve to exactly one agent graph node.
+  `blocked_node_outputs[].node_id` is an agent NODE id whose `declared_outputs`
+  contains `output`. An isolated agent must NOT receive a blocked output,
+  directly or transitively, before `release_phase`; violating this rejects.
+
+### aggregation exact record (no extraneous fields)
+
+- `{{"id":<id>,"aggregator_node_id":<agent node id>,"inputs":[<node_output ref>],"output":<ascii>,"destination_gate_id":<gate id>,"preserve_unresolved_disagreement":<bool>}}`
+- `inputs` are `TypedInputRef` of kind `node_output` ONLY — never `context` or
+  `external_source`. Each names a real declared output of an upstream agent node.
+
+### unresolved_disagreement true / false forms
+
+- false: `{{"triggered":false,"reason":null,"gate_id":null,"output":null}}`
+- true:
+  `{{"triggered":true,"reason":<ascii>,"gate_id":<gate id>,"output":{{"node_id":<agent node id>,"output":<declared output>}}}}`
+- mixed forms reject: `true` requires all three of `reason`/`gate_id`/`output`;
+  `false` requires all three null.
+
 ## Output contract
 
 Return exactly one JSON object with exactly these top-level keys and no others:

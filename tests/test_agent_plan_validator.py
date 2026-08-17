@@ -26,6 +26,7 @@ from core.agent_plan_validator import (
     parse_closed_object,
     parse_domain_policy,
     parse_typed_input_ref,
+    parse_claim_provenance,
     parse_claim_source_ref,
     parse_evidence_ref,
     parse_source_identity,
@@ -794,6 +795,286 @@ class ProvenanceSourceNullableTests(unittest.TestCase):
             parse_provenance_source({"id": "s1", "label": "L", "path": "p/s.json", "sha256": None})
         with self.assertRaises(ValidationError):
             parse_provenance_source({"id": "s1", "label": "L", "path": None, "sha256": SHA})
+
+
+# ---------------------------------------------------------------------------
+# Duplicate-identity / invalid-trigger hardening tests
+# ---------------------------------------------------------------------------
+
+
+class DuplicateIdentityTests(unittest.TestCase):
+    def test_duplicate_agent_id_distinct_content_rejected(self) -> None:
+        # Two agents with the same id but different role content: the whole-object
+        # uniqueness check would miss this; the explicit id check must catch it.
+        plan = _minimal_candidate()
+        a1 = _minimal_agent()
+        a2 = _minimal_agent()
+        a2["id"] = "a1"
+        a2["primary_role"] = {"slug": "judge", "variant": None}
+        plan["agents"] = [a1, a2]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_duplicate_trigger_id_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["trigger_evaluations"] = [
+            {"trigger_id": "uncertainty", "evidence_refs": [], "result": False, "rationale": "r"},
+            {"trigger_id": "uncertainty", "evidence_refs": [], "result": True, "rationale": "r2"},
+        ]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_invalid_trigger_id_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["trigger_evaluations"] = [
+            {"trigger_id": "not-a-real-trigger", "evidence_refs": [], "result": False, "rationale": "r"},
+        ]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_duplicate_graph_node_id_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["nodes"] = [
+            {"id": "n1", "kind": "agent", "agent_id": "a1", "role": "role-taker",
+             "visible_inputs": [], "source_identity": {"kind": "agent", "id": "a1", "disclosure": "d"},
+             "phase": 0, "exec_group": "g", "declared_outputs": ["o"]},
+            {"id": "n1", "kind": "human_gate", "mode": "approval", "condition": "c",
+             "decision_owner": "operator", "required_inputs": [], "continuation": "end", "phase": 1},
+        ]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_human_source_duplicate_label_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["human_source_registry"]["sources"] = [
+            {"id": "h1", "label": "Operator"},
+            {"id": "h2", "label": "Operator"},
+        ]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_provenance_duplicate_label_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["provenance_policy"]["sources"] = [
+            {"id": "s1", "label": "Source", "path": "p/s1.json", "sha256": SHA},
+            {"id": "s2", "label": "Source", "path": "p/s2.json", "sha256": SHA},
+        ]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+
+# ---------------------------------------------------------------------------
+# ClaimProvenance external-citation condition tests
+# ---------------------------------------------------------------------------
+
+
+class ClaimProvenanceConditionTests(unittest.TestCase):
+    def test_external_requires_citations_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            parse_claim_provenance({
+                "mode": "external",
+                "sources": [{"kind": "provenance_source", "source_id": "s1"}],
+                "unsupported_label": "x",
+                "citations": [],
+            })
+
+    def test_external_with_citations_accepted(self) -> None:
+        out = parse_claim_provenance({
+            "mode": "external",
+            "sources": [{"kind": "provenance_source", "source_id": "s1"}],
+            "unsupported_label": "x",
+            "citations": ["c1"],
+        })
+        self.assertEqual(out["mode"], "external")  # type: ignore[union-attr]
+
+    def test_internal_empty_citations_accepted(self) -> None:
+        out = parse_claim_provenance({
+            "mode": "internal",
+            "sources": [],
+            "unsupported_label": "x",
+            "citations": [],
+        })
+        self.assertEqual(out["citations"], [])  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# Aggregation record shape / condition tests
+# ---------------------------------------------------------------------------
+
+
+class AggregationRecordTests(unittest.TestCase):
+    def test_full_aggregation_record_parses(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["aggregation"] = [{
+            "id": "agg1",
+            "aggregator_node_id": "n1",
+            "inputs": [{"kind": "node_output", "node_id": "n1", "output": "accepted role statement"}],
+            "output": "aggregated",
+            "destination_gate_id": "g1",
+            "preserve_unresolved_disagreement": False,
+        }]
+        parsed = parse_candidate_agent_plan(plan)
+        self.assertEqual(len(parsed["interaction_graph"]["aggregation"]), 1)  # type: ignore[union-attr]
+
+    def test_aggregation_context_input_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["aggregation"] = [{
+            "id": "agg1",
+            "aggregator_node_id": "n1",
+            "inputs": [{"kind": "context", "key": "k1"}],
+            "output": "aggregated",
+            "destination_gate_id": "g1",
+            "preserve_unresolved_disagreement": False,
+        }]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+
+# ---------------------------------------------------------------------------
+# unresolved_disagreement true / false form tests
+# ---------------------------------------------------------------------------
+
+
+class UnresolvedDisagreementFormTests(unittest.TestCase):
+    def test_false_form_accepted(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["unresolved_disagreement"] = {
+            "triggered": False, "reason": None, "gate_id": None, "output": None,
+        }
+        parse_candidate_agent_plan(plan)
+
+    def test_true_form_accepted(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["unresolved_disagreement"] = {
+            "triggered": True, "reason": "x", "gate_id": "g1",
+            "output": {"node_id": "n1", "output": "o"},
+        }
+        parse_candidate_agent_plan(plan)
+
+    def test_mixed_false_with_reason_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["unresolved_disagreement"] = {
+            "triggered": False, "reason": "x", "gate_id": None, "output": None,
+        }
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_mixed_true_missing_output_rejected(self) -> None:
+        plan = _minimal_candidate()
+        plan["interaction_graph"]["unresolved_disagreement"] = {
+            "triggered": True, "reason": "x", "gate_id": "g1", "output": None,
+        }
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+
+# ---------------------------------------------------------------------------
+# Independence boundary resolution tests (semantic layer)
+# ---------------------------------------------------------------------------
+
+
+class IndependenceBoundaryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.catalog = load_archetype_catalog()
+        self.domain_policy = load_domain_policy()
+        self.posture = _posture()
+
+    def _enrich(self, candidate, souls):
+        return enrich_candidate_to_planned(
+            candidate, self.catalog, self.domain_policy,
+            posture_snapshot=self.posture,
+            generation_provenance=_gen_prov(self.posture),
+            domain_policy_ref={"path": "p/dp.json", "sha256": SHA},
+            generated_at="2026-08-17T12:34:56Z",
+            soul_markdown_by_id=souls,
+        )
+
+    def _candidate_with_boundaries(self, boundaries):
+        plan = _rt_candidate()
+        plan["interaction_graph"]["independent_opinion_boundaries"] = boundaries
+        return plan
+
+    def test_complete_valid_boundary_passes(self) -> None:
+        plan = self._candidate_with_boundaries([{
+            "isolated_agent_ids": ["a1"],
+            "blocked_node_outputs": [],
+            "release_phase": 1,
+        }])
+        enriched = self._enrich(plan, {"a1": "# Soul\n"})
+        validate_agent_plan_semantics(enriched, self.catalog, self.domain_policy)
+
+    def test_boundary_missing_field_rejected(self) -> None:
+        plan = _rt_candidate()
+        plan["interaction_graph"]["independent_opinion_boundaries"] = [{
+            "isolated_agent_ids": ["a1"],
+            "blocked_node_outputs": [],
+            # release_phase omitted
+        }]
+        with self.assertRaises(ValidationError):
+            parse_candidate_agent_plan(plan)
+
+    def test_boundary_unknown_agent_id_rejected(self) -> None:
+        # AGENT-ID MAPPING: isolated_agent_ids must name a real agent.
+        plan = self._candidate_with_boundaries([{
+            "isolated_agent_ids": ["ghost"],
+            "blocked_node_outputs": [],
+            "release_phase": 1,
+        }])
+        enriched = self._enrich(plan, {"a1": "# Soul\n"})
+        with self.assertRaises(ValidationError):
+            validate_agent_plan_semantics(enriched, self.catalog, self.domain_policy)
+
+    def test_boundary_blocked_output_non_agent_node_rejected(self) -> None:
+        # blocked output must resolve to a real agent node's declared output.
+        plan = self._candidate_with_boundaries([{
+            "isolated_agent_ids": ["a1"],
+            "blocked_node_outputs": [{"node_id": "g1", "output": "whatever"}],
+            "release_phase": 1,
+        }])
+        enriched = self._enrich(plan, {"a1": "# Soul\n"})
+        with self.assertRaises(ValidationError):
+            validate_agent_plan_semantics(enriched, self.catalog, self.domain_policy)
+
+    def test_boundary_self_block_before_release_rejected(self) -> None:
+        # Isolated agent must not receive a blocked output before release_phase.
+        plan = self._candidate_with_boundaries([{
+            "isolated_agent_ids": ["a1"],
+            "blocked_node_outputs": [{"node_id": "n1", "output": "accepted role statement"}],
+            "release_phase": 1,
+        }])
+        enriched = self._enrich(plan, {"a1": "# Soul\n"})
+        with self.assertRaises(ValidationError):
+            validate_agent_plan_semantics(enriched, self.catalog, self.domain_policy)
+
+
+# ---------------------------------------------------------------------------
+# Prompt contract test: the seed documents the exact closed shapes
+# ---------------------------------------------------------------------------
+
+
+class PromptContractTests(unittest.TestCase):
+    def test_seed_documents_exact_shapes(self) -> None:
+        path = Path(__file__).resolve().parent.parent / "profiles" / "alignment" / "prompts" / "archetype_selection_seed.md"
+        contract = path.read_text(encoding="utf-8")
+        for marker in [
+            "independent_opinion_boundaries",
+            "isolated_agent_ids",
+            "blocked_node_outputs",
+            "release_phase",
+            "AGENT-ID MAPPING",
+            "aggregation exact record",
+            "node_output",
+            "unresolved_disagreement",
+            "ClaimProvenance",
+            "claim_provenance",
+            "DomainAssessment",
+            "agent node",
+            "human_gate node",
+            "Registries record shapes",
+            "decision_control",
+            "external-citation condition",
+        ]:
+            self.assertIn(marker, contract, f"selector contract missing reference to {marker!r}")
 
 
 if __name__ == "__main__":
