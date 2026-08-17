@@ -87,8 +87,6 @@
   "composition": {
     "primary_compatible_secondary": [
       "model",
-      "criteria-applicator",
-      "data-processor",
       "decision-scaffolder"
     ],
     "prerequisite_groups": [],

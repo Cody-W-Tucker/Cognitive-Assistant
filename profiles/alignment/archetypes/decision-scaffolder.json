@@ -92,7 +92,6 @@
     "primary_compatible_secondary": [
       "implicit-reasoner",
       "formalizer",
-      "criteria-applicator",
       "user-aligner"
     ],
     "prerequisite_groups": [],

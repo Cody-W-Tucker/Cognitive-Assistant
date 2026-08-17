@@ -47,6 +47,30 @@ Assemble complementary coverage, not a roster.
   graph node.
 - Skills you assign must come from that agent's active roles' `canonical_skills`.
 
+## Composition preflight (mandatory before emitting any candidate)
+
+Before you emit a candidate plan, preflight every agent's active role set (its
+one primary role plus each selected secondary role) against the catalog policy.
+This is a hard gate: an agent whose role set fails either check must not be
+emitted. If a needed pairing fails, drop the offending secondary or choose a
+different primary; never emit an unresolvable set.
+
+1. Knowledge-mode intersection. For the primary role and each secondary role,
+   intersect their `knowledge.allowed_modes`. The resolved knowledge-mode set
+   for every primary→secondary relation you select must be non-empty. A pairing
+   whose intersection is empty (for example an internal/either role composed
+   with an external-only role, or vice versa) is unresolvable and is rejected by
+   the strict resolver; do not emit it.
+2. Decision-control intersection per domain tier. For each impact tier
+   (`unknown`, `high`, `medium`, `low`), intersect the active roles'
+   `decision_control.allowed` with that tier's `decision_control_levels`. Every
+   tier must yield a non-empty decision-control intersection for the agent; if
+   any tier resolves to an empty set, the agent cannot operate at that tier and
+   the pairing is invalid.
+
+Only after both intersections are confirmed non-empty for every selected
+primary→secondary relation and for every domain tier may you emit candidates.
+
 ## Domain, authority, and gates
 
 - Assess exactly one impact tier and cite evidence for it. You assess tier and

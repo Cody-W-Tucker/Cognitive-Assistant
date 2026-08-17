@@ -93,8 +93,6 @@
   "composition": {
     "primary_compatible_secondary": [
       "formalizer",
-      "data-processor",
-      "knowledge-checker",
       "decision-scaffolder"
     ],
     "prerequisite_groups": [],

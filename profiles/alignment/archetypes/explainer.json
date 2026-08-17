@@ -101,8 +101,7 @@
   "composition": {
     "primary_compatible_secondary": [
       "communicator",
-      "implicit-reasoner",
-      "knowledge-checker"
+      "implicit-reasoner"
     ],
     "prerequisite_groups": [
       [

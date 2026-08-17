@@ -91,10 +91,8 @@
   },
   "composition": {
     "primary_compatible_secondary": [
-      "knowledge-checker",
       "alternative-perspectives",
-      "counterargument",
-      "criteria-applicator"
+      "counterargument"
     ],
     "prerequisite_groups": [],
     "conflicts": [
