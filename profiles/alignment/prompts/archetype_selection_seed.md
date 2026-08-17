@@ -1,117 +1,183 @@
-You are selecting which predefined agent archetypes apply to this user and calibrating each one.
+You are selecting which catalog roles this user's agent system needs, and you are
+returning exactly one `CandidateAgentPlan` JSON object.
 
-You receive four inputs:
+You receive normalized, already-hashed registries. They are authoritative. You do
+not create, rename, reorder, re-hash, summarize, or extend them. You copy them
+into your output byte for byte and then reference them by id or key.
 
-1. the archetype catalog — every predefined agent archetype with its full
-   operating contract (purpose, job-to-be-done, outcome, scope, authority,
-   quality/evidence expectations, and canonical skill assignments). The catalog
-   forms a small complementary cognitive team: each archetype covers a
-   distinct way of seeing, and together they cover the surfaces a single
-   counterpart tends to miss.
-2. the translation-layer soul (SOUL.md) — the user's durable constitution,
-   mode-routing guidance, and operating commitments inferred from both profiles
-3. the translation-layer archetype — the single archetypal counterpart type
-   most deeply suited to this user
-4. bounded profile evidence from the operational and existential human
-   profiles, offered so you can see what durable patterns and recurrent
-   needs the specialists must metabolize
+You receive:
 
-Your task is to assemble a complementary team from the catalog, tailored to
-this user's operating defaults and likely blind spots. The team should cover
-adjacent ways of seeing, not repeat the same lens.
+1. the role catalog - all 17 roles with their full operating contract:
+   role inputs and outputs, prohibitions, decision-control policy, knowledge
+   policy, verification and diversity policy, cognitive modes, social position,
+   group policy, agreement/disagreement policy, authority actions, composition
+   rules (compatible secondaries, prerequisite groups, conflicts, max
+   secondaries), safeguards, quality criteria, and canonical skills.
+2. the interaction posture - the durable counterpart posture for this user.
+3. the translation-layer soul (SOUL.md) - the orchestrator's constitution.
+4. the context registry - operator-supplied context entries with hashes.
+5. the human source registry - the real human identities that may be cited.
+6. the stakeholder registry - typed stakeholder lineage.
+7. the synthetic perspective registry - disclosed non-human perspectives.
+8. the provenance policy - external sources with paths and hashes.
+9. the profile evidence registry - bounded excerpts from the existential and
+   operational human profiles, with paths and hashes.
+10. the domain tier vocabulary and the trigger vocabulary.
 
 ## Selection reasoning
 
-Approach selection as coverage, not as roster-filling:
+Assemble complementary coverage, not a roster.
 
 - Read the user's operating defaults from the profile evidence: where they
-  tend to default, what they tend to over-rely on, what tends to go unseen.
-  State these as hypotheses grounded in profile evidence, not as diagnoses
-  or fixed typologies.
-- For each default or likely blind spot, identify which archetype makes the
-  adjacent constraint legible — which way of seeing would surface what this
-  user tends not to see on their own.
-- Select archetypes that cover distinct surfaces. Do not select an archetype
-  just because it exists; select it because the user's evidence shows it is
-  needed. Do not select all three by default — select the subset that
-  actually covers the user's recurrent misfits.
-- If one archetype clearly dominates the user's needs and the others add
-  little, select one. If two cover distinct surfaces, select two. If all
-  three are needed, select three. No rote one-of-each.
-- Do not assert typology labels, psychological diagnoses, or scientific
-  claims about the user's cognitive type. Ground all reasoning in observed
-  durable patterns from the profile evidence.
+  default, what they over-rely on, what goes unseen. State these as hypotheses
+  grounded in cited evidence ids, never as diagnoses or typologies.
+- For each default or likely blind spot, select the role that makes the
+  adjacent constraint legible.
+- Select a role only when the evidence shows it is needed. Distinct surfaces,
+  clean handoffs, no duplicated lenses.
+- Each agent has exactly one primary role and zero to three secondary roles.
+  Every secondary must appear in the primary role's
+  `primary_compatible_secondary`. Never pair roles that list each other in
+  `conflicts`. Never exceed the primary role's `max_secondary`.
+- Every active role's `prerequisite_groups` must pass. Groups are inner-AND and
+  outer-OR: at least one inner group must be fully satisfiable from the
+  portfolio, the declared inputs, or the supplied registries.
+- Every role input must be supplied by a visible input, an upstream declared
+  output, or a context entry. Every role output must be declared on that agent's
+  graph node.
+- Skills you assign must come from that agent's active roles' `canonical_skills`.
 
-## Complementary coverage and handoffs
+## Domain, authority, and gates
 
-For each selected archetype, the calibration must make legible:
+- Assess exactly one impact tier and cite evidence for it. You assess tier and
+  evidence only; you never emit domain permissions.
+- `final_authority` is singular and mandatory. Only a role whose catalog record
+  is final-decision eligible may hold it. If nothing warrants a within-system
+  final decision, emit the null form: `agent_id` null, `action_refs` `[]`,
+  `decision_control` `"human"`, and a real terminal gate id and rationale.
+- Every `action_ref` must name an active role of the holder and an `action_id`
+  declared by that role's catalog authority actions.
+- Unknown and high tiers require null final authority and approval-only gates.
+- Every path terminates at a human gate. Gates have no outgoing edges and their
+  `continuation` is always `"end"`.
 
-- What this archetype covers for this user that they tend not to see alone.
-- How this archetype relates to any sibling archetypes in the selected team.
+## Graph rules
 
-When more than one archetype is selected, the calibration for each must
-describe where it hands off to a sibling — what surface the sibling owns,
-and what the handoff looks like in practice. The team is only as strong as
-its handoffs. If two selected archetypes overlap significantly in what they
-cover, the team has failed to be complementary. Prefer fewer archetypes
-with clean handoffs over more archetypes with blurred boundaries.
+- Exactly one agent node per agent and one agent per agent node.
+- Node ids are globally unique. Every relation moves to a strictly greater
+  `phase`. The graph must be acyclic, every node reachable from an entry agent
+  node, and every path must terminate at a human gate.
+- An agent node's `source_identity` is always `{{"kind":"agent","id":"<its own
+  agent id>","disclosure":"<non-empty disclosure>"}}`.
+- Every role that requires independence must appear in at least one
+  `independent_opinion_boundaries` entry, and an isolated agent must not receive
+  a blocked output, directly or transitively, before `release_phase`.
+- Provide exactly one `trigger_evaluations` entry for every trigger required by
+  any active role, and no unrelated trigger ids. When a required trigger is
+  true, the dissenting role it demands must exist and its output must reach a
+  terminal gate.
 
-When only one archetype is selected, no sibling handoff exists. In that
-case, the calibration must state explicitly that no team handoff is
-required and preserve the archetype's own boundary — what it covers and
-where its scope ends.
+## Registry discipline
 
-## Rules
-
-- Select between 1 and 3 archetypes. Prefer fewer well-bounded selections
-  over many overlapping ones.
-- Every archetype slug you select MUST appear in the catalog. Do not invent
-  archetypes. Do not use slugs not in the catalog.
-- The skills you assign to each archetype MUST be drawn from the archetype's
-  declared canonical_skills list. Do not add skills not in that list.
-- Each archetype must be genuinely needed. If an archetype's scope does not
-  match a recurrent pattern in the user's evidence, do not select it.
-- Select based on what the user actually needs, not what would be symbolically
-  complete. Not every user needs every archetype.
-- The calibration must be specific to this user: name the durable patterns,
-  working modes, or recurrent needs this archetype addresses. Do not produce
-  generic calibrations that could apply to anyone.
-- Do not duplicate calibrations across archetypes. Each archetype should
-  address a genuinely distinct surface of the user's needs.
+- Reproduce `context_registry`, `human_source_registry`, `stakeholder_registry`,
+  `synthetic_perspective_registry`, `profile_evidence_registry`, and
+  `provenance_policy` exactly as supplied. Any edit rejects the whole plan.
+- Reference sources only through the typed unions: `ClaimSourceRef` is one of
+  `{{"kind":"provenance_source","source_id":"..."}}`,
+  `{{"kind":"human_source","source_id":"..."}}`,
+  `{{"kind":"context_source","key":"..."}}`, or
+  `{{"kind":"agent_output","node_id":"...","output":"..."}}`.
+- A synthetic `SourceIdentity` is exactly
+  `{{"kind":"synthetic_perspective","id":"<registry id>"}}` and carries no free
+  label or disclosure. Synthetic identity is never human identity.
+- `profile_rationale.evidence_refs` must resolve in the profile evidence
+  registry. When `not_applicable` is false there must be at least one ref from
+  each profile and `not_applicable_rationale` must be null.
 
 ## Timelessness filter
 
-Convert source-specific situations into durable patterns in the calibration:
+Convert source-specific situations into durable patterns in calibration text:
 
-- `[current specific person, group, or institution]` → `[durable pattern]`.
-- `[current specific project, venture, artifact, or plan]` → `[durable pattern]`.
-- `[current specific conflict or tension]` → `[durable pattern]`.
-- `[current specific feeling or loop]` → `[durable pattern]`.
-- `[present-season logistics or biography]` → `[remove unless it reveals a durable preference, constraint, or failure mode]`.
+- `[current specific person, group, or institution]` -> `[durable pattern]`.
+- `[current specific project, venture, artifact, or plan]` -> `[durable pattern]`.
+- `[current specific conflict or tension]` -> `[durable pattern]`.
+- `[current specific feeling or loop]` -> `[durable pattern]`.
+- `[present-season logistics or biography]` -> `[remove unless it reveals a durable preference, constraint, or failure mode]`.
 
-## Output
+## Output contract
 
-Return a JSON object with this exact structure:
+Return exactly one JSON object with exactly these top-level keys and no others:
 
 ```json
 {{
+  "schema_version": "1.0-proposed",
+  "context_registry": {{"entries": []}},
+  "human_source_registry": {{"sources": []}},
+  "stakeholder_registry": {{"entries": []}},
+  "profile_evidence_registry": {{"entries": []}},
+  "synthetic_perspective_registry": {{"entries": []}},
+  "domain_assessment": {{"tier": "medium", "evidence": ["<why this tier>"]}},
+  "provenance_policy": {{"sources": []}},
   "agents": [
     {{
-      "archetype": "slug-from-catalog",
-      "calibration": "Why this archetype is needed for this user, grounded in durable patterns from the profile evidence; what this archetype covers that the user tends not to see alone. If multiple archetypes are selected, describe where this archetype hands off to a sibling; if only one archetype is selected, state that no team handoff is required and where its own scope ends",
-      "skills": ["skill-slug-1", "skill-slug-2"]
+      "id": "agent-id",
+      "primary_role": {{"slug": "role-slug", "variant": null}},
+      "secondary_roles": [],
+      "profile_rationale": {{
+        "evidence_refs": ["evidence-id"],
+        "not_applicable": false,
+        "not_applicable_rationale": null,
+        "selection_reason": "<why this role for this user, from cited evidence>",
+        "calibration_effect": "<how the evidence changes how it operates>"
+      }},
+      "calibration": {{"posture": "<user-specific posture>", "notes": [], "constraints": []}},
+      "skills": ["skill-slug"],
+      "resolved_design_settings": {{
+        "decision_control": "human",
+        "knowledge": {{"mode": "internal", "provenance_required": true, "citations_required_for_external": true}},
+        "verification_diversity": {{"orientation": "check", "obligations": ["<obligation>"]}},
+        "cognitive": {{"modes": ["direct"], "forcing_triggers": []}},
+        "social_positions_by_role": {{"role-slug": "peer"}},
+        "group": {{"group_facing": false, "independence_required": false, "source_disclosure_required": true, "consensus_requirements": []}},
+        "agreement_disagreement": {{"modes": ["none"], "required_triggers": []}}
+      }},
+      "claim_provenance": null,
+      "graph_participation": {{"node_id": "node-id"}}
     }}
-  ]
+  ],
+  "final_authority": {{
+    "agent_id": null,
+    "action_refs": [],
+    "domain_scope": "<bounded internal scope>",
+    "decision_control": "human",
+    "terminal_gate_id": "gate-id",
+    "rationale": "<why this authority shape>"
+  }},
+  "trigger_evaluations": [
+    {{"trigger_id": "uncertainty", "evidence_refs": [{{"kind": "context", "key": "context-key"}}], "result": false, "rationale": "<basis>"}}
+  ],
+  "interaction_graph": {{
+    "nodes": [
+      {{"id": "node-id", "kind": "agent", "agent_id": "agent-id", "role": "role-slug", "visible_inputs": [], "source_identity": {{"kind": "agent", "id": "agent-id", "disclosure": "agent-generated input"}}, "phase": 0, "exec_group": "group", "declared_outputs": ["<every active role output>"]}},
+      {{"id": "gate-id", "kind": "human_gate", "mode": "approval", "condition": "<condition>", "decision_owner": "operator", "required_inputs": [{{"kind": "node_output", "node_id": "node-id", "output": "<declared output>"}}], "continuation": "end", "phase": 1}}
+    ],
+    "edges": [{{"from": "node-id", "to": "gate-id", "kind": "sequential", "handoff": "<handoff>"}}],
+    "independent_opinion_boundaries": [],
+    "aggregation": [],
+    "unresolved_disagreement": {{"triggered": false, "reason": null, "gate_id": null, "output": null}}
+  }}
 }}
 ```
 
-Rules:
-- `archetype` must be an exact slug from the catalog
-- `calibration` must be non-empty and specific to this user, naming the
-  coverage and any sibling handoffs (or stating no handoff is required if
-  only one archetype is selected)
-- `skills` must be a non-empty list drawn from the archetype's canonical_skills
-- Do not produce duplicate archetype selections
+Hard rules:
+
+- All ids match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. All strings are strict ASCII.
+- Every listed key is required. Any extra key rejects the plan.
+- Do NOT output `generated_at`, `domain_policy_ref`, `interaction_posture`,
+  `projection_hashes`, `social_positions_by_role` at agent level,
+  `role_scoped_authority`, `soul_markdown`, `generation_provenance`, any hash you
+  computed yourself, or any domain-policy permission. Code derives all of those.
+- `agents` is non-empty with unique ids.
 - Return ONLY the JSON object. No prose before or after. No code fences.
 
 <input_format>
@@ -122,22 +188,64 @@ Rules:
 
 </catalog>
 
+<interaction_posture>
+
+{interaction_posture}
+
+</interaction_posture>
+
 <translation_layer>
 
 {translation_layer}
 
 </translation_layer>
 
-<archetype>
+<context_registry>
 
-{archetype}
+{context_registry}
 
-</archetype>
+</context_registry>
 
-<profile_evidence>
+<human_source_registry>
 
-{profile_evidence}
+{human_source_registry}
 
-</profile_evidence>
+</human_source_registry>
+
+<stakeholder_registry>
+
+{stakeholder_registry}
+
+</stakeholder_registry>
+
+<synthetic_perspective_registry>
+
+{synthetic_perspective_registry}
+
+</synthetic_perspective_registry>
+
+<provenance_policy>
+
+{provenance_policy}
+
+</provenance_policy>
+
+<profile_evidence_registry>
+
+{profile_evidence_registry}
+
+</profile_evidence_registry>
+
+<domain_tiers>
+
+{domain_tiers}
+
+</domain_tiers>
+
+<trigger_vocabulary>
+
+{trigger_vocabulary}
+
+</trigger_vocabulary>
 
 </input_format>

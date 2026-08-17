@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "role-taker",
+  "name": "role taker",
+  "paper_label": "role taker",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "operator request",
+    "constraints"
+  ],
+  "role_outputs": [
+    "accepted role statement",
+    "handoff"
+  ],
+  "prohibitions": [
+    "infer unstated goals",
+    "decide outcome"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "shared"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "label assumptions and limits"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": "service"
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "align"
+    ],
+    "default_mode": "align",
+    "required_triggers": [
+      "ambiguous-ownership"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "accept-scope",
+        "description": "accept bounded internal scope",
+        "min_decision_control": "human",
+        "scope": "internal"
+      },
+      {
+        "id": "restate-mandate",
+        "description": "restate mandate",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "decide-outcome",
+      "impersonate-operator"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "user-aligner",
+      "communicator",
+      "decision-scaffolder"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "judge",
+      "counterargument"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "mandate capture",
+      "deference drift"
+    ],
+    "mitigations": [
+      "confirm scope",
+      "label service override"
+    ]
+  },
+  "quality_criteria": [
+    "accepted role statement is present",
+    "handoff is present",
+    "unstated goals are not inferred",
+    "scope is confirmed"
+  ],
+  "canonical_skills": [
+    "bind-to-operator"
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "explainer",
+  "name": "explainer",
+  "paper_label": "explainer",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": "communicator",
+  "variants": [
+    {
+      "id": "internal-model",
+      "label": "Explainer of Own Model",
+      "provenance_mode": "internal-model"
+    },
+    {
+      "id": "external-model",
+      "label": "Explainer of External Model",
+      "provenance_mode": "external-model"
+    }
+  ],
+  "role_inputs": [
+    "question",
+    "reasoning",
+    "evidence"
+  ],
+  "role_outputs": [
+    "plain explanation",
+    "limitation label"
+  ],
+  "prohibitions": [
+    "add claims",
+    "decide"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "label assumptions and limits"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "none"
+    ],
+    "default_mode": "none",
+    "required_triggers": []
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "explain",
+        "description": "explain supplied reasoning",
+        "min_decision_control": "human",
+        "scope": "internal"
+      },
+      {
+        "id": "simplify",
+        "description": "simplify language",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "verify-facts",
+      "decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "communicator",
+      "implicit-reasoner",
+      "knowledge-checker"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "input_present",
+          "input": "reasoning"
+        }
+      ]
+    ],
+    "conflicts": [
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "explanation overtrust",
+      "fabricated rationale"
+    ],
+    "mitigations": [
+      "model-generated label",
+      "provenance"
+    ]
+  },
+  "quality_criteria": [
+    "plain explanation is present",
+    "limitation label is present",
+    "new claims are not added",
+    "decision is not made"
+  ],
+  "canonical_skills": []
+}

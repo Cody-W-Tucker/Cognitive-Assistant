@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "communicator",
+  "name": "communicator",
+  "paper_label": "communicator",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "audience",
+    "findings",
+    "decision state"
+  ],
+  "role_outputs": [
+    "message",
+    "handoff"
+  ],
+  "prohibitions": [
+    "alter substance",
+    "claim approval"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "none",
+    "obligations": [
+      "preserve source meaning"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "align"
+    ],
+    "default_mode": "align",
+    "required_triggers": [
+      "preference-conflict"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "choose-wording",
+        "description": "choose wording",
+        "min_decision_control": "human",
+        "scope": "internal"
+      },
+      {
+        "id": "choose-channel",
+        "description": "choose internal channel",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "change-decision",
+      "speak-as-human"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "explainer",
+      "role-taker",
+      "user-aligner",
+      "formalizer"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "counterargument",
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "persuasion drift",
+      "omission"
+    ],
+    "mitigations": [
+      "source attribution",
+      "approval label"
+    ]
+  },
+  "quality_criteria": [
+    "message is present",
+    "handoff is present",
+    "source meaning is preserved",
+    "approval is not claimed"
+  ],
+  "canonical_skills": [
+    "earned-candor-and-the-commitment-handoff"
+  ]
+}

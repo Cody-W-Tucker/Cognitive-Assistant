@@ -100,23 +100,24 @@ Generates `tool_specs/` (e.g., `memory.md`, `tasks.md`) from the profile.
 #### `build-translation-layer`
 
 Synthesizes the orchestrator translation-layer artifacts
-(`SOUL_ARCHETYPE.md` and `SOUL.md`) by combining outputs from both the
+(`INTERACTION_POSTURE.md` and `SOUL.md`) by combining outputs from both the
 existential and operational profiles. This is the cross-profile bridge
 between raw profile data and the specialist agent system.
 
-- **Flags**: *(none — writes to canonical paths under `workspaces/alignment/artifacts/`)*
+- **Flags**: *(none - writes to canonical paths under `workspaces/alignment/artifacts/`)*
 - **Sources**: `core/translation_layer_creator.py`
 
 #### `build-agents`
 
-Selects applicable archetypes from the predefined catalog at
-`profiles/alignment/archetypes/`, calibrates them to the user, and
-generates one soul document per selected archetype. Each archetype
-carries a full operating contract (purpose, scope, authority,
-quality/evidence expectations, canonical skill assignments). Unknown
-archetype slugs and unknown skill slugs fail with clear errors.
-Specialist agents inherit the orchestrator constitution rather than
-re-deriving the user from raw psychometric profile material.
+Selects roles from the 17-role catalog at `profiles/alignment/archetypes/`
+under the policy in `profiles/alignment/domain_policy.json`, produces exactly
+one `CandidateAgentPlan`, deterministically enriches it into a validated
+`AgentPlan` (recomputed role settings, derived social maps, and derived
+role-scoped authority), and commits the plan plus its projections
+(`persona_map.md` and per-agent soul documents). `agent_plan.json` commits
+last and is authoritative only for the generated bundle. Unknown role slugs and
+unknown skill slugs fail with clear errors. Souls consume the persisted
+`INTERACTION_POSTURE.md` snapshot, never the raw profiles.
 
 Runtime orchestration, tool access enforcement, agent-to-agent routing,
 and trace logging are explicitly deferred and not implemented in this
@@ -199,7 +200,7 @@ flowchart TD
 | `ask-questions` | Yes | `answers.csv` | `core.question_asker` |
 | `build-prompts` | Yes | `human_profile.md` | `core.prompt_creator` |
 | `build-skills` | Yes | `SKILL.md` files | `core.skills_creator` |
-| `build-translation-layer` | No | `SOUL.md`, `SOUL_ARCHETYPE.md` | `core.translation_layer_creator` |
+| `build-translation-layer` | No | `SOUL.md`, `INTERACTION_POSTURE.md` | `core.translation_layer_creator` |
 | `build-agents` | No | `persona_map.md`, `agents/<slug>.md` | `core.soul_creator` |
 | `build-alignment-spec` | No | `alignment_spec.md` | `core.alignment_spec` |
 | `health-check` | Yes | Console Report | `core.health_check` |

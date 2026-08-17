@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "knowledge-checker",
+  "name": "knowledge checker",
+  "paper_label": "knowledge checker",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [
+    {
+      "id": "internal-knowledge",
+      "label": "Internal Knowledge Checker",
+      "provenance_mode": "internal-knowledge"
+    },
+    {
+      "id": "external-knowledge",
+      "label": "External Knowledge Checker",
+      "provenance_mode": "external-knowledge"
+    }
+  ],
+  "role_inputs": [
+    "claim",
+    "source set"
+  ],
+  "role_outputs": [
+    "verification finding",
+    "citation record"
+  ],
+  "prohibitions": [
+    "certify unsupported claims",
+    "decide policy"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "external"
+    ],
+    "default_mode": "external",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "test claim against sources",
+      "cite sources"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": [
+      "external-model-output-present"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "second-opinion"
+    ],
+    "default_mode": "second-opinion",
+    "required_triggers": [
+      "uncertainty",
+      "conflicting-evidence"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "verify-claim",
+        "description": "verify claim",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "decide-policy",
+      "erase-source-limits"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "model",
+      "criteria-applicator",
+      "second-opinion",
+      "formalizer"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "communicator"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "source laundering",
+      "false certainty"
+    ],
+    "mitigations": [
+      "citations",
+      "unsupported label"
+    ]
+  },
+  "quality_criteria": [
+    "verification finding is present",
+    "citation record is present",
+    "unsupported claims are not certified",
+    "sources are cited"
+  ],
+  "canonical_skills": [
+    "verify-before-trust",
+    "bound-before-solving"
+  ]
+}

@@ -24,7 +24,7 @@ shapes, alongside agent-soul and alignment outputs:
 | `lib.artifacts.alignment.spec`                       | Generated alignment spec                                  |
 | `lib.artifacts.alignment.personaMap`                 | Persona map intermediate artifact                         |
 | `lib.artifacts.alignment.translationLayer`           | Generated translation-layer orchestrator soul (SOUL.md)   |
-| `lib.artifacts.alignment.translationArchetype`       | Generated translation-layer archetype (SOUL_ARCHETYPE.md) |
+| `lib.artifacts.alignment.interactionPosture`       | Generated interaction posture (INTERACTION_POSTURE.md) |
 | `lib.artifacts.alignment.agentSouls`                 | Per-agent soul documents keyed by slug                    |
 | `lib.artifacts.alignment.agentSoulNames`             | Available agent soul names                                |
 | `lib.artifacts.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                       |
@@ -118,12 +118,12 @@ per persona. Outputs land at:
 `build-translation-layer` reads both profile artifacts and produces the
 orchestrator translation layer: the archetype inference and the durable soul
 that specialist agents inherit. Outputs land at:
-`workspaces/alignment/artifacts/SOUL_ARCHETYPE.md`
+`workspaces/alignment/artifacts/INTERACTION_POSTURE.md`
 `workspaces/alignment/artifacts/SOUL.md`
 
 ```text
 workspaces/skills/<profile>/<skill-name>/SKILL.md
-workspaces/alignment/artifacts/SOUL_ARCHETYPE.md
+workspaces/alignment/artifacts/INTERACTION_POSTURE.md
 workspaces/alignment/artifacts/SOUL.md
 workspaces/alignment/artifacts/persona_map.md
 workspaces/alignment/artifacts/agents/<slug>.md
@@ -137,7 +137,7 @@ category. Do not write generated skills into opaque folders like `group-1`.
 The alignment command sits above both profiles. It reads unified skills from
 `workspaces/skills` and agent souls from
 `workspaces/alignment/artifacts/agents/` and writes a workspace artifact
-verification spec — a personalized production-readiness checklist that a
+verification spec - a personalized production-readiness checklist that a
 downstream verifier (`rlm`) uses to score AI-generated artifacts.
 
 ```bash

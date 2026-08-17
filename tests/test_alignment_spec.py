@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Tests for alignment spec generation, persona map parsing, and skill loading."""
+"""Tests for alignment spec generation, agent-plan authority, and skill loading."""
 
 from __future__ import annotations
 
-import re
+import json
 import textwrap
 import unittest
 from pathlib import Path
@@ -12,76 +12,73 @@ from core.alignment_spec import (
     AGENT_SOULS_PLACEHOLDER,
     SKILLS_PLACEHOLDER,
     AlignmentSpecCreator,
-    load_declared_agent_slugs,
+    load_planned_agent_ids,
 )
 
+try:  # discover -s tests imports siblings as top-level modules
+    from plan_fixtures import minimal_agent_plan
+except ImportError:  # python -m unittest tests.test_alignment_spec
+    from tests.plan_fixtures import minimal_agent_plan
 
-class LoadDeclaredAgentSlugsTests(unittest.TestCase):
-    def test_parses_declared_slugs(self) -> None:
-        content = textwrap.dedent("""\
-            # Persona Map
 
-            Discovered 2 distinct agent personas from the existential and operational profile artifacts.
+def _write_plan(tmpdir: Path, agent_ids: list[str]) -> Path:
+    """Write a valid agent_plan.json declaring ``agent_ids`` and return its path."""
+    plan_path = tmpdir / "agent_plan.json"
+    plan_path.write_text(
+        json.dumps(minimal_agent_plan(agent_ids=agent_ids), ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    return plan_path
 
-            ## Builder
-            - **Slug:** `builder`
-            - **Archetype:** A maker
-            - **Responsibility:** Shipping
 
-            ## Strategist
-            - **Slug:** `strategist`
-            - **Archetype:** A thinker
-            - **Responsibility:** Strategy
-        """)
-        path = Path(self._write_temp(content))
-        slugs = load_declared_agent_slugs(path)
-        self.assertEqual(slugs, ["builder", "strategist"])
+class LoadPlannedAgentIdsTests(unittest.TestCase):
+    """agent_plan.json is the only authority for declared agents."""
 
-    def test_rejects_missing_map(self) -> None:
-        with self.assertRaises(FileNotFoundError) as ctx:
-            load_declared_agent_slugs(Path("/nonexistent/persona_map.md"))
-        self.assertIn("Persona map not found", str(ctx.exception))
-
-    def test_rejects_empty_map(self) -> None:
-        path = Path(self._write_temp("# Persona Map\n\nNo agents here.\n"))
-        with self.assertRaises(ValueError) as ctx:
-            load_declared_agent_slugs(path)
-        self.assertIn("declares no agent slugs", str(ctx.exception))
-
-    def test_rejects_duplicate_slugs(self) -> None:
-        content = textwrap.dedent("""\
-            ## A
-            - **Slug:** `same`
-
-            ## B
-            - **Slug:** `same`
-        """)
-        path = Path(self._write_temp(content))
-        with self.assertRaises(ValueError) as ctx:
-            load_declared_agent_slugs(path)
-        self.assertIn("duplicate slug", str(ctx.exception))
-
-    def test_ignores_non_slug_backtick_references(self) -> None:
-        content = textwrap.dedent("""\
-            # Persona Map
-
-            Some prose mentioning `random.md` and other files.
-
-            ## Builder
-            - **Slug:** `builder`
-        """)
-        path = Path(self._write_temp(content))
-        slugs = load_declared_agent_slugs(path)
-        self.assertEqual(slugs, ["builder"])
-
-    def _write_temp(self, content: str) -> str:
+    def setUp(self) -> None:
+        import shutil
         import tempfile
-        fd = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        )
-        fd.write(content)
-        fd.close()
-        return fd.name
+
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
+
+    def test_parses_declared_agent_ids(self) -> None:
+        plan_path = _write_plan(self.tmp, ["builder", "strategist"])
+        self.assertEqual(load_planned_agent_ids(plan_path), ["builder", "strategist"])
+
+    def test_rejects_missing_plan(self) -> None:
+        with self.assertRaises(FileNotFoundError) as ctx:
+            load_planned_agent_ids(Path("/nonexistent/agent_plan.json"))
+        self.assertIn("Agent plan not found", str(ctx.exception))
+
+    def test_rejects_unparseable_plan(self) -> None:
+        plan_path = self.tmp / "agent_plan.json"
+        plan_path.write_text("{not valid json", encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            load_planned_agent_ids(plan_path)
+        self.assertIn("is invalid", str(ctx.exception))
+
+    def test_rejects_schema_invalid_plan(self) -> None:
+        plan = minimal_agent_plan(agent_ids=["builder"])
+        plan["unknown_key"] = True
+        plan_path = self.tmp / "agent_plan.json"
+        plan_path.write_text(json.dumps(plan, ensure_ascii=True), encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            load_planned_agent_ids(plan_path)
+        self.assertIn("is invalid", str(ctx.exception))
+
+    def test_rejects_empty_agent_list(self) -> None:
+        plan = minimal_agent_plan(agent_ids=["builder"])
+        plan["agents"] = []
+        plan_path = self.tmp / "agent_plan.json"
+        plan_path.write_text(json.dumps(plan, ensure_ascii=True), encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            load_planned_agent_ids(plan_path)
+        self.assertIn("is invalid", str(ctx.exception))
+
+    def test_persona_map_is_never_read_as_authority(self) -> None:
+        source = Path("core/alignment_spec.py").read_text(encoding="utf-8")
+        self.assertNotIn("PERSONA_MAP_FILE", source)
+        self.assertNotIn("persona_map.md", source)
 
 
 class AlignmentSpecPlaceholderValidationTests(unittest.TestCase):
@@ -145,7 +142,7 @@ class AlignmentSpecPlaceholderValidationTests(unittest.TestCase):
 
 class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
     def test_unlisted_agent_files_are_excluded(self) -> None:
-        """Verify _load_declared_agent_souls loads only persona-map-declared slugs."""
+        """Verify _load_declared_agent_souls loads only plan-declared agents."""
         import tempfile
         import shutil
 
@@ -153,32 +150,25 @@ class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
         try:
             agents_dir = tmpdir / "agents"
             agents_dir.mkdir()
-            persona_map = tmpdir / "persona_map.md"
-
             # Write declared soul
             (agents_dir / "builder.md").write_text("I build things.\n", encoding="utf-8")
             # Write an undeclared soul that should be ignored
             (agents_dir / "stranger.md").write_text("I am not declared.\n", encoding="utf-8")
 
-            persona_map.write_text(textwrap.dedent("""\
-                # Persona Map
-
-                ## Builder
-                - **Slug:** `builder`
-            """), encoding="utf-8")
+            plan_path = _write_plan(tmpdir, ["builder"])
 
             creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
             # Patch module-level paths for this test
             import core.alignment_spec as mod
-            orig_map = mod.PERSONA_MAP_FILE
+            orig_plan = mod.PLAN_FILE
             orig_dir = mod.AGENTS_DIR
-            mod.PERSONA_MAP_FILE = persona_map
+            mod.PLAN_FILE = plan_path
             mod.AGENTS_DIR = agents_dir
             try:
                 result = creator._load_declared_agent_souls()
             finally:
-                mod.PERSONA_MAP_FILE = orig_map
+                mod.PLAN_FILE = orig_plan
                 mod.AGENTS_DIR = orig_dir
 
             self.assertIn("builder", result)
@@ -195,19 +185,14 @@ class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
         try:
             agents_dir = tmpdir / "agents"
             agents_dir.mkdir()
-            persona_map = tmpdir / "persona_map.md"
-
-            persona_map.write_text(textwrap.dedent("""\
-                ## Builder
-                - **Slug:** `builder`
-            """), encoding="utf-8")
+            plan_path = _write_plan(tmpdir, ["builder"])
 
             creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
             import core.alignment_spec as mod
-            orig_map = mod.PERSONA_MAP_FILE
+            orig_plan = mod.PLAN_FILE
             orig_dir = mod.AGENTS_DIR
-            mod.PERSONA_MAP_FILE = persona_map
+            mod.PLAN_FILE = plan_path
             mod.AGENTS_DIR = agents_dir
             try:
                 with self.assertRaises(FileNotFoundError) as ctx:
@@ -215,7 +200,7 @@ class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
                 self.assertIn("builder", str(ctx.exception))
                 self.assertIn("missing", str(ctx.exception).lower())
             finally:
-                mod.PERSONA_MAP_FILE = orig_map
+                mod.PLAN_FILE = orig_plan
                 mod.AGENTS_DIR = orig_dir
         finally:
             shutil.rmtree(tmpdir)
@@ -228,27 +213,23 @@ class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
         try:
             agents_dir = tmpdir / "agents"
             agents_dir.mkdir()
-            persona_map = tmpdir / "persona_map.md"
 
             (agents_dir / "builder.md").write_text("   \n  \n", encoding="utf-8")
-            persona_map.write_text(textwrap.dedent("""\
-                ## Builder
-                - **Slug:** `builder`
-            """), encoding="utf-8")
+            plan_path = _write_plan(tmpdir, ["builder"])
 
             creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
             import core.alignment_spec as mod
-            orig_map = mod.PERSONA_MAP_FILE
+            orig_plan = mod.PLAN_FILE
             orig_dir = mod.AGENTS_DIR
-            mod.PERSONA_MAP_FILE = persona_map
+            mod.PLAN_FILE = plan_path
             mod.AGENTS_DIR = agents_dir
             try:
                 with self.assertRaises(ValueError) as ctx:
                     creator._load_declared_agent_souls()
                 self.assertIn("empty", str(ctx.exception).lower())
             finally:
-                mod.PERSONA_MAP_FILE = orig_map
+                mod.PLAN_FILE = orig_plan
                 mod.AGENTS_DIR = orig_dir
         finally:
             shutil.rmtree(tmpdir)
@@ -279,12 +260,16 @@ class CLISubcommandTests(unittest.TestCase):
 
 class LegacyCleanupAbsentTests(unittest.TestCase):
     def test_soul_creator_has_no_legacy_cleanup(self) -> None:
-        """soul_creator.py must not contain legacy SOUL/SOUL_ARCHETYPE cleanup logic."""
+        """soul_creator.py reads SOUL.md but never cleans up translation artifacts."""
         source_path = Path(__file__).resolve().parent.parent / "core" / "soul_creator.py"
         source = source_path.read_text(encoding="utf-8")
-        # The removed block referenced SOUL.md and SOUL_ARCHETYPE.md in a cleanup loop.
-        self.assertNotIn("SOUL.md", source)
-        self.assertNotIn("SOUL_ARCHETYPE.md", source)
+        # SOUL.md is a read-only selection input; the posture and soul are owned
+        # by build-translation-layer and must never be written or removed here.
+        self.assertNotIn("SOUL_ARCHETYPE", source)
+        self.assertNotIn("SOUL_FILE.write_text", source)
+        self.assertNotIn("SOUL_FILE.unlink", source)
+        self.assertNotIn("POSTURE_FILE.write_text", source)
+        self.assertNotIn("POSTURE_FILE.unlink", source)
         self.assertNotIn("legacy_path", source)
         self.assertNotIn("legacy artifact", source.lower())
 

@@ -47,10 +47,21 @@ _PLACEHOLDER_FIXTURES = {
     "supported_tools": "- `memory.md`: Memory agent",
     "seed_documents": "sample seed",
     "profile_sources": "<profile_source layer=\"existential\">sample</profile_source>",
-    "archetype": "sample archetype",
+    "interaction_posture": "sample interaction posture",
     "translation_layer": "sample translation layer",
-    "profile_evidence": "<profile_source layer=\"existential\">sample evidence</profile_source>",
-    "persona_definition": "Name: Agent\nSlug: agent\nArchetype: T\nResponsibility: R\nBoundary: B\nFit rationale: F",
+    "catalog": "{\"role-taker\": {}}",
+    "context_registry": "{\"entries\": []}",
+    "human_source_registry": "{\"sources\": []}",
+    "stakeholder_registry": "{\"entries\": []}",
+    "synthetic_perspective_registry": "{\"entries\": []}",
+    "provenance_policy": "{\"sources\": []}",
+    "profile_evidence_registry": "{\"entries\": []}",
+    "domain_tiers": "{\"medium\": {}}",
+    "trigger_vocabulary": "[\"uncertainty\"]",
+    "agent_definition": "{\"id\": \"agent\"}",
+    "skill_material": "<skill slug=\"sample\">sample</skill>",
+    "skills_content": "<skill slug=\"sample\">sample</skill>",
+    "agent_souls_content": "<agent_soul slug=\"agent\">sample</agent_soul>",
 }
 
 
@@ -102,15 +113,23 @@ def check_required_paths(config: Config) -> List[str]:
 # Alignment prompts live outside the profile system; render them separately
 # so health checks cover the restored translation-layer seeds.
 _ALIGNMENT_PROMPT_FIXTURES = {
-    "soul_archetype_seed.md": ["profile_sources"],
-    "soul_seed.md": ["profile_sources", "archetype"],
+    "interaction_posture_seed.md": ["profile_sources"],
+    "soul_seed.md": ["profile_sources", "interaction_posture"],
     "archetype_selection_seed.md": [
         "catalog",
+        "interaction_posture",
         "translation_layer",
-        "archetype",
-        "profile_evidence",
+        "context_registry",
+        "human_source_registry",
+        "stakeholder_registry",
+        "synthetic_perspective_registry",
+        "provenance_policy",
+        "profile_evidence_registry",
+        "domain_tiers",
+        "trigger_vocabulary",
     ],
-    "agent_soul_seed.md": ["agent_definition", "translation_layer", "skill_material"],
+    "agent_soul_seed.md": ["agent_definition", "interaction_posture", "skill_material"],
+    "seed.md": ["skills_content", "agent_souls_content"],
 }
 
 

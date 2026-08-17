@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "counterargument",
+  "name": "counterargument",
+  "paper_label": "counterargument",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": "alternative-perspectives",
+  "variants": [],
+  "role_inputs": [
+    "proposal",
+    "rationale"
+  ],
+  "role_outputs": [
+    "strongest objection",
+    "rebuttal test"
+  ],
+  "prohibitions": [
+    "strawman",
+    "final decide"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "adversarial",
+    "obligations": [
+      "steelman before challenge"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "counterfactual"
+    ],
+    "default_mode": "counterfactual",
+    "forcing_triggers": [
+      "high-impact",
+      "convergence-risk",
+      "conflicting-evidence"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "counterargument"
+    ],
+    "default_mode": "counterargument",
+    "required_triggers": [
+      "high-impact",
+      "uncertainty",
+      "convergence-risk",
+      "user-requested-challenge"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "challenge-rationale",
+        "description": "challenge rationale",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "suppress-alternatives",
+      "final-decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "alternative-perspectives",
+      "second-opinion",
+      "knowledge-checker"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "alternative-perspectives"
+        }
+      ]
+    ],
+    "conflicts": [
+      "consensus-generator",
+      "user-aligner"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "performative dissent",
+      "hostility"
+    ],
+    "mitigations": [
+      "steelman",
+      "source disclosure"
+    ]
+  },
+  "quality_criteria": [
+    "strongest objection is present",
+    "rebuttal test is present",
+    "proposal is steelmanned",
+    "no final decision is made"
+  ],
+  "canonical_skills": [
+    "additive-thinking-partner",
+    "skip-the-default-scripts"
+  ]
+}

@@ -9,7 +9,7 @@ Subcommands:
   build-skills       Generate canonical skills from latest human_profile.md
   enhance-skill      Enhance a skill from source material
   build-tool-specs   Generate tool_specs/ from latest human_profile.md (gated)
-  build-translation-layer  Generate SOUL_ARCHETYPE.md and SOUL.md from both profiles
+  build-translation-layer  Generate INTERACTION_POSTURE.md and SOUL.md from both profiles
   build-agents       Discover agent personas and generate per-agent soul documents
   build-alignment-spec  Generate alignment verification spec from skills and agent souls
   update             Run build-prompts, build-skills, build-translation-layer, build-agents, build-alignment-spec, and build-tool-specs
@@ -161,7 +161,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "build-translation-layer",
-        help="Generate SOUL_ARCHETYPE.md and SOUL.md from both profile layers.",
+        help="Generate INTERACTION_POSTURE.md and SOUL.md from both profile layers.",
     )
 
     return parser

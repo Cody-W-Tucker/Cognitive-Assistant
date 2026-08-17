@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0-proposed",
+  "decision_control_rank": {
+    "human": 0,
+    "shared": 1,
+    "agent": 2
+  },
+  "impact_tiers": {
+    "unknown": {
+      "decision_control_levels": [
+        "human"
+      ],
+      "default_decision_control": "human",
+      "terminal_gate_modes": [
+        "approval"
+      ],
+      "default_terminal_gate_mode": "approval",
+      "within_system_final_decision": false
+    },
+    "high": {
+      "decision_control_levels": [
+        "human"
+      ],
+      "default_decision_control": "human",
+      "terminal_gate_modes": [
+        "approval"
+      ],
+      "default_terminal_gate_mode": "approval",
+      "within_system_final_decision": false
+    },
+    "medium": {
+      "decision_control_levels": [
+        "human",
+        "shared"
+      ],
+      "default_decision_control": "human",
+      "terminal_gate_modes": [
+        "approval",
+        "review"
+      ],
+      "default_terminal_gate_mode": "approval",
+      "within_system_final_decision": true
+    },
+    "low": {
+      "decision_control_levels": [
+        "human",
+        "shared",
+        "agent"
+      ],
+      "default_decision_control": "agent",
+      "terminal_gate_modes": [
+        "approval",
+        "review",
+        "notification"
+      ],
+      "default_terminal_gate_mode": "notification",
+      "within_system_final_decision": true
+    }
+  }
+}

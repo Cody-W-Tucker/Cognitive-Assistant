@@ -3,7 +3,7 @@ Relevant source files
 - [core/config.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/config.py)
 - [profiles/README.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/README.md?plain=1)
 
-The Cognitive Assistant system is built on a unified pipeline in `core/` that is parameterized by **Layer Profiles**. A `LayerProfile` is a static declaration that defines how the pipeline behaves for a specific domain of knowledge—specifically what questions it asks, which prompts it uses for synthesis, and which artifacts it is capable of producing.
+The Cognitive Assistant system is built on a unified pipeline in `core/` that is parameterized by **Layer Profiles**. A `LayerProfile` is a static declaration that defines how the pipeline behaves for a specific domain of knowledge-specifically what questions it asks, which prompts it uses for synthesis, and which artifacts it is capable of producing.
 
 The repository strictly separates **inputs** (located in `profiles/`) from **generated outputs** (located in `workspaces/`). By switching the `--profile` flag in the CLI, the same core logic can perform introspective identity modeling (Existential) or workflow pattern extraction (Operational).
 
@@ -53,7 +53,7 @@ Sources: [core/config.py58-98](https://github.com/Cody-W-Tucker/Cognitive-Assist
 
 ## Existential Profile
 
-The **Existential Profile** is designed for first-person introspective modeling. It focuses on the "Soul" of the assistant—its identity, core frame, and cognitive patterns.
+The **Existential Profile** is designed for first-person introspective modeling. It focuses on the "Soul" of the assistant-its identity, core frame, and cognitive patterns.
 
 - **Purpose**: To synthesize a durable identity based on a "substrate" of personal notes and relational graphs.
 - **Ingestion**: It primarily consumes `graph.json` and focus bundles, which are transformed into `graph_pages.jsonl` and `mention_evidence.jsonl`.
@@ -67,7 +67,7 @@ Sources: [core/config.py128-149](https://github.com/Cody-W-Tucker/Cognitive-Assi
 
 ## Operational Profile
 
-The **Operational Profile** is designed for third-person workflow modeling. It focuses on the "Body" of the assistant—its tasks, tools, and tacit rules of operation.
+The **Operational Profile** is designed for third-person workflow modeling. It focuses on the "Body" of the assistant-its tasks, tools, and tacit rules of operation.
 
 - **Purpose**: To extract workflow patterns, success criteria, and tool specifications from a corpus of activity logs or documentation.
 - **Ingestion**: Enables the `ingest-corpus` pathway to process batch artifacts into evidence packets.
@@ -87,7 +87,7 @@ The **Alignment Profile** is a meta-profile that sits above the Existential and 
 - **Key Artifacts**:
 
 - `SOUL.md`: The definitive persona.
-- `SOUL_ARCHETYPE.md`: The high-level pattern.
+- `INTERACTION_POSTURE.md`: The high-level pattern.
 - `alignment_spec.md`: A verification checklist used to score all other artifacts.
 
 For details on the `soul_seed.md` and the verification lifecycle, see **[Alignment Profile (#3.3)](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/Alignment Profile (#3.3))**.

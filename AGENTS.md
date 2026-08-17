@@ -57,12 +57,17 @@ fail with a clear error rather than silently no-op.
 `workspaces/skills/<profile>/<skill>/SKILL.md` for generated profile skills.
 Manual imports can still live under purpose categories like
 `workspaces/skills/workflow/<skill>/SKILL.md`.
-`build-agents` reads from both profiles, selects applicable archetypes from
-the catalog at `profiles/alignment/archetypes/`, and writes agent persona maps
-and per-agent soul documents to `workspaces/alignment/artifacts/`.
+`build-agents` reads from both profiles, selects roles from the 17-role catalog
+at `profiles/alignment/archetypes/` under the policy in
+`profiles/alignment/domain_policy.json`, and commits a validated
+`agent_plan.json` plus its projections (`persona_map.md` and per-agent soul
+documents) to `workspaces/alignment/artifacts/`. `agent_plan.json` commits last
+and is authoritative only for that generated bundle.
 `build-translation-layer` reads from both profiles and writes the orchestrator
-translation layer (`SOUL_ARCHETYPE.md` and `SOUL.md`) to
-`workspaces/alignment/artifacts/`.
+translation layer (`INTERACTION_POSTURE.md` and `SOUL.md`) to
+`workspaces/alignment/artifacts/`. It owns `INTERACTION_POSTURE.md`;
+`build-agents` only consumes a hash-validated snapshot of it and never
+regenerates, repairs, or reconciles it.
 `build-alignment-spec` reads both unified skills and agent souls and writes the alignment spec.
 `update` runs the full pipeline: per-profile stages (including `build-skills`), then cross-profile
 stages (`build-translation-layer` + `build-agents` + `build-alignment-spec`).

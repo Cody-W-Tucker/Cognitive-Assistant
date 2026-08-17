@@ -95,9 +95,15 @@
         artifacts = {
           alignment = {
             spec = ./workspaces/alignment/artifacts/alignment_spec.md;
-            personaMap = ./workspaces/alignment/artifacts/persona_map.md;
             translationLayer = ./workspaces/alignment/artifacts/SOUL.md;
-            translationArchetype = ./workspaces/alignment/artifacts/SOUL_ARCHETYPE.md;
+            interactionPosture = ./workspaces/alignment/artifacts/INTERACTION_POSTURE.md;
+            # persona_map.md is a generated plan projection: it exists only
+            # after `build-agents` commits an agent_plan.json.
+          }
+          // nixpkgs.lib.optionalAttrs
+            (builtins.pathExists ./workspaces/alignment/artifacts/persona_map.md)
+            { personaMap = ./workspaces/alignment/artifacts/persona_map.md; }
+          // {
             agentSouls = agentSoulsByName;
             agentSoulNames = builtins.attrNames agentSoulsByName;
             toolSpecs = {

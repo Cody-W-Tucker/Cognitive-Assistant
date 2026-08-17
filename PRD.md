@@ -82,7 +82,7 @@ The resulting system will have four layers:
 
 1. Identity layer
    `SOUL.md` (orchestrator translation-layer constitution),
-   `SOUL_ARCHETYPE.md` (inferred archetype), `persona_map.md`,
+   `INTERACTION_POSTURE.md` (inferred archetype), `persona_map.md`,
    per-agent souls in `agents/<slug>.md`, `alignment_spec.md`, related
    prompts.
 2. Operational layer
@@ -229,7 +229,7 @@ The expected behavior is selective rebuild, not full destructive replacement.
 
 ### Generated artifacts
 
-- `workspaces/alignment/artifacts/SOUL_ARCHETYPE.md`
+- `workspaces/alignment/artifacts/INTERACTION_POSTURE.md`
 - `workspaces/alignment/artifacts/SOUL.md`
 - `workspaces/alignment/artifacts/persona_map.md`
 - `workspaces/alignment/artifacts/agents/<slug>.md`

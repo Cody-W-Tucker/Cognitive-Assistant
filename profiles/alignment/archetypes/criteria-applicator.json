@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "criteria-applicator",
+  "name": "criteria applicator",
+  "paper_label": "criteria applicator",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "criteria",
+    "evidence",
+    "alternatives"
+  ],
+  "role_outputs": [
+    "scored application",
+    "evidence gaps"
+  ],
+  "prohibitions": [
+    "invent criteria",
+    "invent evidence"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "external"
+    ],
+    "default_mode": "external",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "criteria",
+    "obligations": [
+      "cite evidence per criterion"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "criteria"
+    ],
+    "default_mode": "criteria",
+    "forcing_triggers": [
+      "explicit-criteria-present"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "adjudicate"
+    ],
+    "default_mode": "adjudicate",
+    "required_triggers": [
+      "conflicting-evidence"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "apply-criteria",
+        "description": "apply supplied criteria",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "define-values",
+      "final-decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "formalizer",
+      "knowledge-checker",
+      "judge",
+      "decision-scaffolder"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "formalizer"
+        }
+      ],
+      [
+        {
+          "kind": "criteria_present",
+          "criteria_key": "decision-criteria"
+        }
+      ]
+    ],
+    "conflicts": [
+      "user-aligner",
+      "role-taker"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "rubric theater",
+      "uncited scoring"
+    ],
+    "mitigations": [
+      "criterion-source map",
+      "defer gaps"
+    ]
+  },
+  "quality_criteria": [
+    "scored application is present",
+    "evidence gaps are present",
+    "criteria and evidence are not invented",
+    "each criterion has evidence citation"
+  ],
+  "canonical_skills": [
+    "decision-calibration",
+    "verify-before-trust"
+  ]
+}

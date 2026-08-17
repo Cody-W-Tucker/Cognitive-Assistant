@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "formalizer",
+  "name": "formalizer",
+  "paper_label": "formalizer",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "ambiguous rule",
+    "criteria",
+    "model"
+  ],
+  "role_outputs": [
+    "formal representation",
+    "constraints",
+    "testable rule"
+  ],
+  "prohibitions": [
+    "claim completeness",
+    "choose values"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "shared"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "formal",
+    "obligations": [
+      "define terms and constraints"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "formal"
+    ],
+    "default_mode": "formal",
+    "forcing_triggers": [
+      "uncertainty"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "none"
+    ],
+    "default_mode": "none",
+    "required_triggers": []
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "formalize-rules",
+        "description": "formalize rules",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "choose-values",
+      "final-decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "model",
+      "criteria-applicator",
+      "data-processor",
+      "decision-scaffolder"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "role-taker",
+      "user-aligner"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "false rigor",
+      "omitted assumptions"
+    ],
+    "mitigations": [
+      "definition review",
+      "assumptions list"
+    ]
+  },
+  "quality_criteria": [
+    "formal representation is present",
+    "constraints are present",
+    "testable rule is present",
+    "model completeness is not claimed"
+  ],
+  "canonical_skills": [
+    "scope-framing",
+    "complexity-reduction"
+  ]
+}

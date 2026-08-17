@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "judge",
+  "name": "judge",
+  "paper_label": "judge",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "alternatives",
+    "criteria record",
+    "verified findings"
+  ],
+  "role_outputs": [
+    "reasoned recommendation",
+    "decision rationale"
+  ],
+  "prohibitions": [
+    "bypass gate",
+    "claim external authority"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared",
+      "agent"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "criteria",
+    "obligations": [
+      "explain basis and uncertainty"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "adjudicate"
+    ],
+    "default_mode": "adjudicate",
+    "required_triggers": [
+      "high-impact",
+      "conflicting-evidence",
+      "ai-recommendation-present"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "synthesize-system-position",
+        "description": "synthesize within-system position",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      },
+      {
+        "id": "issue-final-system-decision",
+        "description": "issue permitted within-system final decision",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "external-action",
+      "override-human-gate"
+    ],
+    "final_decision_eligible": true
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "criteria-applicator",
+      "knowledge-checker",
+      "formalizer",
+      "communicator"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "criteria-applicator"
+        }
+      ],
+      [
+        {
+          "kind": "criteria_present",
+          "criteria_key": "decision-criteria"
+        }
+      ]
+    ],
+    "conflicts": [
+      "role-taker",
+      "user-aligner"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "authority inflation",
+      "premature closure"
+    ],
+    "mitigations": [
+      "policy gate",
+      "dissent record"
+    ]
+  },
+  "quality_criteria": [
+    "reasoned recommendation is present",
+    "decision rationale is present",
+    "human gate is not bypassed",
+    "external authority is not claimed"
+  ],
+  "canonical_skills": [
+    "decision-calibration",
+    "verify-before-trust",
+    "decision-ready-not-impressive"
+  ]
+}

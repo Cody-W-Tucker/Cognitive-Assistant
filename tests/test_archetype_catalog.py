@@ -1,161 +1,288 @@
 #!/usr/bin/env python3
-"""Tests for the archetype catalog loader and validation."""
+"""Strict catalog, scalar/closed type, role-composition, and domain-policy tests."""
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
-import json
 from pathlib import Path
 
 from core.archetype_catalog import (
-    ArchetypeSpec,
+    ARCHETYPES_DIR,
+    CATALOG_SLUGS,
+    PARENT_LINKS,
+    VARIANT_RECORDS,
+    canonical_role_record,
     load_archetype_catalog,
-    validate_archetype_slugs,
-    validate_skill_assignments,
+    validate_role_slug,
 )
+from core.agent_plan_validator import ValidationError, load_domain_policy
+
+LEGACY = {"pattern-scout", "constraint-reader", "commitment-anchor"}
+
+VARIANT_IDS = {
+    "explainer": {"internal-model", "external-model"},
+    "knowledge-checker": {"internal-knowledge", "external-knowledge"},
+}
 
 
-class LoadArchetypeCatalogTests(unittest.TestCase):
-    def test_loads_real_catalog(self) -> None:
-        """The checked-in catalog must load without error."""
+class CatalogLoadTests(unittest.TestCase):
+    def test_loads_exactly_17_roles(self) -> None:
         catalog = load_archetype_catalog()
-        self.assertGreaterEqual(len(catalog), 3)
-        self.assertIn("pattern-scout", catalog)
-        self.assertIn("constraint-reader", catalog)
-        self.assertIn("commitment-anchor", catalog)
+        self.assertEqual(set(catalog), CATALOG_SLUGS)
+        self.assertEqual(len(catalog), 17)
 
-    def test_all_archetypes_have_required_fields(self) -> None:
+    def test_all_records_match_canonical(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug in CATALOG_SLUGS:
+            self.assertEqual(catalog[slug], canonical_role_record(slug), slug)
+
+    def test_legacy_files_absent(self) -> None:
+        for slug in LEGACY:
+            self.assertFalse((ARCHETYPES_DIR / f"{slug}.json").exists(), slug)
+
+    def test_schema_version_literal(self) -> None:
         catalog = load_archetype_catalog()
         for slug, spec in catalog.items():
-            self.assertEqual(spec.slug, slug)
-            self.assertTrue(spec.name, f"{slug} missing name")
-            self.assertTrue(spec.purpose, f"{slug} missing purpose")
-            self.assertTrue(spec.job_to_be_done, f"{slug} missing job_to_be_done")
-            self.assertTrue(spec.outcome, f"{slug} missing outcome")
-            self.assertTrue(spec.scope_triggers, f"{slug} missing scope_triggers")
-            self.assertTrue(spec.scope_outputs, f"{slug} missing scope_outputs")
-            self.assertTrue(spec.out_of_scope, f"{slug} missing out_of_scope")
-            self.assertTrue(spec.canonical_skills, f"{slug} missing canonical_skills")
+            self.assertEqual(spec["schema_version"], "1.0-proposed", slug)
 
-    def test_contract_text_is_renderable(self) -> None:
+    def test_parent_links_only_four_nonnull(self) -> None:
         catalog = load_archetype_catalog()
-        for spec in catalog.values():
-            text = spec.contract_text()
-            self.assertIn(spec.name, text)
-            self.assertIn(spec.slug, text)
+        expected = {k: v for k, v in PARENT_LINKS.items()}
+        for slug, spec in catalog.items():
+            self.assertEqual(spec["parent"], expected[slug], slug)
 
-    def test_missing_directory_raises(self) -> None:
-        with self.assertRaises(FileNotFoundError):
-            load_archetype_catalog(Path("/nonexistent/catalog"))
+    def test_variant_records_exact_and_literal(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            expected = VARIANT_RECORDS.get(slug, [])
+            self.assertEqual(spec["variants"], expected, slug)
+            if slug in VARIANT_IDS:
+                self.assertEqual({v["id"] for v in spec["variants"]}, VARIANT_IDS[slug], slug)
+                for v in spec["variants"]:
+                    self.assertIn(v["provenance_mode"], {"internal-model", "external-model",
+                                                         "internal-knowledge", "external-knowledge"})
+            else:
+                self.assertEqual(spec["variants"], [], slug)
 
-    def test_empty_directory_raises(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(ValueError):
-                load_archetype_catalog(Path(tmp))
+    def test_actions_internal_unique_not_prohibited(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            ids = [a["id"] for a in spec["authority"]["actions"]]
+            self.assertEqual(len(ids), len(set(ids)), f"{slug}: duplicate action id")
+            for action in spec["authority"]["actions"]:
+                self.assertEqual(action["scope"], "internal", f"{slug}: {action['id']} not internal")
+            prohibited = spec["authority"]["prohibited_action_ids"]
+            self.assertEqual(len(prohibited), len(set(prohibited)), f"{slug}: dup prohibited")
+            overlap = set(ids) & set(prohibited)
+            self.assertFalse(overlap, f"{slug}: action id also prohibited: {overlap}")
+
+    def test_max_secondary_is_three(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            self.assertEqual(spec["composition"]["max_secondary"], 3, slug)
+
+    def test_social_override_rules(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            override = spec["social"]["role_override"]
+            if slug == "role-taker":
+                self.assertEqual(override, "service", slug)
+            elif slug == "user-aligner":
+                self.assertEqual(override, "advocate", slug)
+            else:
+                self.assertIsNone(override, slug)
+
+    def test_judge_only_final_eligible(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            expected = slug == "judge"
+            self.assertEqual(spec["authority"]["final_decision_eligible"], expected, slug)
+
+    def test_prerequisites_discriminated(self) -> None:
+        catalog = load_archetype_catalog()
+        seen_kinds = set()
+        valid = {"role_present", "input_present", "criteria_present",
+                 "external_model_output_present", "group_input_count",
+                 "registered_decision_present", "profile_context_present"}
+        for slug, spec in catalog.items():
+            for group in spec["composition"]["prerequisite_groups"]:
+                for pre in group:
+                    self.assertIn(pre["kind"], valid, f"{slug}: unknown prereq kind {pre['kind']}")
+                    seen_kinds.add(pre["kind"])
+                    if pre["kind"] == "role_present":
+                        self.assertIn(pre["role"], CATALOG_SLUGS)
+                    elif pre["kind"] == "criteria_present":
+                        self.assertIn("criteria_key", pre)
+                    elif pre["kind"] == "registered_decision_present":
+                        self.assertIn("decision_key", pre)
+                    elif pre["kind"] == "input_present":
+                        self.assertIn("input", pre)
+        # Kinds actually exercised by the normative ledger.
+        for expected_kind in {"role_present", "input_present", "criteria_present",
+                              "registered_decision_present"}:
+            self.assertIn(expected_kind, seen_kinds)
+
+    def test_decision_control_consistency(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            dc = spec["decision_control"]
+            self.assertIn(dc["default"], dc["allowed"], slug)
+            self.assertIn(spec["knowledge"]["default_mode"], spec["knowledge"]["allowed_modes"], slug)
+            cog = spec["cognitive"]
+            self.assertIn(cog["default_mode"], cog["supported_modes"], slug)
+            ad = spec["agreement_disagreement"]
+            self.assertIn(ad["default_mode"], ad["supported_modes"], slug)
+
+    def test_arrays_unique_and_ordered(self) -> None:
+        catalog = load_archetype_catalog()
+        for slug, spec in catalog.items():
+            for field in ("role_inputs", "role_outputs", "prohibitions",
+                          "quality_criteria", "canonical_skills"):
+                values = spec[field]
+                self.assertEqual(len(values), len(set(values)), f"{slug}.{field} duplicate")
+
+    def test_validate_role_slug(self) -> None:
+        validate_role_slug("judge")
+        with self.assertRaises(ValidationError):
+            validate_role_slug("not-a-role")
+
+
+class CatalogStrictRejectionTests(unittest.TestCase):
+    def _write(self, tmpdir: Path, slug: str, record: dict) -> None:
+        (tmpdir / f"{slug}.json").write_text(json.dumps(record), encoding="utf-8")
+
+    def _good(self, slug: str) -> dict:
+        return canonical_role_record(slug)
+
+    def test_unknown_key_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["extra_field"] = "x"
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError) as ctx:
+                load_archetype_catalog(tmp)
+            self.assertIn("unknown", str(ctx.exception))
+
+    def test_missing_key_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            del rec["knowledge"]
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError) as ctx:
+                load_archetype_catalog(tmp)
+            self.assertIn("missing", str(ctx.exception))
+
+    def test_wrong_scalar_type_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["role_inputs"] = "not-a-list"
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_invalid_enum_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["decision_control"]["default"] = "autonomous"
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_duplicate_array_member_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["role_inputs"] = ["context", "context"]
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_invalid_id_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["slug"] = "Bad_Slug"
+            self._write(tmp, "Bad_Slug", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_variant_mismatch_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["variants"] = [{"id": "x", "label": "X", "provenance_mode": "internal-model"}]
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError) as ctx:
+                load_archetype_catalog(tmp)
+            self.assertIn("variants", str(ctx.exception))
+
+    def test_external_action_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["authority"]["actions"][0]["scope"] = "external"
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_social_override_on_wrong_role_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["social"]["role_override"] = "service"
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
+
+    def test_max_secondary_deviation_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            rec["composition"]["max_secondary"] = 2
+            self._write(tmp, "model", rec)
+            with self.assertRaises(ValidationError):
+                load_archetype_catalog(tmp)
 
     def test_filename_slug_mismatch_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            (tmpdir / "wrong-name.json").write_text(
-                json.dumps(_valid_contract("different-name")),
-                encoding="utf-8",
-            )
-            with self.assertRaises(ValueError) as ctx:
-                load_archetype_catalog(tmpdir)
-            self.assertIn("filename must match slug", str(ctx.exception))
-
-    def test_rejects_malformed_json(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            (tmpdir / "test.json").write_text("{not json", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "not valid JSON"):
-                load_archetype_catalog(tmpdir)
-
-    def test_rejects_scalar_where_list_is_required(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            contract = _valid_contract("test")
-            contract["canonical_skills"] = "mode-detection"
-            (tmpdir / "test.json").write_text(json.dumps(contract), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "canonical_skills.*list"):
-                load_archetype_catalog(tmpdir)
-
-    def test_rejects_empty_or_duplicate_skill_identifiers(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            contract = _valid_contract("test")
-            contract["canonical_skills"] = ["mode-detection", "mode-detection"]
-            (tmpdir / "test.json").write_text(json.dumps(contract), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "canonical_skills.*duplicate"):
-                load_archetype_catalog(tmpdir)
-
-            contract["canonical_skills"] = [""]
-            (tmpdir / "test.json").write_text(json.dumps(contract), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "canonical_skills.*non-empty"):
-                load_archetype_catalog(tmpdir)
-
-    def test_rejects_unknown_skill_identifier(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
-            contract = _valid_contract("test")
-            contract["canonical_skills"] = ["does-not-exist"]
-            (tmpdir / "test.json").write_text(json.dumps(contract), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "unknown canonical skill.*does-not-exist"):
-                load_archetype_catalog(tmpdir)
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            rec = self._good("model")
+            self._write(tmp, "wrong-name", rec)
+            with self.assertRaises(ValidationError) as ctx:
+                load_archetype_catalog(tmp)
+            self.assertIn("filename must match", str(ctx.exception))
 
 
-def _valid_contract(slug: str) -> dict:
-    return {
-        "slug": slug,
-        "name": "Test",
-        "purpose": "Purpose",
-        "job_to_be_done": "Job",
-        "outcome": "Outcome",
-        "scope": {
-            "triggers": ["Trigger"],
-            "outputs": ["Output"],
-            "out_of_scope": ["Out"],
-        },
-        "authority": {"can_decide": ["Decide"], "must_defer": ["Defer"]},
-        "approval_boundaries": "Approval",
-        "quality_expectations": "Quality",
-        "evidence_expectations": "Evidence",
-        "canonical_skills": ["mode-detection"],
-    }
+class DomainPolicyTests(unittest.TestCase):
+    def test_domain_policy_loads_and_matches(self) -> None:
+        policy = load_domain_policy()
+        self.assertEqual(policy["schema_version"], "1.0-proposed")
+        self.assertEqual(policy["decision_control_rank"], {"human": 0, "shared": 1, "agent": 2})
+        self.assertEqual(set(policy["impact_tiers"]), {"unknown", "high", "medium", "low"})
 
+    def test_domain_policy_tier_structure(self) -> None:
+        policy = load_domain_policy()
+        low = policy["impact_tiers"]["low"]
+        self.assertEqual(low["decision_control_levels"], ["human", "shared", "agent"])
+        self.assertEqual(low["default_decision_control"], "agent")
+        self.assertEqual(low["within_system_final_decision"], True)
+        unknown = policy["impact_tiers"]["unknown"]
+        self.assertEqual(unknown["decision_control_levels"], ["human"])
 
-class ValidateArchetypeSlugsTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.catalog = {
-            "a": ArchetypeSpec(
-                slug="a", name="A", purpose="p", job_to_be_done="j",
-                outcome="o", scope_triggers=[], scope_outputs=[],
-                out_of_scope=[], authority_can_decide=[],
-                authority_must_defer=[], approval_boundaries="",
-                quality_expectations="", evidence_expectations="",
-                canonical_skills=[],
-            ),
-        }
-
-    def test_known_slugs_pass(self) -> None:
-        validate_archetype_slugs(["a"], self.catalog)
-
-    def test_unknown_slug_fails(self) -> None:
-        with self.assertRaises(ValueError) as ctx:
-            validate_archetype_slugs(["unknown"], self.catalog)
-        self.assertIn("unknown archetype", str(ctx.exception).lower())
-        self.assertIn("unknown", str(ctx.exception))
-
-
-class ValidateSkillAssignmentsTests(unittest.TestCase):
-    def test_valid_skill_slug_format_required(self) -> None:
-        with self.assertRaises(ValueError):
-            validate_skill_assignments("test", ["INVALID_SLUG"])
-
-    def test_duplicate_skill_slug_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "duplicate canonical skill"):
-            validate_skill_assignments("test", ["mode-detection", "mode-detection"])
+    def test_domain_policy_tamper_rejected(self) -> None:
+        import copy
+        policy = load_domain_policy()
+        tampered = copy.deepcopy(policy)
+        tampered["impact_tiers"]["low"]["default_decision_control"] = "human"
+        from core.agent_plan_validator import parse_domain_policy
+        with self.assertRaises(ValidationError):
+            parse_domain_policy(tampered)
 
 
 if __name__ == "__main__":

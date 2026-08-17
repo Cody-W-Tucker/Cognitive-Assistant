@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "alternative-perspectives",
+  "name": "alternative perspectives",
+  "paper_label": "alternative perspectives",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "decision framing",
+    "stakeholders",
+    "evidence"
+  ],
+  "role_outputs": [
+    "distinct perspectives",
+    "assumptions"
+  ],
+  "prohibitions": [
+    "manufacture stakeholder voice",
+    "collapse dissent"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "plural",
+    "obligations": [
+      "at least two materially distinct frames"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "counterfactual"
+    ],
+    "default_mode": "counterfactual",
+    "forcing_triggers": [
+      "convergence-risk",
+      "conflicting-evidence"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "alternatives"
+    ],
+    "default_mode": "alternatives",
+    "required_triggers": [
+      "convergence-risk",
+      "conflicting-evidence"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "generate-frames",
+        "description": "generate distinct frames",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "impersonate-stakeholder",
+      "collapse-dissent"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "counterargument",
+      "minority-opinion",
+      "second-opinion",
+      "user-aligner"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "consensus-generator",
+      "role-taker"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "token diversity",
+      "stakeholder substitution"
+    ],
+    "mitigations": [
+      "synthetic disclosure",
+      "independence boundary"
+    ]
+  },
+  "quality_criteria": [
+    "at least two distinct perspectives are present",
+    "assumptions are present",
+    "stakeholder voice is not manufactured",
+    "synthetic disclosure is present when needed"
+  ],
+  "canonical_skills": [
+    "additive-thinking-partner",
+    "skip-the-default-scripts"
+  ]
+}

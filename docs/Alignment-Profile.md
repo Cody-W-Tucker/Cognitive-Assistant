@@ -2,7 +2,7 @@
 Relevant source files
 - [profiles/alignment/README.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md?plain=1)
 - [profiles/alignment/prompts/seed.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/seed.md?plain=1)
-- [profiles/alignment/prompts/soul_archetype_seed.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_archetype_seed.md?plain=1)
+- [profiles/alignment/prompts/interaction_posture_seed.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/interaction_posture_seed.md?plain=1)
 - [profiles/alignment/prompts/soul_seed.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1)
 
 The **Alignment Profile** is a meta-profile that sits above the layer profile system. Unlike the Existential and Operational profiles which focus on specific data domains (identity vs. workflow), the Alignment profile consumes the outputs of both layers to synthesize a unified identity and a personalized verification standard.
@@ -27,7 +27,7 @@ Title: Alignment Profile Data Integration
 ```mermaid
 flowchart LR
     SOUL["workspaces/alignment/artifacts/SOUL.md"]
-    ARCH["workspaces/alignment/artifacts/SOUL_ARCHETYPE.md"]
+    ARCH["workspaces/alignment/artifacts/INTERACTION_POSTURE.md"]
     SPEC["workspaces/alignment/artifacts/alignment_spec.md"]
     subgraph subGraph2 ["Artifact Store"]
         HP_E["workspaces/existential/human_profile.md"]
@@ -60,11 +60,11 @@ The system generates a durable identity in two stages: Archetype Inference and S
 
 ### 1. Archetype Inference
 
-The system first uses `soul_archetype_seed.md` to infer a single recognizable human counterpart (e.g., "The Seasoned Architect" or "The Direct Editor"). This archetype acts as the "center of gravity" to prevent the AI from becoming a generic assistant.
+The system first uses `interaction_posture_seed.md` to infer a single recognizable human counterpart (e.g., "The Seasoned Architect" or "The Direct Editor"). This archetype acts as the "center of gravity" to prevent the AI from becoming a generic assistant.
 
 - **Input**: Existential and Operational `human_profile.md`.
-- **Logic**: Uses "positive inversion" to turn user misfits into agent strengths [profiles/alignment/prompts/soul_archetype_seed.md23-30](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_archetype_seed.md?plain=1#L23-L30)
-- **Output**: `SOUL_ARCHETYPE.md`.
+- **Logic**: Uses "positive inversion" to turn user misfits into agent strengths [profiles/alignment/prompts/interaction_posture_seed.md23-30](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/interaction_posture_seed.md?plain=1#L23-L30)
+- **Output**: `INTERACTION_POSTURE.md`.
 
 ### 2. SOUL Composition
 
@@ -73,7 +73,7 @@ Using `soul_seed.md`, the system writes the final `SOUL.md` from the perspective
 - **Tone**: First-person, direct, and concrete [profiles/alignment/prompts/soul_seed.md38-43](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L38-L43)
 - **Sections**: Includes "Core Truths", "Boundaries", and a "Detect Mode" section for real-time routing logic [profiles/alignment/prompts/soul_seed.md49-52](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L49-L52)
 
-Sources: [profiles/alignment/prompts/soul_archetype_seed.md1-21](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_archetype_seed.md?plain=1#L1-L21)[profiles/alignment/prompts/soul_seed.md1-21](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L1-L21)
+Sources: [profiles/alignment/prompts/interaction_posture_seed.md1-21](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/interaction_posture_seed.md?plain=1#L1-L21)[profiles/alignment/prompts/soul_seed.md1-21](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L1-L21)
 
 ## Alignment Specification
 
@@ -153,7 +153,7 @@ The Alignment profile is managed through specific subcommands of the core pipeli
 
 | Command | Action | Output |
 | --- | --- | --- |
-| `python -m core build-soul` | Merges human profiles into identity documents. | `SOUL.md`, `SOUL_ARCHETYPE.md` |
+| `python -m core build-translation-layer` | Generates the orchestrator soul and interaction posture from both profiles. | `SOUL.md`, `INTERACTION_POSTURE.md` |
 | `python -m core build-alignment-spec` | Compiles skills into the verification spec. | `alignment_spec.md` |
 
 Sources: [profiles/alignment/README.md34-55](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md?plain=1#L34-L55)

@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "second-opinion",
+  "name": "second opinion",
+  "paper_label": "second opinion",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "proposal",
+    "evidence"
+  ],
+  "role_outputs": [
+    "independent assessment",
+    "confidence difference"
+  ],
+  "prohibitions": [
+    "echo source",
+    "make final decision"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "independent",
+    "obligations": [
+      "independent evaluation"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "counterfactual"
+    ],
+    "default_mode": "counterfactual",
+    "forcing_triggers": [
+      "high-impact",
+      "uncertainty",
+      "convergence-risk"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "second-opinion"
+    ],
+    "default_mode": "second-opinion",
+    "required_triggers": [
+      "high-impact",
+      "uncertainty",
+      "convergence-risk",
+      "user-requested-challenge"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "independently-assess",
+        "description": "make independent assessment",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "aggregate-consensus",
+      "make-final-decision"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "knowledge-checker",
+      "alternative-perspectives",
+      "counterargument",
+      "criteria-applicator"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "consensus-generator",
+      "user-aligner"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "anchoring",
+      "false independence"
+    ],
+    "mitigations": [
+      "isolation boundary",
+      "disclose sources"
+    ]
+  },
+  "quality_criteria": [
+    "independent assessment is present",
+    "confidence difference is present",
+    "source is not echoed",
+    "independence boundary is enforced"
+  ],
+  "canonical_skills": [
+    "additive-thinking-partner",
+    "verify-before-trust",
+    "failure-recovery"
+  ]
+}

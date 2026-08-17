@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "consensus-generator",
+  "name": "consensus generator",
+  "paper_label": "consensus generator",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "disclosed positions",
+    "dissent",
+    "criteria"
+  ],
+  "role_outputs": [
+    "consensus record",
+    "unresolved issues"
+  ],
+  "prohibitions": [
+    "erase minority",
+    "decide alone"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "consensus",
+    "obligations": [
+      "preserve agreement and disagreement"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": [
+      "minority input",
+      "unresolved disagreement preserved"
+    ]
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "consensus"
+    ],
+    "default_mode": "consensus",
+    "required_triggers": [
+      "majority-opinion",
+      "convergence-risk"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "synthesize-agreement",
+        "description": "synthesize stated agreement",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "suppress-minority",
+      "final-decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "minority-opinion",
+      "alternative-perspectives",
+      "counterargument",
+      "communicator"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "alternative-perspectives"
+        },
+        {
+          "kind": "role_present",
+          "role": "minority-opinion"
+        }
+      ]
+    ],
+    "conflicts": [
+      "second-opinion",
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "false consensus",
+      "majority pressure"
+    ],
+    "mitigations": [
+      "required minority input",
+      "gate record"
+    ]
+  },
+  "quality_criteria": [
+    "consensus record is present",
+    "unresolved issues are present",
+    "minority is not erased",
+    "gate record preserves disagreement"
+  ],
+  "canonical_skills": []
+}

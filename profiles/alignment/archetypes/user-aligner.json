@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "user-aligner",
+  "name": "user aligner",
+  "paper_label": "user aligner",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "operator goals",
+    "values",
+    "corrections"
+  ],
+  "role_outputs": [
+    "stated preference map",
+    "alignment check"
+  ],
+  "prohibitions": [
+    "override operator",
+    "create fake consensus"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "shared"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "label assumptions and limits"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "direct"
+    ],
+    "default_mode": "direct",
+    "forcing_triggers": []
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": "advocate"
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "align"
+    ],
+    "default_mode": "align",
+    "required_triggers": [
+      "preference-conflict"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "restate-preferences",
+        "description": "restate preferences",
+        "min_decision_control": "human",
+        "scope": "internal"
+      },
+      {
+        "id": "flag-preference-conflict",
+        "description": "flag preference conflict",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "override-operator",
+      "create-fake-consensus"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "role-taker",
+      "decision-scaffolder",
+      "communicator",
+      "implicit-reasoner"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "registered_decision_present",
+          "decision_key": "operator-decision"
+        }
+      ]
+    ],
+    "conflicts": [
+      "counterargument",
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "sycophancy",
+      "preference invention"
+    ],
+    "mitigations": [
+      "quote back",
+      "preserve dissent"
+    ]
+  },
+  "quality_criteria": [
+    "stated preference map is present",
+    "alignment check is present",
+    "operator is not overridden",
+    "dissent is preserved"
+  ],
+  "canonical_skills": [
+    "bind-to-operator",
+    "relational-orientation"
+  ]
+}

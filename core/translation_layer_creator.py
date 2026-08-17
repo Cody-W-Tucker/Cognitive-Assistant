@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
-"""Generate the translation layer artifacts: SOUL_ARCHETYPE.md and SOUL.md.
+"""Generate the translation layer artifacts: INTERACTION_POSTURE.md and SOUL.md.
 
 The translation layer is the cross-profile bridge between the raw profile
 sources and the specialist agent system. It distills the existential and
 operational human profiles into two artifacts:
 
-  1. SOUL_ARCHETYPE.md — the single archetypal counterpart type most deeply
+  1. INTERACTION_POSTURE.md - the durable counterpart posture most deeply
      suited to this user over years.
-  2. SOUL.md           — the durable orchestrator soul: the user-fit
+  2. SOUL.md                - the durable orchestrator soul: the user-fit
      constitution, mode-routing guidance, and operating commitments that
      specialists inherit.
 
 Pipeline:
-  1. Archetype inference — both profile human_profile artifacts + the
-     archetype seed prompt produce SOUL_ARCHETYPE.md.
-  2. Soul synthesis      — both profile human_profile artifacts + the
-     inferred archetype + the soul seed prompt produce SOUL.md.
+  1. Posture inference - both profile human_profile artifacts + the
+     interaction posture seed prompt produce INTERACTION_POSTURE.md.
+  2. Soul synthesis    - both profile human_profile artifacts + the
+     inferred posture + the soul seed prompt produce SOUL.md.
 
 Outputs:
-  workspaces/alignment/artifacts/SOUL_ARCHETYPE.md
+  workspaces/alignment/artifacts/INTERACTION_POSTURE.md
   workspaces/alignment/artifacts/SOUL.md
+
+This module owns interaction posture generation. ``build-agents`` only reads a
+hash-validated snapshot of the posture; it never regenerates, repairs, or
+reconciles it.
 
 This command sits above the profile system: it reads from both registered
 profiles but does not belong to either. It is invoked without --profile.
@@ -40,42 +44,42 @@ from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
 
-ARCHETYPE_SEED_PATH = (
-    ROOT_DIR / "profiles" / "alignment" / "prompts" / "soul_archetype_seed.md"
+POSTURE_SEED_PATH = (
+    ROOT_DIR / "profiles" / "alignment" / "prompts" / "interaction_posture_seed.md"
 )
 SOUL_SEED_PATH = ROOT_DIR / "profiles" / "alignment" / "prompts" / "soul_seed.md"
 
 OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
 SOUL_OUTPUT_FILE = OUTPUT_DIR / "SOUL.md"
-ARCHETYPE_OUTPUT_FILE = OUTPUT_DIR / "SOUL_ARCHETYPE.md"
+POSTURE_OUTPUT_FILE = OUTPUT_DIR / "INTERACTION_POSTURE.md"
 
 MAX_SOUL_OUTPUT_TOKENS = 2400
-MAX_ARCHETYPE_OUTPUT_TOKENS = 6000
+MAX_POSTURE_OUTPUT_TOKENS = 6000
 
 
 def translation_layer_paths() -> tuple[Path, Path]:
-    """Return (SOUL.md path, SOUL_ARCHETYPE.md path)."""
-    return SOUL_OUTPUT_FILE, ARCHETYPE_OUTPUT_FILE
+    """Return (SOUL.md path, INTERACTION_POSTURE.md path)."""
+    return SOUL_OUTPUT_FILE, POSTURE_OUTPUT_FILE
 
 
 def load_translation_layer() -> tuple[str, str]:
     """Load the generated translation layer artifacts from disk.
 
-    Returns (soul_content, archetype_content). Raises FileNotFoundError if
-    either artifact is missing.
+    Returns (soul_content, interaction_posture_content). Raises
+    FileNotFoundError if either artifact is missing.
     """
-    soul_path, archetype_path = translation_layer_paths()
+    soul_path, posture_path = translation_layer_paths()
     if not soul_path.exists():
         raise FileNotFoundError(
             f"Translation layer SOUL.md not found at {soul_path}. "
             "Run `python -m core build-translation-layer` first."
         )
-    if not archetype_path.exists():
+    if not posture_path.exists():
         raise FileNotFoundError(
-            f"Translation layer SOUL_ARCHETYPE.md not found at {archetype_path}. "
+            f"Translation layer INTERACTION_POSTURE.md not found at {posture_path}. "
             "Run `python -m core build-translation-layer` first."
         )
-    return soul_path.read_text(encoding="utf-8"), archetype_path.read_text(encoding="utf-8")
+    return soul_path.read_text(encoding="utf-8"), posture_path.read_text(encoding="utf-8")
 
 
 def _strip_code_fences(response: str) -> str:
@@ -182,37 +186,39 @@ class TranslationLayerCreator:
         """Generate both translation layer artifacts and write them to disk.
 
         The artifacts are written to the canonical paths under
-        ``workspaces/alignment/artifacts/``. Returns (soul_path, archetype_path).
+        ``workspaces/alignment/artifacts/``. Returns (soul_path, posture_path).
         Raises ``ValueError`` if either LLM stage returns empty content so the
         invalid output is never persisted.
         """
         profile_sources = load_profile_sources()
 
-        archetype = await self._generate_archetype(profile_sources)
-        _write_artifact(ARCHETYPE_OUTPUT_FILE, archetype)
-        print(f"Info: Wrote translation archetype to {ARCHETYPE_OUTPUT_FILE}")
+        posture = await self._generate_interaction_posture(profile_sources)
+        _write_artifact(POSTURE_OUTPUT_FILE, posture)
+        print(f"Info: Wrote interaction posture to {POSTURE_OUTPUT_FILE}")
 
-        soul = await self._generate_soul(profile_sources, archetype)
+        soul = await self._generate_soul(profile_sources, posture)
         _write_artifact(SOUL_OUTPUT_FILE, soul)
         print(f"Info: Wrote translation layer soul to {SOUL_OUTPUT_FILE}")
 
-        return SOUL_OUTPUT_FILE, ARCHETYPE_OUTPUT_FILE
+        return SOUL_OUTPUT_FILE, POSTURE_OUTPUT_FILE
 
-    async def _generate_archetype(self, profile_sources: str) -> str:
-        archetype_seed = _load_text_file(ARCHETYPE_SEED_PATH, "Translation archetype seed")
-        prompt = archetype_seed.format(profile_sources=profile_sources)
+    async def _generate_interaction_posture(self, profile_sources: str) -> str:
+        posture_seed = _load_text_file(POSTURE_SEED_PATH, "Interaction posture seed")
+        prompt = posture_seed.format(profile_sources=profile_sources)
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,
             temperature=self.api.TEMPERATURE,
-            max_output_tokens=MAX_ARCHETYPE_OUTPUT_TOKENS,
+            max_output_tokens=MAX_POSTURE_OUTPUT_TOKENS,
         )
         stripped = _strip_code_fences(response)
-        return _validate_generated_content(stripped, artifact_label="archetype")
+        return _validate_generated_content(stripped, artifact_label="interaction posture")
 
-    async def _generate_soul(self, profile_sources: str, archetype: str) -> str:
+    async def _generate_soul(self, profile_sources: str, interaction_posture: str) -> str:
         soul_seed = _load_text_file(SOUL_SEED_PATH, "Translation soul seed")
-        prompt = soul_seed.format(profile_sources=profile_sources, archetype=archetype)
+        prompt = soul_seed.format(
+            profile_sources=profile_sources, interaction_posture=interaction_posture
+        )
         response = await generate_text_async(
             self.handle,
             user_prompt=prompt,

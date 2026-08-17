@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "data-processor",
+  "name": "data processor",
+  "paper_label": "data processor",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "bounded data",
+    "transformation request"
+  ],
+  "role_outputs": [
+    "transformed data",
+    "summary",
+    "error report"
+  ],
+  "prohibitions": [
+    "infer causal conclusion",
+    "hide errors"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared",
+      "agent"
+    ],
+    "default": "agent"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "external"
+    ],
+    "default_mode": "external",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "data",
+    "obligations": [
+      "preserve lineage and errors"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "compute"
+    ],
+    "default_mode": "compute",
+    "forcing_triggers": [
+      "structured-data-present"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "none"
+    ],
+    "default_mode": "none",
+    "required_triggers": []
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "transform-data",
+        "description": "transform bounded data",
+        "min_decision_control": "agent",
+        "scope": "internal"
+      },
+      {
+        "id": "summarize-data",
+        "description": "summarize transformed data",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "decide-meaning",
+      "hide-errors"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "model",
+      "formalizer",
+      "knowledge-checker",
+      "criteria-applicator"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "input_present",
+          "input": "bounded data"
+        }
+      ],
+      [
+        {
+          "kind": "input_present",
+          "input": "structured data"
+        }
+      ]
+    ],
+    "conflicts": [
+      "role-taker",
+      "user-aligner"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "silent transform error",
+      "data leakage"
+    ],
+    "mitigations": [
+      "lineage",
+      "validation report"
+    ]
+  },
+  "quality_criteria": [
+    "transformed data is present",
+    "summary is present",
+    "error report is present",
+    "lineage and errors are preserved"
+  ],
+  "canonical_skills": []
+}

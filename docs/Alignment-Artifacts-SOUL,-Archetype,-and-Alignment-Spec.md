@@ -7,7 +7,7 @@ Relevant source files
 - [profiles/existential/prompts/initial_template.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/existential/prompts/initial_template.md?plain=1)
 - [profiles/operational/prompts/initial_template.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/operational/prompts/initial_template.md?plain=1)
 - [workspaces/alignment/artifacts/SOUL.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1)
-- [workspaces/alignment/artifacts/SOUL_ARCHETYPE.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL_ARCHETYPE.md?plain=1)
+- [workspaces/alignment/artifacts/INTERACTION_POSTURE.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/INTERACTION_POSTURE.md?plain=1)
 - [workspaces/alignment/artifacts/alignment_spec.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/alignment_spec.md?plain=1)
 - [workspaces/existential/artifacts/human_profile.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/existential/artifacts/human_profile.md?plain=1)
 - [workspaces/operational/artifacts/human_profile.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/operational/artifacts/human_profile.md?plain=1)
@@ -21,7 +21,7 @@ The alignment workspace serves as the "meta-layer" that consumes the outputs of 
 | Artifact | File Path | Purpose |
 | --- | --- | --- |
 | **Translation-layer soul** | `workspaces/alignment/artifacts/SOUL.md` | The durable orchestrator constitution. Specialist agents inherit this as their situational and user-fit grounding. |
-| **Translation-layer archetype** | `workspaces/alignment/artifacts/SOUL_ARCHETYPE.md` | An intermediate third-person representation of the agent's character, used to ground the SOUL generation. |
+| **Translation-layer archetype** | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | An intermediate third-person representation of the agent's character, used to ground the SOUL generation. |
 | **Alignment Spec** | `workspaces/alignment/artifacts/alignment_spec.md` | A personalized verification checklist used by the `verify-alignment` tool to score AI outputs against user-specific standards. |
 
 **Sources:**[core/soul_creator.py30-32](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L30-L32)[core/alignment_spec.py31-32](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L31-L32)
@@ -30,7 +30,7 @@ The alignment workspace serves as the "meta-layer" that consumes the outputs of 
 
 ## The Translation-Layer Generation Pipeline
 
-The generation of `SOUL.md` and `SOUL_ARCHETYPE.md` is handled by
+The generation of `SOUL.md` and `INTERACTION_POSTURE.md` is handled by
 `TranslationLayerCreator` in `core/translation_layer_creator.py`. This
 process is a two-stage LLM synthesis that bridges the gap between raw
 profile data and a cohesive orchestrator constitution that specialist
@@ -45,7 +45,7 @@ and their work patterns (operational).
 ```mermaid
 flowchart TD
     subgraph subGraph2 ["Alignment Workspace (Artifacts)"]
-        AT["SOUL_ARCHETYPE.md"]
+        AT["INTERACTION_POSTURE.md"]
         SL["SOUL.md"]
     end
     subgraph subGraph1 ["Code Entity Space (translation_layer_creator.py)"]
@@ -67,8 +67,8 @@ flowchart TD
 ```
 
 The specialist agent pipeline then consumes the translation layer.
-`core/soul_creator.py` uses `SOUL.md` and `SOUL_ARCHETYPE.md` — together
-with bounded profile evidence and the predefined archetype catalog — to
+`core/soul_creator.py` uses `SOUL.md` and `INTERACTION_POSTURE.md` - together
+with bounded profile evidence and the predefined archetype catalog - to
 select applicable archetypes and generate per-agent soul documents.
 Specialist souls receive the full archetype contract, user calibration,
 the translation layer, and relevant skill material as operational
@@ -82,13 +82,13 @@ guidance, not the full raw psychometric profile sources.
    `human_profile.md` from each registered profile via
    `load_profile_sources()`, wrapping them in `<profile_source>` tags.
 2. **Archetype Synthesis**: Before the orchestrator SOUL is written, the
-   system generates `SOUL_ARCHETYPE.md` using
-   `soul_archetype_seed.md`. This artifact defines the "Type,"
+   system generates `INTERACTION_POSTURE.md` using
+   `interaction_posture_seed.md`. This artifact defines the "Type,"
    "Essence," and "Gifts" of the counterpart in the third person.
 3. **Durable Orchestrator Soul (SOUL)**: The final `SOUL.md` is written
    in the first person. It includes sections for `Persona`,
    `Core Truths`, `Boundaries`, `Detect Mode`, and `Voice`. The
-   "Detect Mode" section is critical for routing — it defines how to
+   "Detect Mode" section is critical for routing - it defines how to
    respond to specific operator signals and becomes the constitution
    specialist agents inherit.
 
@@ -143,7 +143,7 @@ flowchart LR
 - `load_profile_sources()`: Loads the latest `human_profile.md` from
   each registered profile.
 - `load_translation_layer()`: Returns the generated SOUL.md and
-  SOUL_ARCHETYPE.md content for downstream consumers like the agent
+  INTERACTION_POSTURE.md content for downstream consumers like the agent
   soul pipeline.
 
 ### `SoulCreator` (`core/soul_creator.py`)
@@ -157,7 +157,7 @@ flowchart LR
   skill slugs fail with clear errors.
 - Specialist souls consume the full archetype contract (purpose, scope,
   authority, quality/evidence expectations, canonical skills), user
-  calibration, the translation layer, and scoped skill material — not
+  calibration, the translation layer, and scoped skill material - not
   the full raw psychometric profile sources.
 - Runtime orchestration, tool access enforcement, agent-to-agent
   routing, and trace logging are explicitly not implemented in this

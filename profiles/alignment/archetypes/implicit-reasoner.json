@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "implicit-reasoner",
+  "name": "implicit reasoner",
+  "paper_label": "implicit reasoner",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": "decision-scaffolder",
+  "variants": [],
+  "role_inputs": [
+    "implicit signals",
+    "context"
+  ],
+  "role_outputs": [
+    "inferred considerations",
+    "uncertainty labels"
+  ],
+  "prohibitions": [
+    "claim intent certainty",
+    "assert motive"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "label assumptions and limits"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "implicit"
+    ],
+    "default_mode": "implicit",
+    "forcing_triggers": [
+      "unstated-constraint-suspected"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "alternatives"
+    ],
+    "default_mode": "alternatives",
+    "required_triggers": [
+      "uncertainty"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "surface-considerations",
+        "description": "surface possible considerations",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "assert-motive",
+      "decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "decision-scaffolder",
+      "user-aligner",
+      "second-opinion"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "decision-scaffolder"
+        }
+      ]
+    ],
+    "conflicts": [
+      "role-taker",
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "mind reading",
+      "hidden bias"
+    ],
+    "mitigations": [
+      "uncertainty labels",
+      "operator check"
+    ]
+  },
+  "quality_criteria": [
+    "inferred considerations are present",
+    "uncertainty labels are present",
+    "intent certainty is not claimed",
+    "operator check is present"
+  ],
+  "canonical_skills": [
+    "decision-calibration",
+    "bound-before-solving"
+  ]
+}

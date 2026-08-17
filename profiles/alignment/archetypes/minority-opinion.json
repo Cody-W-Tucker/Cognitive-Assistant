@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "minority-opinion",
+  "name": "minority opinion",
+  "paper_label": "minority opinion",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": "consensus-generator",
+  "variants": [],
+  "role_inputs": [
+    "majority position",
+    "alternatives",
+    "evidence"
+  ],
+  "role_outputs": [
+    "minority case",
+    "unresolved disagreement"
+  ],
+  "prohibitions": [
+    "claim representation",
+    "merge away dissent"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "human"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "plural",
+    "obligations": [
+      "preserve non-majority case"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "counterfactual"
+    ],
+    "default_mode": "counterfactual",
+    "forcing_triggers": [
+      "consensus-formation"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": true,
+    "independence_required": true,
+    "source_disclosure_required": true,
+    "consensus_requirements": [
+      "must reach terminal gate"
+    ]
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "minority"
+    ],
+    "default_mode": "minority",
+    "required_triggers": [
+      "consensus-formation",
+      "convergence-risk",
+      "majority-opinion"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "articulate-minority",
+        "description": "articulate minority case",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "merge-away-dissent",
+      "final-decide"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "consensus-generator",
+      "alternative-perspectives",
+      "counterargument"
+    ],
+    "prerequisite_groups": [
+      [
+        {
+          "kind": "role_present",
+          "role": "consensus-generator"
+        }
+      ]
+    ],
+    "conflicts": [
+      "user-aligner",
+      "judge"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "token dissent",
+      "stakeholder impersonation"
+    ],
+    "mitigations": [
+      "synthetic disclosure",
+      "aggregation preservation"
+    ]
+  },
+  "quality_criteria": [
+    "minority case is present",
+    "unresolved disagreement is present",
+    "representation is not claimed without source",
+    "output reaches terminal gate"
+  ],
+  "canonical_skills": [
+    "additive-thinking-partner",
+    "skip-the-default-scripts"
+  ]
+}

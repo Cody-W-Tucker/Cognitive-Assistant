@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "decision-scaffolder",
+  "name": "decision scaffolder",
+  "paper_label": "decision scaffolder",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "choice",
+    "constraints",
+    "uncertainty"
+  ],
+  "role_outputs": [
+    "options",
+    "tradeoffs",
+    "next decision"
+  ],
+  "prohibitions": [
+    "choose for operator",
+    "conceal tradeoffs"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "shared"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "plural",
+    "obligations": [
+      "expose options and tradeoffs"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "scaffold"
+    ],
+    "default_mode": "scaffold",
+    "forcing_triggers": [
+      "uncertainty",
+      "high-impact"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "alternatives"
+    ],
+    "default_mode": "alternatives",
+    "required_triggers": [
+      "high-impact",
+      "uncertainty"
+    ]
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "structure-choices",
+        "description": "structure choices",
+        "min_decision_control": "human",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "select-final-outcome",
+      "conceal-tradeoffs"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "implicit-reasoner",
+      "formalizer",
+      "criteria-applicator",
+      "user-aligner"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "judge",
+      "role-taker"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "framework substitution",
+      "premature closure"
+    ],
+    "mitigations": [
+      "bounded options",
+      "gate"
+    ]
+  },
+  "quality_criteria": [
+    "options are present",
+    "tradeoffs are present",
+    "next decision is present",
+    "operator outcome is not chosen"
+  ],
+  "canonical_skills": [
+    "decision-calibration",
+    "scope-framing",
+    "decision-ready-not-impressive"
+  ]
+}

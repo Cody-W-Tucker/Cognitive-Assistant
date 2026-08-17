@@ -96,7 +96,7 @@ flowchart LR
 The `alignment/` workspace serves as the synthesis point for the entire system. It consumes the outputs of the existential and operational layers to produce the agent's durable persona and verification logic.
 
 - **SOUL.md:** The definitive representation of the agent's persona and identity.
-- **SOUL_ARCHETYPE.md:** An intermediate representation used to bridge raw profile data and the final SOUL.
+- **INTERACTION_POSTURE.md:** An intermediate representation used to bridge raw profile data and the final SOUL.
 - **alignment_spec.md:** A personalized verification checklist used by the `verify-alignment` tool to ensure the agent's responses remain consistent with its defined persona and skills. [flake.nix78-84](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/flake.nix#L78-L84)
 
 The `alignment_spec.md` is particularly critical as it is used as a runtime environment variable for the alignment validator. [flake.nix101-102](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/flake.nix#L101-L102)

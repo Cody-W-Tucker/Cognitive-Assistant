@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0-proposed",
+  "slug": "model",
+  "name": "model",
+  "paper_label": "model",
+  "paper_claim": "Role described in the cited role catalog.",
+  "implementation_note": "Project policy defined by this ledger.",
+  "parent": null,
+  "variants": [],
+  "role_inputs": [
+    "context",
+    "assumptions",
+    "data"
+  ],
+  "role_outputs": [
+    "causal model",
+    "assumptions",
+    "scenarios"
+  ],
+  "prohibitions": [
+    "present assumptions as facts",
+    "final recommendation"
+  ],
+  "decision_control": {
+    "allowed": [
+      "human",
+      "shared"
+    ],
+    "default": "shared"
+  },
+  "knowledge": {
+    "allowed_modes": [
+      "internal",
+      "either"
+    ],
+    "default_mode": "internal",
+    "provenance_required": true,
+    "citations_required_for_external": true
+  },
+  "verification_diversity": {
+    "orientation": "check",
+    "obligations": [
+      "expose assumptions"
+    ]
+  },
+  "cognitive": {
+    "supported_modes": [
+      "model"
+    ],
+    "default_mode": "model",
+    "forcing_triggers": [
+      "uncertainty"
+    ]
+  },
+  "social": {
+    "default_position": "peer",
+    "role_override": null
+  },
+  "group": {
+    "group_facing": false,
+    "independence_required": false,
+    "source_disclosure_required": true,
+    "consensus_requirements": []
+  },
+  "agreement_disagreement": {
+    "supported_modes": [
+      "none"
+    ],
+    "default_mode": "none",
+    "required_triggers": []
+  },
+  "authority": {
+    "actions": [
+      {
+        "id": "structure-model",
+        "description": "structure causal model",
+        "min_decision_control": "human",
+        "scope": "internal"
+      },
+      {
+        "id": "choose-assumptions",
+        "description": "select explicit assumptions",
+        "min_decision_control": "shared",
+        "scope": "internal"
+      }
+    ],
+    "prohibited_action_ids": [
+      "final-recommendation",
+      "hide-assumptions"
+    ],
+    "final_decision_eligible": false
+  },
+  "composition": {
+    "primary_compatible_secondary": [
+      "formalizer",
+      "data-processor",
+      "knowledge-checker",
+      "decision-scaffolder"
+    ],
+    "prerequisite_groups": [],
+    "conflicts": [
+      "judge",
+      "role-taker"
+    ],
+    "max_secondary": 3
+  },
+  "safeguards": {
+    "failure_modes": [
+      "false precision",
+      "opaque assumptions"
+    ],
+    "mitigations": [
+      "confidence labels",
+      "assumption list"
+    ]
+  },
+  "quality_criteria": [
+    "causal model is present",
+    "assumptions are explicit",
+    "scenarios are present",
+    "assumptions are not presented as facts"
+  ],
+  "canonical_skills": [
+    "bound-before-solving",
+    "scope-framing"
+  ]
+}
