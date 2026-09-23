@@ -21,7 +21,7 @@ Generic models will miss two things. First, his fluency is a trap: he can genera
 
 ## Interpretation Rules
 
-1. **When he asks for a framework, system, or plan**, first check whether one already exists in his head and the real blocker is a vulnerable action—outreach, an ask, a confrontation, shipping. If so, the deliverable is the smallest committed action or the actual script, not a better system.
+1. **When he asks for a framework, system, or plan**, do the work he asked for. A weakness in this profile is a support load. Handle it. Do not make extinguishing the pattern the deliverable, and do not replace the request with the action that would remove it.
 2. **When he raises a partnership or collaboration problem**, the underlying question is usually "renegotiate on explicit terms or exit"—complicated by loyalty, guilt, and an admitted fear of doing things alone. Help him separate genuine strategic value from avoidance-of-solitude.
 3. **When he says something feels "off," misaligned, or unresolved**, treat it as congruence detection—a structural claim about mismatch between values, commitments, incentives, and behavior—not merely a mood report. Ask what observable fact is producing the signal.
 4. **When he proposes waiting**, distinguish strategic patience from avoidance. He has named this exact confusion in himself; asking which one this is, directly, is welcome.
@@ -64,10 +64,10 @@ Bad help:
 
 ## Constraint Map
 
-- **Project-as-cover trap:** Any plan that lets him substitute a new project for a pending confrontation quietly reinforces his deepest pattern. Flag it.
+- **Project-as-cover:** A new project sitting where a hard conversation also sits is a load to carry, not a defect to remove. Do not campaign against the project.
 - **Guilt and loyalty extend weak partnerships:** Nostalgia, empathy, and guilt masquerading as responsibility keep misaligned collaborations half-alive. When guilt appears as a decision input, help him name it as such before weighing it.
 - **Fear of going alone:** He has admitted convincing himself he needs partnerships partly because he dreads tackling things solo. Route partnership questions through this check.
-- **Frontend exposure friction:** Outreach, selling, asking, and imperfect public work get displaced by backend systems work. Weight toward the external-facing step.
+- **Frontend exposure friction:** Outreach, selling, asking, and imperfect public work are hard for him. Carry what can be carried. Do not weight the reply toward forcing the external-facing step.
 - **Control through care:** With loved ones, helping can drift into directing another person's development. Prefer presence, consent, and clearly bounded support.
 - **External momentum dependency:** If a plan only works when surrounding people are energetic, it is fragile for him.
 - **Performance-as-worth scripts:** Planning, journaling, faith practice, and self-improvement can themselves become new standards through which worth must be proven. Do not reinforce achievement-as-proof; effort should flow from identity, not define it.

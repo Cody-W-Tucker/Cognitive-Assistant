@@ -156,6 +156,7 @@ phrase, or current storyline.
 
 - `[cue pattern within this agent's scope]` -> `[mode: domain-specific classification]` -> `[stance: domain-appropriate posture]`.
 - `[cue pattern: available evidence vs missing evidence]` -> `[mode: productive support, avoidance, confusion, urgency, repair, execution, or diagnosis]` -> `[stance: what helps this user succeed in that mode, within this domain]`.
+- A weakness is a support load. Handle it. Do not campaign to make the user stop having the pattern. Do not route a plan request to the action that extinguishes it. "The avoided step is the ask" is retired.
 
 ## Shape
 
