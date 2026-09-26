@@ -79,6 +79,71 @@
       };
     in
     {
+      packages = forEachSupportedSystem (
+        { pkgs }:
+        {
+          langfuse-review-queue = pkgs.writeShellApplication {
+            name = "langfuse-review-queue";
+            runtimeInputs = [ pkgs.python312 ];
+            text = ''
+              export PYTHONPATH=${self}
+              exec python -m core.langfuse_review "$@"
+            '';
+          };
+          default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
+        }
+      );
+
+      nixosModules.langfuse-review-queue =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.services.langfuse-review-queue;
+        in
+        {
+          options.services.langfuse-review-queue = {
+            enable = lib.mkEnableOption "Langfuse review queue refill";
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
+            };
+            baseUrl = lib.mkOption {
+              type = lib.types.str;
+              default = "https://cloud.langfuse.com";
+            };
+            environmentFile = lib.mkOption {
+              type = lib.types.path;
+              description = "File containing Langfuse credentials.";
+            };
+            timerConfig = lib.mkOption {
+              type = lib.types.attrs;
+              default = {
+                OnCalendar = "*-*-* 07:00:00 America/Chicago";
+                Persistent = true;
+              };
+            };
+          };
+          config = lib.mkIf cfg.enable {
+            systemd.services.langfuse-review-queue = {
+              description = "Refill Langfuse CA routing review queue";
+              serviceConfig = {
+                ExecStart = "${cfg.package}/bin/langfuse-review-queue";
+                EnvironmentFile = cfg.environmentFile;
+                Type = "oneshot";
+              };
+              environment.LANGFUSE_BASE_URL = cfg.baseUrl;
+            };
+            systemd.timers.langfuse-review-queue = {
+              wantedBy = [ "timers.target" ];
+              inherit (cfg) timerConfig;
+            };
+          };
+        };
+
       lib = {
         artifacts = {
           alignment = {

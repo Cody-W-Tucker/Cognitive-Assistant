@@ -33,6 +33,7 @@ SCRIPT_MODULES = [
     "core.cli",
     "core.translation_layer_creator",
     "core.alignment_spec",
+    "core.langfuse_review",
 ]
 
 SKILLS_DIR = Path("workspaces/skills")

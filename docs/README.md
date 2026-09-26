@@ -9,6 +9,7 @@
 - [CLI-and-Command-Reference](CLI-and-Command-Reference.md)
 - [Configuration-System](Configuration-System.md)
 - [Data-Ingestion](Data-Ingestion.md)
+- [Projection-Experiments](Projection-Experiments.md)
 - [Question-Answering-and-Prompt-Creation](Question-Answering-and-Prompt-Creation.md)
 - [Layer-Profiles](Layer-Profiles.md)
 - [Existential-Profile](Existential-Profile.md)

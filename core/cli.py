@@ -134,6 +134,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "build-translation-layer",
         help="Generate INTERACTION_POSTURE.md and SOUL.md from both profile layers.",
     )
+    review_parser = subparsers.add_parser(
+        "review-queue",
+        help="Refill the Langfuse CA routing review queue.",
+    )
+    review_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report candidates without creating queue items.",
+    )
 
     return parser
 
@@ -174,6 +183,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from core import translation_layer_creator
 
         return translation_layer_creator.run()
+
+    if args.command == "review-queue":
+        from core import langfuse_review
+
+        return langfuse_review.run(dry_run=args.dry_run)
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":
