@@ -21,7 +21,7 @@ The alignment workspace serves as the "meta-layer" that consumes the outputs of 
 | --- | --- | --- |
 | **Translation-layer soul** | `workspaces/alignment/artifacts/SOUL.md` | The durable orchestrator constitution and mode-routing guidance. |
 | **Interaction posture** | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | An intermediate third-person representation of the agent's character, used to ground the SOUL generation. |
-| **Alignment Spec** | `workspaces/alignment/artifacts/alignment_spec.md` | A personalized verification checklist used by the `verify-alignment` tool to score AI outputs against user-specific standards. |
+| **Alignment Spec** | `workspaces/alignment/artifacts/alignment_spec.md` | A personalized verification checklist derived from user-specific standards. |
 
 **Sources:**[core/alignment_spec.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py)
 
@@ -93,7 +93,7 @@ The `alignment_spec.md` is a specialized artifact designed for automated and sem
 
 ### Structural Requirements
 
-The `alignment_spec.md` follows a strict structure to remain compatible with the `verify-alignment` tool:
+The `alignment_spec.md` follows a strict scoring structure:
 
 - **SPEC_PREAMBLE**: Sets the context for the LLM as an "artifact verifier" [core/alignment_spec.py37-42](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L37-L42)
 - **Personalized Checklist**: A 10-point checklist (e.g., Clear Purpose, Grounded Claims, Efficient Structure) that includes specific "Satisfied when" and "Failed when" criteria derived from the user's skills [workspaces/alignment/artifacts/alignment_spec.md15-114](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/alignment_spec.md?plain=1#L15-L114)

@@ -74,9 +74,9 @@ def check_provider_setup(
     return issues
 
 
-def check_rlm_command(command: str) -> List[str]:
-    """Verify the configured RLM command is available."""
+def check_qmd_command(command: str = "qmd") -> List[str]:
+    """Verify the QMD command required for question-answering retrieval."""
     issues: List[str] = []
     if shutil.which(command) is None:
-        issues.append(f"RLM command not found on PATH: {command}")
+        issues.append(f"QMD command not found on PATH: {command}")
     return issues

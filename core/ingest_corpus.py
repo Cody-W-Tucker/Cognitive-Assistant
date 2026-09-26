@@ -548,7 +548,7 @@ def _write_manifest(
         "generated_at": datetime.now().isoformat(),
         "intake_dir": str(config.paths.INTAKE_DIR),
         "ready_dir": str(config.paths.READY_DIR),
-        "review_globs": config.profile.rlm_review_globs or [],
+        "qmd_collections": config.profile.qmd_collections,
         "schema_version": SCHEMA_VERSION,
         "sources": [result.__dict__ for result in results],
     }

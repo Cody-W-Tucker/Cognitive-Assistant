@@ -24,9 +24,7 @@ shapes, alongside translation-layer and alignment outputs:
 | `lib.artifacts.alignment.spec`                       | Generated alignment spec                                  |
 | `lib.artifacts.alignment.translationLayer`           | Generated translation-layer orchestrator soul (SOUL.md)   |
 | `lib.artifacts.alignment.interactionPosture`       | Generated interaction posture (INTERACTION_POSTURE.md) |
-| `lib.artifacts.alignment.toolSpecs.verifyAlignment`  | Alignment tool spec                                       |
 | `lib.artifacts.operational.toolSpecs.{memory,tasks}` | Operational tool specs                                    |
-| `packages.<system>.verify-alignment`                 | Alignment verifier package                                |
 
 ## Downstream Usage
 
@@ -36,7 +34,6 @@ shapes, alongside translation-layer and alignment outputs:
 let
   cognitive = inputs.cognitive-assistant;
   system = pkgs.stdenv.hostPlatform.system;
-  verifyAlignment = cognitive.packages.${system}.verify-alignment;
   artifacts = cognitive.lib.artifacts;
   operational = artifacts.operational;
   alignment = artifacts.alignment;
@@ -50,23 +47,11 @@ in
     memory = builtins.readFile operational.toolSpecs.memory;
     tasks = builtins.readFile operational.toolSpecs.tasks;
 
-    # Alignment verifier tool spec.
-    verifyAlignment = builtins.readFile alignment.toolSpecs.verifyAlignment;
   };
 
-  # Alignment spec and package for verifying generated artifacts.
+  # Generated alignment spec.
   environment.sessionVariables.ALIGNMENT_SPEC = "${alignment.spec}";
-  environment.systemPackages = [
-    verifyAlignment
-  ];
 }
-```
-
-Then use it to verify any artifact against the alignment spec:
-
-```bash
-verify-alignment --file draft.md
-verify-alignment --stdin < output.md
 ```
 
 ## Regeneration Workflow
@@ -76,7 +61,6 @@ The repo runs as one unified pipeline parameterized by a layer profile
 
 ```bash
 # Existential profile
-python -m core --profile existential ingest-substrate --graph /path/to/graph.json
 python -m core --profile existential ask-questions
 python -m core --profile existential build-prompts
 python -m core --profile existential build-skills
@@ -93,6 +77,10 @@ python -m core enhance-skill
 python -m core build-translation-layer
 python -m core build-alignment-spec
 ```
+
+Question answering retrieves from configured QMD collections. Existential uses
+`Journal` and `Personal`; operational uses `Base`, `Consulting`, and `Customers`.
+Raw source notes are not copied into this repository.
 
 `build-skills` reads the active profile's latest `human_profile*.md`, but writes
 to the unified skill store. Cross-system consumers should read skills only from
@@ -117,23 +105,17 @@ workspaces/alignment/artifacts/SOUL.md
 Use profile folders when the generator does not yet have a better stable
 category. Do not write generated skills into opaque folders like `group-1`.
 
-## Alignment Verification
+## Alignment Spec
 
 The alignment command sits above both profiles. It reads unified skills from
-`workspaces/skills` and writes a workspace artifact verification spec - a
-personalized production-readiness checklist that a downstream verifier (`rlm`)
-uses to score AI-generated artifacts.
+`workspaces/skills` and writes a personalized production-readiness checklist.
 
 ```bash
 # Build the spec (requires build-skills to have been run)
 python -m core build-alignment-spec
 
-# Verify an artifact against the spec
-scripts/verify_alignment.sh --file path/to/artifact.md
-scripts/verify_alignment.sh --stdin < artifact.md
 ```
 
-The verifier returns `VERDICT: SHIP | TIGHTEN | REWORK` with per-item scores
-and corrections. Regenerate the spec whenever skills change. See
+Regenerate the spec whenever skills change. See
 [`profiles/alignment/README.md`](profiles/alignment/README.md) for architecture
 and details.

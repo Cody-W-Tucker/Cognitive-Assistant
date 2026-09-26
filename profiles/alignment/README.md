@@ -10,8 +10,7 @@ workspace, questions, or CLI `--profile` value.
 
 The alignment profile solves one question: what makes an artifact
 production-ready _for this user_? It produces a **personalized artifact
-verification checklist** that a downstream verifier (`rlm` via
-`verify-alignment`) uses to score AI-generated artifacts.
+verification checklist**.
 
 The checklist has two layers:
 
@@ -19,8 +18,8 @@ The checklist has two layers:
 2. **Personalization** - unified skills from `workspaces/skills` overlay onto each checklist item as user-specific cues for what "satisfied" and "failed" look like in practice.
 
 The checklist skeleton lives in `profiles/alignment/prompts/seed.md`. The
-verifier role and response format live in `core/alignment_spec.py` (preamble +
-postamble). The LLM only generates the personalized middle.
+static scoring instructions and response format live in `core/alignment_spec.py`
+(preamble + postamble). The LLM only generates the personalized middle.
 
 ## Pipeline
 
@@ -41,9 +40,8 @@ The pipeline is ordered and deterministic:
 | `profiles/alignment/prompts/seed.md`               | Compiler instructions: fixed checklist taxonomy + per-item output structure.                                                                    |
 | `profiles/alignment/prompts/interaction_posture_seed.md` | Compiler instructions for inferring the orchestrator counterpart posture from both profiles.                                                            |
 | `profiles/alignment/prompts/soul_seed.md`          | Compiler instructions for generating the orchestrator translation-layer soul from both profiles plus the interaction posture.                             |
-| `core/alignment_spec.py`                           | Loads unified skills from `workspaces/skills`, calls the LLM with the seed, prepends/appends static verifier role and response format, writes the final spec. |
+| `core/alignment_spec.py`                           | Loads unified skills from `workspaces/skills`, calls the LLM with the seed, prepends/appends static scoring instructions and response format, writes the final spec. |
 | `core/translation_layer_creator.py`                | Loads both profile human profiles, infers the interaction posture, generates the orchestrator soul, writes `INTERACTION_POSTURE.md` and `SOUL.md`.             |
-| `scripts/verify_alignment.sh`                      | Runtime tool. Passes the spec + an artifact to `rlm` for evaluation.                                                                            |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
 | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | The generated orchestrator counterpart posture intermediate artifact.                                                                                     |
 | `workspaces/alignment/artifacts/SOUL.md`           | The generated orchestrator translation-layer soul.                                                                                              |
@@ -77,7 +75,6 @@ Output:
 ## Full regeneration order
 
 ```bash
-python -m core --profile existential ingest-substrate --graph /path/to/graph.json
 python -m core --profile existential ask-questions
 python -m core --profile existential build-prompts
 python -m core --profile existential build-skills
@@ -89,9 +86,3 @@ python -m core --profile operational build-skills
 python -m core build-translation-layer
 python -m core build-alignment-spec
 ```
-
-## Verify alignment at runtime
-
-`scripts/verify_alignment.sh` passes the generated spec plus an artifact to
-`rlm` for evaluation and returns `VERDICT: SHIP | TIGHTEN | REWORK` with
-per-item scores and corrections.

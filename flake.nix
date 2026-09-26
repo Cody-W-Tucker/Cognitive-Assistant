@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1.*.tar.gz";
-    rlm.url = "github:Cody-W-Tucker/rlm";
+    llm-agents.url = "github:numtide/llm-agents.nix";
     ai-data-extractor.url = "github:Cody-W-Tucker/ai-data-extraction";
   };
 
@@ -11,7 +11,7 @@
     {
       self,
       nixpkgs,
-      rlm,
+      llm-agents,
       ai-data-extractor,
     }:
     let
@@ -26,7 +26,10 @@
         nixpkgs.lib.genAttrs supportedSystems (
           system:
           f {
-            pkgs = import nixpkgs { inherit system; };
+            pkgs = import nixpkgs {
+              inherit system;
+              overlays = [ llm-agents.overlays.shared-nixpkgs ];
+            };
           }
         );
       mkLayerExports =
@@ -82,9 +85,6 @@
             spec = ./workspaces/alignment/artifacts/alignment_spec.md;
             translationLayer = ./workspaces/alignment/artifacts/SOUL.md;
             interactionPosture = ./workspaces/alignment/artifacts/INTERACTION_POSTURE.md;
-            toolSpecs = {
-              verifyAlignment = ./workspaces/alignment/artifacts/tool_specs/verify_alignment.md;
-            };
           };
           inherit existential operational;
           skills = {
@@ -95,21 +95,6 @@
         };
       };
 
-      packages = forEachSupportedSystem (
-        { pkgs }:
-        {
-          verify-alignment = pkgs.writeShellApplication {
-            name = "verify-alignment";
-            runtimeInputs = [ rlm.packages.${pkgs.stdenv.hostPlatform.system}.default ];
-            text = ''
-              ALIGNMENT_SPEC="''${ALIGNMENT_SPEC:-${./workspaces/alignment/artifacts/alignment_spec.md}}"
-              export ALIGNMENT_SPEC
-              exec ${./scripts/verify_alignment.sh} "$@"
-            '';
-          };
-        }
-      );
-
       devShells = forEachSupportedSystem (
         { pkgs }:
         {
@@ -118,12 +103,16 @@
               (pkgs.python312.withPackages (
                 python-pkgs: with python-pkgs; [
                   python-dotenv
+                  pydantic
                   anthropic
                   pandas
                   openai
                 ]
               ))
-              rlm.packages.${pkgs.stdenv.hostPlatform.system}.default
+              (pkgs.llm-agents.qmd.override {
+                vulkanSupport = false;
+                cudaSupport = false;
+              })
               ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
             ];
           };

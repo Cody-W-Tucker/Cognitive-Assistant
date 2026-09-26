@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Profile-aware prompt creator.
 
-Loads the most recent `questions_with_answers_rlm_*.csv` from the active
+Loads the most recent `questions_with_answers_qmd_*.csv` from the active
 profile's data directory, formats it into context, and writes
 `human_profile.md`.
 """
@@ -36,7 +36,7 @@ class DraftResult:
 def load_dataset_context(config: Config) -> str:
     """Load the most recent dataset and format all context for the LLM."""
     try:
-        dataset_csv = config.get_most_recent_file("questions_with_answers_rlm_*.csv")
+        dataset_csv = config.get_most_recent_file("questions_with_answers_qmd_*.csv")
     except FileNotFoundError as exc:
         raise FileNotFoundError(
             "No question_asker dataset files found in "

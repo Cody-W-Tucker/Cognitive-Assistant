@@ -3,10 +3,9 @@
 
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, List, Optional
+from typing import Any, List, Optional
 
 from dotenv import load_dotenv
 
@@ -179,39 +178,3 @@ def get_most_recent_file(data_dir: Path, pattern: str) -> Path:
     if not files:
         raise FileNotFoundError(f"No files found matching pattern: {pattern}")
     return max(files, key=lambda file_path: file_path.stat().st_mtime)
-
-
-def run_rlm_query(
-    *,
-    command: List[str],
-    review_paths: Iterable[Path],
-    timeout_seconds: int,
-    query: str,
-) -> str:
-    """Run the RLM CLI against a collection of review targets."""
-    resolved_paths = list(review_paths)
-    if not resolved_paths:
-        raise ValueError("No RLM review targets were provided")
-
-    full_command = list(command)
-    for path in resolved_paths:
-        full_command.extend(["--file", str(path)])
-    full_command.append(query)
-
-    result = subprocess.run(
-        full_command,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip() or "RLM command failed without stderr output"
-        raise RuntimeError(stderr)
-
-    stdout = result.stdout.strip()
-    if not stdout:
-        raise RuntimeError("RLM returned empty output")
-
-    return stdout

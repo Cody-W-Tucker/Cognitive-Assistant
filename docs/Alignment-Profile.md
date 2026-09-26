@@ -122,26 +122,6 @@ flowchart LR
 
 Sources: [core/alignment_spec.py1-28](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L1-L28)[profiles/alignment/prompts/seed.md1-9](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/seed.md?plain=1#L1-L9)[profiles/alignment/README.md28](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md?plain=1#L28-L28)
 
-## Runtime Verification
-
-Once the `alignment_spec.md` is generated, it is used by the `scripts/verify_alignment.sh` tool. This tool bridges the static specification with live evaluation.
-
-| Component | Role |
-| --- | --- |
-| `alignment_spec.md` | The "law" against which artifacts are judged. |
-| `verify_alignment.sh` | The runner script that calls the LLM with the spec and the target artifact. |
-| `rlm` | The binary used to execute the query with a "Compass" judgment style. |
-
-### Verdict Lifecycle
-
-The verifier returns one of three verdicts:
-
-- **SHIP**: Artifact meets all standards.
-- **TIGHTEN**: Minor issues found; provides imperative fix instructions.
-- **REWORK**: Structural failure; requires a fundamental rethink of the artifact.
-
-Sources: [profiles/alignment/README.md57-90](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md?plain=1#L57-L90)[scripts/verify_alignment.sh1-30](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/scripts/verify_alignment.sh#L1-L30)
-
 ## CLI Command Reference
 
 The Alignment profile is managed through specific subcommands of the core pipeline. Note that these commands typically do not require the `--profile` flag as they are cross-profile.

@@ -3,8 +3,7 @@
 
 Subcommands:
   ingest-corpus      Normalize intake exports into ready/*.jsonl (operational)
-  ingest-substrate   Project schema graph/focus exports into ready/*.jsonl packets
-  ask-questions      Run RLM against questions.csv -> answers CSV
+  ask-questions      Answer questions.csv with QMD retrieval and direct LLM synthesis
   build-prompts      Generate profile artifacts declared by the active profile
   build-skills       Generate canonical skills from latest human_profile.md
   enhance-skill      Enhance a skill from source material
@@ -12,7 +11,7 @@ Subcommands:
   build-translation-layer  Generate INTERACTION_POSTURE.md and SOUL.md from both profiles
   build-alignment-spec  Generate alignment verification spec from unified skills
   update             Run build-prompts, build-skills, build-translation-layer, build-alignment-spec, and build-tool-specs
-  health-check       Validate prompts, paths, provider access, RLM availability
+  health-check       Validate prompts, paths, provider access, and QMD availability
 
 Common flags:
   --profile <name>   Required for most commands. Optional for 'update' (all profiles).
@@ -46,31 +45,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Normalize intake exports into ready/*.jsonl (operational profiles).",
     )
 
-    substrate_parser = subparsers.add_parser(
-        "ingest-substrate",
-        help="Project schema graph/focus exports into ready/*.jsonl packets.",
-    )
-    substrate_parser.add_argument(
-        "--graph",
-        type=Path,
-        help="Path to a schema graph.json export.",
-    )
-    substrate_parser.add_argument(
-        "--focus",
-        type=Path,
-        action="append",
-        default=[],
-        help="Path to a schema focus-bundle.json export. Repeat for multiple bundles.",
-    )
-    substrate_parser.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Output directory for JSONL packets (default: workspaces/<profile>/data/ready/substrate)",
-    )
-
     subparsers.add_parser(
         "ask-questions",
-        help="Run RLM against the profile's questions.csv.",
+        help="Answer the profile's questions.csv with QMD retrieval.",
     )
     subparsers.add_parser(
         "build-prompts",
@@ -134,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser(
         "health-check",
-        help="Validate prompts, paths, provider access, RLM availability.",
+        help="Validate prompts, paths, provider access, and QMD availability.",
     )
 
     subparsers.add_parser(
@@ -208,16 +185,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         from core import ingest_corpus
 
         return ingest_corpus.run(config)
-
-    if args.command == "ingest-substrate":
-        from core import ingest_substrate
-
-        return ingest_substrate.run(
-            config,
-            graph_path=args.graph,
-            focus_paths=args.focus,
-            output_dir=args.output_dir,
-        )
 
     if args.command == "ask-questions":
         from core import question_asker

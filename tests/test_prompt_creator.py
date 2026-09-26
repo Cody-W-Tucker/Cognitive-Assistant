@@ -3,18 +3,37 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+from core.config import Config
 from core.prompt_creator import (
     DraftResult,
     _build_candidate_profiles_block,
     _build_synthesis_prompt,
     get_prompt_creator_providers,
+    load_dataset_context,
 )
-from core.config import Config
 
 
 class PromptCreatorTests(unittest.TestCase):
+    def test_loads_qmd_answer_dataset(self) -> None:
+        config = Config.from_profile("existential")
+        with tempfile.TemporaryDirectory() as directory:
+            dataset = Path(directory) / "questions_with_answers_qmd_20260926_000000.csv"
+            dataset.write_text(
+                "Category,Goal,Element,Question 1,AI_Answer 1\n"
+                "Continuity,Ground the answer,Decision,What changed?,A concrete answer\n",
+                encoding="utf-8",
+            )
+            with patch.object(config, "get_most_recent_file", return_value=dataset) as lookup:
+                context = load_dataset_context(config)
+        lookup.assert_called_once_with("questions_with_answers_qmd_*.csv")
+        self.assertIn("What changed?", context)
+        self.assertIn("A concrete answer", context)
+
     def test_get_prompt_creator_providers_is_distinct(self) -> None:
         self.assertEqual(
             get_prompt_creator_providers(),

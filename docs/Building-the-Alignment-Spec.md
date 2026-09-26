@@ -22,7 +22,7 @@ The generation process follows a strict "load-inject-call-wrap" sequence. The go
 1. **Skill Aggregation**: The creator scans `workspaces/skills/` for all `SKILL.md` files [core/alignment_spec.py137](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L137-L137) Each skill is wrapped in an XML-tagged block containing its source profile and name [core/alignment_spec.py142-145](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L142-L145)
 2. **Template Injection**: The aggregated skills are injected into the `{skills_content}` placeholder of the `seed.md` template [core/alignment_spec.py97](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L97-L97)
 3. **LLM Synthesis**: The system calls the LLM (typically a "refine" class model like GPT-4o or Claude 3.5 Sonnet) to compile the specification [core/alignment_spec.py98-103](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L98-L103)
-4. **Static Wrapping**: The LLM's raw output is wrapped between a static `SPEC_PREAMBLE` and `SPEC_POSTAMBLE`[core/alignment_spec.py106](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L106-L106) These contain the final instructions for the `verify-alignment` tool, including the verdict logic (SHIP/TIGHTEN/REWORK).
+4. **Static Wrapping**: The LLM's raw output is wrapped between a static `SPEC_PREAMBLE` and `SPEC_POSTAMBLE`[core/alignment_spec.py106](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L106-L106) These contain the final scoring instructions, including the verdict logic (SHIP/TIGHTEN/REWORK).
 
 ### Data Flow: From Skills to Spec
 
@@ -58,7 +58,7 @@ flowchart LR
 
 ## Structural Requirements
 
-The generated `alignment_spec.md` must adhere to a specific structure to be compatible with the downstream `verify-alignment` tool.
+The generated `alignment_spec.md` has a specific scoring structure.
 
 ### 1. The Preamble and Cross-cutting Signals
 
@@ -96,7 +96,7 @@ The core of the spec is a 10-point checklist derived from the `seed.md` methodol
 
 ## Verdict Logic and Postamble
 
-The `AlignmentSpecCreator` appends a static `SPEC_POSTAMBLE` that defines the scoring system for the `verify-alignment` tool [core/alignment_spec.py44-78](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L44-L78)
+The `AlignmentSpecCreator` appends a static `SPEC_POSTAMBLE` that defines the scoring system [core/alignment_spec.py44-78](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L44-L78)
 
 ### Scoring System
 
@@ -118,7 +118,7 @@ The tool aggregates these scores into a final status:
 
 ```mermaid
 flowchart TD
-    START["verify-alignment (shell script)"]
+    START["Alignment spec review"]
     SCORES["Score 10 Items (PASS/WEAK/FAIL)"]
     FAIL_CHECK["Any FAIL?"]
     WEAK_CHECK["Any WEAK?"]

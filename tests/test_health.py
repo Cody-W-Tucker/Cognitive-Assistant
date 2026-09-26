@@ -2,7 +2,7 @@
 """Profile-aware health-check tests.
 
 Runs the unified health check against every registered profile. Network calls
-(actual LLM client creation) and RLM availability checks are skipped here so
+(actual LLM client creation) and QMD availability checks are skipped here so
 the test passes in CI without secrets or external binaries.
 """
 
@@ -29,7 +29,6 @@ SCRIPT_MODULES = [
     "core.skills_creator",
     "core.skill_enhancer",
     "core.question_asker",
-    "core.ingest_substrate",
     "core.health_check",
     "core.cli",
     "core.translation_layer_creator",
@@ -57,8 +56,8 @@ class ProfileHealthTests(unittest.TestCase):
                     [],
                 )
                 self.assertEqual(check_prompt_rendering(config), [])
-                # Skipped: validate_question_answering checks RLM evidence
-                # source which may be environment-specific. Just verify the
+                # Skipped: validate_question_answering checks direct LLM access.
+                # Just verify the
                 # prompt runtime directory exists.
                 self.assertTrue(config.paths.PROMPT_RUNTIME_DIR.exists())
 

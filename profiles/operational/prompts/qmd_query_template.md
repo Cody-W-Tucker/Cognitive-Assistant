@@ -3,6 +3,10 @@ You are evaluating a corpus of operational artifacts such as coding conversation
 
 {synthesis_prompt}
 
+<retrieved_passages>
+{retrieved_passages}
+</retrieved_passages>
+
 Use this extraction lens:
 
 Category:
@@ -21,12 +25,8 @@ Answer the following question using only evidence that can be supported from the
 </question>
 
 Requirements:
-- when `graph_pages.jsonl` and `mention_evidence.jsonl` are present, use them as a structured evidence layer
-- treat `mention_evidence` as the stronger source for concrete claims because it preserves source-note lines and repeated reference patterns
-- treat `graph_pages` as canonical background for stable entities, themes, and summaries, but do not let a single page body carry a behavioral claim by itself when stronger artifact traces are available
-- for questions about workflow, quality thresholds, sequencing, repair, or proof standards, prefer direct work artifacts over graph summaries when they diverge
-- for questions about recurring themes, enduring mission, people, projects, concepts, or long-running relational patterns, let the graph layer sharpen pattern selection and entity continuity
-- use graph structure to compress and disambiguate the corpus, not to override stronger read-backed behavioral evidence
+- use only the retrieved passages as evidence
+- when retrieval is unavailable, empty, or stale, return "Insufficient evidence" and name the limitation
 - build a high-salience composite example from the strongest repeated evidence you actually read
 - the composite should feel like the most representative way this user behaves under the conditions named in the question
 - infer the tacit operational rule that this composite and its supporting reads justify
@@ -40,7 +40,7 @@ Requirements:
 - focus on tacit workflow knowledge, not personality narration
 - write in third person
 - keep the answer concrete, information-dense, and interpretive enough to be useful downstream
-- ground every substantive claim in passages you actually read, not just matched in search results
+- ground every substantive claim in the retrieved passages, not just result metadata
 - avoid invented frameworks, internal psychology, or metadata theories unless the artifacts explicitly support them
 - distinguish user-authored behavior from assistant-authored structure; do not treat the latter as evidence of user preference without repeated user endorsement
 - avoid corpus-wide language like "consistently" or "usually" unless the evidence spans multiple sessions or sources; otherwise name the narrower scope

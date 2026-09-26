@@ -2,7 +2,7 @@
 
 Runtime prompt templates for the Operational Layer pipeline live in `prompts/`.
 
-- `rlm_query_template.md`: asks RLM to evaluate artifact corpora against the operational taxonomy
+- `qmd_query_template.md`: asks the direct LLM to evaluate QMD-retrieved artifact passages against the operational taxonomy
 - `initial_template.md`: synthesizes the evaluated dataset into `artifacts/human_profile.md`
 - `skills_creation_template.md`: converts the profile into small, lazily-loaded skills
-- `synthesis_prompt.md`: shared evaluation posture used inside the RLM query template
+- `synthesis_prompt.md`: shared evaluation posture used inside the QMD query template

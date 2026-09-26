@@ -12,7 +12,7 @@ from core.prompt_loader import load_prompt_for_profile
 from lib.health import (
     check_prompt_files as shared_check_prompt_files,
     check_provider_setup,
-    check_rlm_command,
+    check_qmd_command,
     check_script_imports,
 )
 from lib.llm import create_client
@@ -77,7 +77,7 @@ def check_prompt_rendering(config: Config) -> List[str]:
         "initial_template": ["context"],
         "ensemble_synthesis_template": ["candidate_profiles"],
         "skills_creation_template": ["grouped_bio_content"],
-        "rlm_query_template": profile.rlm_prompt_placeholders,
+        "qmd_query_template": profile.qmd_prompt_placeholders,
         "tool_specs_creation_template": [
             "bio_content",
             "supported_tools",
@@ -159,7 +159,7 @@ def run_health_checks(config: Config) -> List[str]:
         )
     )
     issues.extend(
-        check_rlm_command(config.rlm.COMMAND[0] if config.rlm.COMMAND else "rlm")
+        check_qmd_command()
     )
     return issues
 

@@ -29,7 +29,6 @@ python -m core build-translation-layer
 python -m core build-alignment-spec
 
 # Existential profile workflow
-python -m core --profile existential ingest-substrate --graph /path/to/graph.json
 python -m core --profile existential ask-questions
 python -m core --profile existential build-prompts
 python -m core --profile existential build-skills
@@ -44,9 +43,8 @@ python -m core --profile operational build-tool-specs
 # Profile-aware validation
 python -m core --profile <name> health-check
 
-# Alignment verification
+# Alignment spec generation
 python -m core build-alignment-spec
-scripts/verify_alignment.sh --file path/to/artifact.md
 ```
 
 Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)

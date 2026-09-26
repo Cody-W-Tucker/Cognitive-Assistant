@@ -2,9 +2,8 @@
 """Unified configuration for the layer pipeline.
 
 A `LayerProfile` declares everything that varies between the existential and
-operational paths. A `Config` is built from a profile and exposes the same
-attribute surface previous per-layer config modules used (`api`, `paths`, `rlm`,
-`csv`, `redaction`, `prompts`, `output`, `profile`).
+operational paths. A `Config` is built from a profile and exposes the shared
+configuration surface used by the pipeline.
 
 Usage:
     from core.config import Config
@@ -16,7 +15,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 # Make the repo root importable so `lib.*` resolves regardless of how callers
 # invoke the pipeline.
@@ -27,11 +26,11 @@ if str(ROOT_DIR) not in sys.path:
 
 from lib.config import (  # noqa: E402
     APIConfig,
+    DEFAULT_PROVIDER,
     PathConfig,
     RedactionConfig,
     get_data_files as shared_get_data_files,
     get_most_recent_file as shared_get_most_recent_file,
-    run_rlm_query as shared_run_rlm_query,
     validate_provider_config,
 )
 from lib.prompts import (
@@ -68,15 +67,14 @@ class LayerProfile:
     questions_csv: Path  # profiles/<name>/questions.csv
     prompts_dir: Path  # profiles/<name>/prompts/runtime
 
-    # Evidence source (exactly one is populated)
-    rlm_review_paths: Optional[List[Path]] = None
-    rlm_review_globs: Optional[List[str]] = None
+    # QMD collections used for question-answering retrieval.
+    qmd_collections: List[str] = field(default_factory=list)
 
     # Prompt set: logical_name -> filename inside prompts_dir
     prompt_files: dict[str, str] = field(default_factory=dict)
 
-    # RLM prompt placeholder set used by question_asker and health_check fixtures
-    rlm_prompt_placeholders: List[str] = field(default_factory=list)
+    # QMD synthesis prompt placeholders used by question_asker and health checks.
+    qmd_prompt_placeholders: List[str] = field(default_factory=list)
 
     # Pipeline gates
     has_corpus_ingest: bool = False
@@ -132,19 +130,15 @@ EXISTENTIAL_PROFILE = LayerProfile(
     workspace_dir=ROOT_DIR / "workspaces" / "existential",
     questions_csv=ROOT_DIR / "profiles" / "existential" / "questions.csv",
     prompts_dir=ROOT_DIR / "profiles" / "existential" / "prompts",
-    rlm_review_paths=None,
-    rlm_review_globs=[
-        "ready/substrate/graph_pages.jsonl",
-        "ready/substrate/mention_evidence.jsonl",
-    ],
+    qmd_collections=["Journal", "Personal"],
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
         "ensemble_synthesis_template": "ensemble_synthesis_template.md",
         "skills_creation_template": "skills_creation_template.md",
-        "rlm_query_template": "rlm_query_template.md",
+        "qmd_query_template": "qmd_query_template.md",
     },
-    rlm_prompt_placeholders=["synthesis_prompt", "question"],
+    qmd_prompt_placeholders=["synthesis_prompt", "question", "retrieved_passages"],
     has_corpus_ingest=False,
     has_tool_specs=False,
     section_header_template="# Understanding: **{category}**",
@@ -190,22 +184,22 @@ OPERATIONAL_PROFILE = LayerProfile(
     workspace_dir=ROOT_DIR / "workspaces" / "operational",
     questions_csv=ROOT_DIR / "profiles" / "operational" / "questions.csv",
     prompts_dir=ROOT_DIR / "profiles" / "operational" / "prompts",
-    rlm_review_paths=None,
-    rlm_review_globs=["ready/**/*.jsonl"],
+    qmd_collections=["Base", "Consulting", "Customers"],
     prompt_files={
         "synthesis_prompt": "synthesis_prompt.md",
         "initial_template": "initial_template.md",
         "ensemble_synthesis_template": "ensemble_synthesis_template.md",
         "skills_creation_template": "skills_creation_template.md",
         "tool_specs_creation_template": "tool_specs_creation_template.md",
-        "rlm_query_template": "rlm_query_template.md",
+        "qmd_query_template": "qmd_query_template.md",
     },
-    rlm_prompt_placeholders=[
+    qmd_prompt_placeholders=[
         "synthesis_prompt",
         "category",
         "goal",
         "element",
         "question",
+        "retrieved_passages",
     ],
     has_corpus_ingest=True,
     has_tool_specs=True,
@@ -274,7 +268,7 @@ register_profile(OPERATIONAL_PROFILE)
 
 
 # ---------------------------------------------------------------------------
-# Path / RLM / CSV / Prompts / Output sub-configs derived from a profile
+# Path / CSV / Prompts / Output sub-configs derived from a profile
 # ---------------------------------------------------------------------------
 
 
@@ -310,57 +304,6 @@ class ProfilePathConfig(PathConfig):
             "TOOL_SPECS_DIR",
         ]:
             getattr(self, attr).mkdir(parents=True, exist_ok=True)
-
-
-@dataclass
-class RLMConfig:
-    """RLM CLI configuration derived from a profile."""
-
-    profile: LayerProfile
-    COMMAND: List[str] = field(default_factory=lambda: ["rlm"])
-    TIMEOUT_SECONDS: int = 300
-
-    @property
-    def REVIEW_PATHS(self) -> Optional[List[Path]]:
-        return self.profile.rlm_review_paths
-
-    @property
-    def REVIEW_GLOBS(self) -> Optional[List[str]]:
-        return self.profile.rlm_review_globs
-
-    def validate(self, data_dir: Path) -> List[str]:
-        """Validate that the configured evidence source resolves to something."""
-        issues: List[str] = []
-        if self.profile.rlm_review_paths is not None:
-            if not self.profile.rlm_review_paths:
-                issues.append("RLM review paths are not configured for this profile")
-                return issues
-            for path in self.profile.rlm_review_paths:
-                if not path.exists():
-                    issues.append(f"RLM review path does not exist: {path}")
-        elif self.profile.rlm_review_globs is not None:
-            if not self.profile.rlm_review_globs:
-                issues.append("RLM review globs are not configured for this profile")
-                return issues
-            if not _resolve_globs(data_dir, self.profile.rlm_review_globs):
-                issues.append(
-                    "No files matched the configured REVIEW_GLOBS under " f"{data_dir}"
-                )
-        else:
-            issues.append("Profile has neither rlm_review_paths nor rlm_review_globs")
-        return issues
-
-
-def _resolve_globs(base_dir: Path, patterns: Iterable[str]) -> List[Path]:
-    """Resolve glob patterns relative to a base dir into a deduped file list."""
-    resolved: List[Path] = []
-    seen: set[Path] = set()
-    for pattern in patterns:
-        for path in sorted(base_dir.glob(pattern)):
-            if path.is_file() and path not in seen:
-                seen.add(path)
-                resolved.append(path)
-    return resolved
 
 
 @dataclass
@@ -434,8 +377,8 @@ class PromptsConfig:
         return self._load("skills_creation_template")
 
     @property
-    def rlm_query_template(self) -> str:
-        return self._load("rlm_query_template")
+    def qmd_query_template(self) -> str:
+        return self._load("qmd_query_template")
 
     @property
     def tool_specs_creation_template(self) -> str:
@@ -450,7 +393,7 @@ class PromptsConfig:
 class OutputConfig:
     """Output file naming patterns."""
 
-    QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_rlm_{timestamp}.csv"
+    QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_qmd_{timestamp}.csv"
     TIMESTAMP_FORMAT: str = "%Y%m%d_%H%M%S"
 
 
@@ -466,7 +409,6 @@ class Config:
     profile: LayerProfile
     api: APIConfig = field(default_factory=APIConfig)
     paths: ProfilePathConfig = field(init=False)
-    rlm: RLMConfig = field(init=False)
     csv: CSVConfig = field(init=False)
     redaction: ProfileRedactionConfig = field(init=False)
     prompts: PromptsConfig = field(init=False)
@@ -474,7 +416,6 @@ class Config:
 
     def __post_init__(self) -> None:
         self.paths = ProfilePathConfig(self.profile)
-        self.rlm = RLMConfig(profile=self.profile)
         self.csv = CSVConfig(profile=self.profile)
         self.redaction = ProfileRedactionConfig(
             SENSITIVE_PATTERNS=list(self.profile.redaction_patterns),
@@ -508,11 +449,15 @@ class Config:
         return validate_provider_config(self.api, provider)
 
     def validate_question_answering(self) -> List[str]:
-        """Validate everything required to run the RLM-backed question loop."""
+        """Validate everything required to run the QMD-backed question loop."""
         issues: List[str] = []
         if not self.paths.QUESTIONS_CSV.exists():
             issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
-        issues.extend(self.rlm.validate(self.paths.DATA_DIR))
+        if not self.profile.qmd_collections:
+            issues.append(
+                f"No QMD collections configured for profile '{self.profile.name}'"
+            )
+        issues.extend(self.validate_llm_access(DEFAULT_PROVIDER))
         return issues
 
     # ----- helper accessors --------------------------------------------------
@@ -522,40 +467,6 @@ class Config:
 
     def get_most_recent_file(self, pattern: str) -> Path:
         return shared_get_most_recent_file(self.paths.DATA_DIR, pattern)
-
-    def get_review_files(self, patterns: Optional[List[str]] = None) -> List[Path]:
-        """Resolve glob-based review files (operational-style profiles only)."""
-        if self.profile.rlm_review_globs is None:
-            raise ValueError(
-                f"Profile '{self.profile.name}' uses filesystem review paths, "
-                "not glob-based review files"
-            )
-        return _resolve_globs(
-            self.paths.DATA_DIR, patterns or self.profile.rlm_review_globs
-        )
-
-    def run_rlm_query(
-        self, query: str, review_paths: Optional[List[Path]] = None
-    ) -> str:
-        """Run the RLM CLI against the configured evidence source."""
-        if review_paths is not None:
-            paths = review_paths
-        elif self.profile.rlm_review_paths is not None:
-            paths = list(self.profile.rlm_review_paths)
-        else:
-            paths = self.get_review_files()
-
-        if not paths:
-            raise ValueError(
-                f"No RLM review targets configured for profile '{self.profile.name}'"
-            )
-
-        return shared_run_rlm_query(
-            command=self.rlm.COMMAND,
-            review_paths=paths,
-            timeout_seconds=self.rlm.TIMEOUT_SECONDS,
-            query=query,
-        )
 
     def get_redaction_function(self) -> Callable[[str, Optional[List[str]]], str]:
         """Return the configured redaction function."""
@@ -571,7 +482,6 @@ __all__ = [
     "PromptsConfig",
     "ProfilePathConfig",
     "ProfileRedactionConfig",
-    "RLMConfig",
     "EXISTENTIAL_PROFILE",
     "OPERATIONAL_PROFILE",
     "get_profile",
