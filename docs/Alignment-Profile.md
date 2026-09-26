@@ -35,7 +35,6 @@ flowchart LR
         SKILLS["workspaces/skills/*.md"]
     end
     subgraph subGraph1 ["Core Pipeline (Alignment Commands)"]
-        SC["soul_creator.py"]
         ASC["alignment_spec_creator.py"]
     end
     subgraph subGraph0 ["Layer Profiles"]
@@ -44,23 +43,19 @@ flowchart LR
     end
     EP --> HP_E
     OP --> HP_O
-    HP_E --> SC
-    HP_O --> SC
     SKILLS --> ASC
-    SC --> SOUL
-    SC --> ARCH
     ASC --> SPEC
 ```
 
-Sources: [profiles/alignment/README.md24-32](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md?plain=1#L24-L32)[core/soul_creator.py1-29](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L1-L29)[core/alignment_spec.py1-28](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L1-L28)
+Sources: [profiles/alignment/README.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/README.md)[core/alignment_spec.py1-28](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L1-L28)
 
 ## Identity Synthesis (SOUL)
 
 The system generates a durable identity in two stages: Archetype Inference and SOUL Composition. This process is managed by `core/translation_layer_creator.py`.
 
-### 1. Archetype Inference
+### 1. Interaction Posture Inference
 
-The system first uses `interaction_posture_seed.md` to infer a single recognizable human counterpart (e.g., "The Seasoned Architect" or "The Direct Editor"). This archetype acts as the "center of gravity" to prevent the AI from becoming a generic assistant.
+The system first uses `interaction_posture_seed.md` to infer a single recognizable human counterpart (e.g., "The Seasoned Architect" or "The Direct Editor"). This interaction posture acts as the "center of gravity" to prevent the AI from becoming a generic assistant.
 
 - **Input**: Existential and Operational `human_profile.md`.
 - **Logic**: Uses "positive inversion" to turn user misfits into agent strengths [profiles/alignment/prompts/interaction_posture_seed.md23-30](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/interaction_posture_seed.md?plain=1#L23-L30)
@@ -68,7 +63,7 @@ The system first uses `interaction_posture_seed.md` to infer a single recognizab
 
 ### 2. SOUL Composition
 
-Using `soul_seed.md`, the system writes the final `SOUL.md` from the perspective of the inferred archetype.
+Using `soul_seed.md`, the system writes the final `SOUL.md` from the perspective of the inferred interaction posture.
 
 - **Tone**: First-person, direct, and concrete [profiles/alignment/prompts/soul_seed.md38-43](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L38-L43)
 - **Sections**: Includes "Core Truths", "Boundaries", and a "Detect Mode" section for real-time routing logic [profiles/alignment/prompts/soul_seed.md49-52](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/alignment/prompts/soul_seed.md?plain=1#L49-L52)

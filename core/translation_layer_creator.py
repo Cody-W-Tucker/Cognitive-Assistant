@@ -21,9 +21,8 @@ Outputs:
   workspaces/alignment/artifacts/INTERACTION_POSTURE.md
   workspaces/alignment/artifacts/SOUL.md
 
-This module owns interaction posture generation. ``build-agents`` only reads a
-hash-validated snapshot of the posture; it never regenerates, repairs, or
-reconciles it.
+This module owns interaction posture generation and artifact writing for the
+translation layer.
 
 This command sits above the profile system: it reads from both registered
 profiles but does not belong to either. It is invoked without --profile.

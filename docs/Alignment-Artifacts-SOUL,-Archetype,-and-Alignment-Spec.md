@@ -1,9 +1,8 @@
-# Alignment Artifacts: SOUL, Archetype, and Alignment Spec
+# Alignment Artifacts: SOUL, Interaction Posture, and Alignment Spec
 Relevant source files
 - [core/alignment_spec.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py)
 - [core/skill_engine.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/skill_engine.py)
 - [core/skill_enhancer.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/skill_enhancer.py)
-- [core/soul_creator.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py)
 - [profiles/existential/prompts/initial_template.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/existential/prompts/initial_template.md?plain=1)
 - [profiles/operational/prompts/initial_template.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/profiles/operational/prompts/initial_template.md?plain=1)
 - [workspaces/alignment/artifacts/SOUL.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1)
@@ -12,7 +11,7 @@ Relevant source files
 - [workspaces/existential/artifacts/human_profile.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/existential/artifacts/human_profile.md?plain=1)
 - [workspaces/operational/artifacts/human_profile.md](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/operational/artifacts/human_profile.md?plain=1)
 
-This section details the core artifacts generated within the `workspaces/alignment/artifacts/` directory. These artifacts represent the final synthesis of the existential and operational layers, providing a durable orchestrator constitution, an intermediate archetype, specialist agent souls, and a personalized verification checklist for the Cognitive Assistant.
+This section details the core artifacts generated within the `workspaces/alignment/artifacts/` directory. These artifacts represent the final synthesis of the existential and operational layers, providing a durable orchestrator constitution, an intermediate interaction posture, and a personalized verification checklist for the Cognitive Assistant.
 
 ## Overview of Alignment Artifacts
 
@@ -20,11 +19,11 @@ The alignment workspace serves as the "meta-layer" that consumes the outputs of 
 
 | Artifact | File Path | Purpose |
 | --- | --- | --- |
-| **Translation-layer soul** | `workspaces/alignment/artifacts/SOUL.md` | The durable orchestrator constitution. Specialist agents inherit this as their situational and user-fit grounding. |
-| **Translation-layer archetype** | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | An intermediate third-person representation of the agent's character, used to ground the SOUL generation. |
+| **Translation-layer soul** | `workspaces/alignment/artifacts/SOUL.md` | The durable orchestrator constitution and mode-routing guidance. |
+| **Interaction posture** | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | An intermediate third-person representation of the agent's character, used to ground the SOUL generation. |
 | **Alignment Spec** | `workspaces/alignment/artifacts/alignment_spec.md` | A personalized verification checklist used by the `verify-alignment` tool to score AI outputs against user-specific standards. |
 
-**Sources:**[core/soul_creator.py30-32](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L30-L32)[core/alignment_spec.py31-32](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L31-L32)
+**Sources:**[core/alignment_spec.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py)
 
 ---
 
@@ -50,7 +49,7 @@ flowchart TD
     end
     subgraph subGraph1 ["Code Entity Space (translation_layer_creator.py)"]
         LC["load_profile_sources()"]
-        GA["_generate_archetype()"]
+        GA["_generate_interaction_posture()"]
         GS["_generate_soul()"]
     end
     subgraph subGraph0 ["Natural Language Space (Profiles)"]
@@ -66,22 +65,16 @@ flowchart TD
     GS --> SL
 ```
 
-The specialist agent pipeline then consumes the translation layer.
-`core/soul_creator.py` uses `SOUL.md` and `INTERACTION_POSTURE.md` - together
-with bounded profile evidence and the predefined archetype catalog - to
-select applicable archetypes and generate per-agent soul documents.
-Specialist souls receive the full archetype contract, user calibration,
-the translation layer, and relevant skill material as operational
-guidance, not the full raw psychometric profile sources.
-
-**Sources:**[core/soul_creator.py64-84](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L64-L84)[core/soul_creator.py106-123](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L106-L123)
+The generated translation layer is committed
+(`SOUL.md` and `INTERACTION_POSTURE.md`); no consumer pipeline regenerates
+or repairs it downstream.
 
 ### Implementation Details
 
 1. **Profile Ingestion**: `TranslationLayerCreator` loads the latest
    `human_profile.md` from each registered profile via
    `load_profile_sources()`, wrapping them in `<profile_source>` tags.
-2. **Archetype Synthesis**: Before the orchestrator SOUL is written, the
+2. **Interaction Posture Synthesis**: Before the orchestrator SOUL is written, the
    system generates `INTERACTION_POSTURE.md` using
    `interaction_posture_seed.md`. This artifact defines the "Type,"
    "Essence," and "Gifts" of the counterpart in the third person.
@@ -137,31 +130,13 @@ flowchart LR
 
 ### `TranslationLayerCreator` (`core/translation_layer_creator.py`)
 
-- `generate_translation_layer(soul_output_path)`: Orchestrates the
-  loading of profiles, generation of the archetype, and final synthesis
-  of the orchestrator SOUL artifact.
+- `generate_translation_layer()`: Orchestrates the loading of profiles,
+  generation of the interaction posture, and final synthesis of the
+  orchestrator SOUL artifact.
 - `load_profile_sources()`: Loads the latest `human_profile.md` from
   each registered profile.
 - `load_translation_layer()`: Returns the generated SOUL.md and
-  INTERACTION_POSTURE.md content for downstream consumers like the agent
-  soul pipeline.
-
-### `SoulCreator` (`core/soul_creator.py`)
-
-- `generate_agents()`: Loads the translation layer and the archetype
-  catalog, selects applicable archetypes from the catalog, calibrates
-  them to the user, then generates one soul document per selected
-  archetype.
-- Agent selection is constrained to the predefined catalog at
-  `profiles/alignment/archetypes/`. Unknown archetype slugs and unknown
-  skill slugs fail with clear errors.
-- Specialist souls consume the full archetype contract (purpose, scope,
-  authority, quality/evidence expectations, canonical skills), user
-  calibration, the translation layer, and scoped skill material - not
-  the full raw psychometric profile sources.
-- Runtime orchestration, tool access enforcement, agent-to-agent
-  routing, and trace logging are explicitly not implemented in this
-  stage.
+  INTERACTION_POSTURE.md content.
 
 ### `AlignmentSpecCreator` ([core/alignment_spec.py81](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L81-L81))
 
@@ -173,4 +148,4 @@ flowchart LR
 - **SOUL.md** uses first-person "I" statements to establish presence and agency [workspaces/alignment/artifacts/SOUL.md5-13](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1#L5-L13)
 - **alignment_spec.md** uses imperative "Check" and "Fix" patterns to guide verification [workspaces/alignment/artifacts/alignment_spec.md17-29](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/alignment_spec.md?plain=1#L17-L29)
 
-**Sources:**[core/soul_creator.py1-190](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/soul_creator.py#L1-L190)[core/alignment_spec.py1-180](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py#L1-L180)[workspaces/alignment/artifacts/SOUL.md1-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1#L1-L60)[workspaces/alignment/artifacts/alignment_spec.md1-130](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/alignment_spec.md?plain=1#L1-L130)
+**Sources:**[core/alignment_spec.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/alignment_spec.py)[workspaces/alignment/artifacts/SOUL.md1-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1#L1-L60)[workspaces/alignment/artifacts/alignment_spec.md1-130](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/alignment_spec.md?plain=1#L1-L130)

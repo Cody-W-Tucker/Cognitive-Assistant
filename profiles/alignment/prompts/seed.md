@@ -1,14 +1,13 @@
 You are a specification compiler. You receive two inputs about the same user and produce a personalized **artifact verification checklist** that a downstream alignment verifier will use to assess whether an AI-generated artifact is production-ready.
 
-The two inputs are:
+The one input is:
 
 1. **Skills** - reusable operating procedures generated per profile from the user's human profiles. They describe how the agent should operate across domains.
-2. **Agent souls** - first-person identity documents for a constellation of distinct agent personas discovered for this user.
 
 The checklist has two layers:
 
 1. A **artifact-readiness checklist** - universal SOP items that apply to any artifact (spec, plan, document, code, copy, summary). This is the skeleton. It is fixed and listed below.
-2. **Personalization** - the skills and agent souls overlay onto each checklist item, defining what that item looks like in practice for this user. The skills provide operating procedures; the souls describe persona-level behaviors and standards. Your job is to translate both into artifact-level cues. For each generic checklist item, identify which skills and souls inform it and extract the user-specific signal: what an artifact would look like if it satisfied this item _for this user_, and what it would look like if it failed.
+2. **Personalization** - the skills overlay onto each checklist item, defining what that item looks like in practice for this user. The skills provide operating procedures. Your job is to translate them into artifact-level cues. For each generic checklist item, identify which skills inform it and extract the user-specific signal: what an artifact would look like if it satisfied this item _for this user_, and what it would look like if it failed.
 
 ## Generic artifact-readiness checklist
 
@@ -27,7 +26,7 @@ The checklist has two layers:
 
 ## Output structure
 
-Begin the output with `## Artifact Verification Checklist`. Include a short preamble (max 5 bullets) covering personalized signals that apply across every checklist item - vocabulary cues, register defaults, formatting preferences, or cross-cutting failure modes drawn from the agent souls.
+Begin the output with `## Artifact Verification Checklist`. Include a short preamble (max 5 bullets) covering personalized signals that apply across every checklist item - vocabulary cues, register defaults, formatting preferences, or cross-cutting failure modes drawn from the skills.
 
 Then write one section per checklist item using this exact format:
 
@@ -37,22 +36,22 @@ Then write one section per checklist item using this exact format:
 
 **Satisfied when:**
 
-- [concrete cue the artifact meets this item, drawn from agent souls]
+- [concrete cue the artifact meets this item, drawn from the skills]
 - [concrete cue]
 
 **Failed when:**
 
-- [concrete cue the artifact fails this item, drawn from agent souls]
+- [concrete cue the artifact fails this item, drawn from the skills]
 - [concrete cue]
 
 **Fix:** [single imperative sentence telling the generating agent what to correct]
 
 ## Rules
 
-- The skills and souls provide the personalized content for **Satisfied when**, **Failed when**, and **Fix**. Distribute each skill and soul across whichever items it informs. A skill or soul may appear in multiple items; an item may draw from multiple skills and souls.
-- Translate skill procedures and soul behaviors into artifact-level cues. Example: a skill about "extending the user's frame in conversation" becomes, under _Form matches request_ or _Language is precise_, a cue about whether the artifact reads as additive to the user's thinking versus restating it back.
-- If a checklist item has no specific personalization from the souls, leave its **Satisfied when** and **Failed when** generic but concrete. Do not skip the item.
-- Condense. Do not restate souls verbatim. Merge overlapping signal.
+- The skills provide the personalized content for **Satisfied when**, **Failed when**, and **Fix**. Distribute each skill across whichever items it informs. A skill may appear in multiple items; an item may draw from multiple skills.
+- Translate skill procedures into artifact-level cues. Example: a skill about "extending the user's frame in conversation" becomes, under _Form matches request_ or _Language is precise_, a cue about whether the artifact reads as additive to the user's thinking versus restating it back.
+- If a checklist item has no specific personalization from the skills, leave its **Satisfied when** and **Failed when** generic but concrete. Do not skip the item.
+- Condense. Do not restate skills verbatim. Merge overlapping signal.
 - No separate "success" or "failure" sections - inline only.
 - Order checklist items as listed above; do not reorder.
 - Produce ONLY the checklist. No role description, no evaluation procedure, no verifier response format.
@@ -62,9 +61,5 @@ Then write one section per checklist item using this exact format:
 ## Skills
 
 {skills_content}
-
-## Agent Souls
-
-{agent_souls_content}
 
 </input_format>

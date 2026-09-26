@@ -75,8 +75,8 @@ class TranslationLayerPathsTests(unittest.TestCase):
         )
         self.assertEqual(soul_path.parent, posture_path.parent)
 
-    def test_no_legacy_posture_artifact_name_remains(self) -> None:
-        """The legacy SOUL_ARCHETYPE surface must be gone, not shimmed."""
+    def test_no_bundle_surfaces_remain(self) -> None:
+        """The legacy SOUL_ARCHETYPE surface and the agent bundle must be gone."""
         source = Path("core/translation_layer_creator.py").read_text(encoding="utf-8")
         self.assertNotIn("SOUL_ARCHETYPE", source)
         self.assertNotIn("soul_archetype_seed", source)
@@ -89,27 +89,6 @@ class TranslationLayerPathsTests(unittest.TestCase):
         self.assertTrue(
             Path("profiles/alignment/prompts/interaction_posture_seed.md").exists()
         )
-
-
-class PostureOwnershipTests(unittest.TestCase):
-    """build-translation-layer owns the posture; build-agents only reads it."""
-
-    def test_soul_creator_never_writes_the_posture(self) -> None:
-        source = Path("core/soul_creator.py").read_text(encoding="utf-8")
-        # The only posture reference in the agent builder is the read-only
-        # snapshot path; no write/render/repair path may target it.
-        self.assertIn("POSTURE_FILE = OUTPUT_DIR / \"INTERACTION_POSTURE.md\"", source)
-        self.assertNotIn("_write_artifact(POSTURE", source)
-        self.assertNotIn("POSTURE_FILE.write_text", source)
-        self.assertNotIn("_atomic_write(POSTURE_FILE", source)
-
-    def test_reconciliation_only_touches_bundle_projections(self) -> None:
-        from core.soul_creator import SoulCreator
-
-        source = Path("core/soul_creator.py").read_text(encoding="utf-8")
-        rerender = source.split("_rerender_and_hashcheck_from_plan")[2]
-        self.assertNotIn("POSTURE", rerender.split("def _ensure_projection")[0])
-        self.assertTrue(hasattr(SoulCreator, "snapshot_posture"))
 
 
 class GenerateTranslationLayerTests(unittest.TestCase):

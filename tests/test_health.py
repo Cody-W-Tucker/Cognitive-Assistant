@@ -32,13 +32,11 @@ SCRIPT_MODULES = [
     "core.ingest_substrate",
     "core.health_check",
     "core.cli",
-    "core.soul_creator",
     "core.translation_layer_creator",
     "core.alignment_spec",
 ]
 
 SKILLS_DIR = Path("workspaces/skills")
-AGENTS_DIR = Path("workspaces/alignment/artifacts/agents")
 
 
 class ProfileHealthTests(unittest.TestCase):
@@ -82,22 +80,6 @@ class ProfileHealthTests(unittest.TestCase):
         }
 
         self.assertEqual(duplicates, {})
-
-    def test_agents_directory_is_valid(self) -> None:
-        """If the agents directory exists, all entries must be .md files with safe slugs."""
-        if not AGENTS_DIR.exists():
-            return  # Not yet generated; acceptable pre-build state.
-        for entry in AGENTS_DIR.iterdir():
-            if entry.is_file():
-                self.assertTrue(
-                    entry.suffix == ".md",
-                    f"Unexpected file in agents dir: {entry}",
-                )
-                slug = entry.stem
-                self.assertTrue(
-                    slug.replace("-", "").isalnum() and slug[0].isalpha(),
-                    f"Unsafe slug in agents dir: {slug}",
-                )
 
 
 if __name__ == "__main__":

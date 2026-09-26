@@ -29,6 +29,11 @@ class TranslationLayerCLIRegistrationTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parser.parse_args(["build-soul"])
 
+    def test_build_agents_is_not_registered(self) -> None:
+        parser = _build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["build-agents"])
+
     def test_update_help_mentions_translation_layer(self) -> None:
         parser = _build_parser()
         # The update subparser exists and accepts --skip-tool-specs.

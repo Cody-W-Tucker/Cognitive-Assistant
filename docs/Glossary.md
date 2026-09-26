@@ -78,7 +78,7 @@ A legacy or external source format for skills. The `enhance-skill` command uses 
 The "Durable Persona" artifact representing the agent's identity, boundaries, and voice. It is synthesized from both existential and operational human profiles.
 
 - **Artifact**: `workspaces/alignment/artifacts/SOUL.md`[workspaces/alignment/artifacts/SOUL.md1-60](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/workspaces/alignment/artifacts/SOUL.md?plain=1#L1-L60)
-- **Generator**: `soul_creator.py`[core/cli.py155-164](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/cli.py#L155-L164)
+- **Generator**: `translation_layer_creator.py`[core/translation_layer_creator.py](https://github.com/Cody-W-Tucker/Cognitive-Assistant/blob/a77ddaf6/core/translation_layer_creator.py)
 
 ### Substrate
 

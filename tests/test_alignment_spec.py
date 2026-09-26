@@ -1,118 +1,46 @@
 #!/usr/bin/env python3
-"""Tests for alignment spec generation, agent-plan authority, and skill loading."""
+"""Tests for alignment spec generation and skill loading."""
 
 from __future__ import annotations
 
-import json
-import textwrap
 import unittest
 from pathlib import Path
 
 from core.alignment_spec import (
-    AGENT_SOULS_PLACEHOLDER,
     SKILLS_PLACEHOLDER,
     AlignmentSpecCreator,
-    load_planned_agent_ids,
 )
-
-try:  # discover -s tests imports siblings as top-level modules
-    from plan_fixtures import minimal_agent_plan
-except ImportError:  # python -m unittest tests.test_alignment_spec
-    from tests.plan_fixtures import minimal_agent_plan
-
-
-def _write_plan(tmpdir: Path, agent_ids: list[str]) -> Path:
-    """Write a valid agent_plan.json declaring ``agent_ids`` and return its path."""
-    plan_path = tmpdir / "agent_plan.json"
-    plan_path.write_text(
-        json.dumps(minimal_agent_plan(agent_ids=agent_ids), ensure_ascii=True, indent=2),
-        encoding="utf-8",
-    )
-    return plan_path
-
-
-class LoadPlannedAgentIdsTests(unittest.TestCase):
-    """agent_plan.json is the only authority for declared agents."""
-
-    def setUp(self) -> None:
-        import shutil
-        import tempfile
-
-        self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
-
-    def test_parses_declared_agent_ids(self) -> None:
-        plan_path = _write_plan(self.tmp, ["builder", "strategist"])
-        self.assertEqual(load_planned_agent_ids(plan_path), ["builder", "strategist"])
-
-    def test_rejects_missing_plan(self) -> None:
-        with self.assertRaises(FileNotFoundError) as ctx:
-            load_planned_agent_ids(Path("/nonexistent/agent_plan.json"))
-        self.assertIn("Agent plan not found", str(ctx.exception))
-
-    def test_rejects_unparseable_plan(self) -> None:
-        plan_path = self.tmp / "agent_plan.json"
-        plan_path.write_text("{not valid json", encoding="utf-8")
-        with self.assertRaises(ValueError) as ctx:
-            load_planned_agent_ids(plan_path)
-        self.assertIn("is invalid", str(ctx.exception))
-
-    def test_rejects_schema_invalid_plan(self) -> None:
-        plan = minimal_agent_plan(agent_ids=["builder"])
-        plan["unknown_key"] = True
-        plan_path = self.tmp / "agent_plan.json"
-        plan_path.write_text(json.dumps(plan, ensure_ascii=True), encoding="utf-8")
-        with self.assertRaises(ValueError) as ctx:
-            load_planned_agent_ids(plan_path)
-        self.assertIn("is invalid", str(ctx.exception))
-
-    def test_rejects_empty_agent_list(self) -> None:
-        plan = minimal_agent_plan(agent_ids=["builder"])
-        plan["agents"] = []
-        plan_path = self.tmp / "agent_plan.json"
-        plan_path.write_text(json.dumps(plan, ensure_ascii=True), encoding="utf-8")
-        with self.assertRaises(ValueError) as ctx:
-            load_planned_agent_ids(plan_path)
-        self.assertIn("is invalid", str(ctx.exception))
-
-    def test_persona_map_is_never_read_as_authority(self) -> None:
-        source = Path("core/alignment_spec.py").read_text(encoding="utf-8")
-        self.assertNotIn("PERSONA_MAP_FILE", source)
-        self.assertNotIn("persona_map.md", source)
 
 
 class AlignmentSpecPlaceholderValidationTests(unittest.TestCase):
-    def test_seed_must_contain_both_placeholders_exactly_once(self) -> None:
+    def test_seed_must_contain_skills_placeholder_exactly_once(self) -> None:
         creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
         def fake_seed() -> str:
-            content = f"skills: {SKILLS_PLACEHOLDER} souls: {AGENT_SOULS_PLACEHOLDER}"
-            for placeholder in (SKILLS_PLACEHOLDER, AGENT_SOULS_PLACEHOLDER):
-                count = content.count(placeholder)
-                if count != 1:
-                    raise ValueError(
-                        f"Alignment seed must contain placeholder "
-                        f"'{placeholder}' exactly once; found {count}."
-                    )
+            content = f"skills: {SKILLS_PLACEHOLDER}"
+            count = content.count(SKILLS_PLACEHOLDER)
+            if count != 1:
+                raise ValueError(
+                    f"Alignment seed must contain placeholder "
+                    f"'{SKILLS_PLACEHOLDER}' exactly once; found {count}."
+                )
             return content
 
         creator._load_seed = fake_seed  # type: ignore[assignment]
         result = creator._load_seed()
         self.assertEqual(result.count(SKILLS_PLACEHOLDER), 1)
-        self.assertEqual(result.count(AGENT_SOULS_PLACEHOLDER), 1)
 
     def test_seed_with_missing_skills_placeholder_rejected(self) -> None:
         creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
         def fake_seed() -> str:
-            content = f"no skills placeholder, only {AGENT_SOULS_PLACEHOLDER}"
-            for placeholder in (SKILLS_PLACEHOLDER, AGENT_SOULS_PLACEHOLDER):
-                count = content.count(placeholder)
-                if count != 1:
-                    raise ValueError(
-                        f"Alignment seed must contain placeholder "
-                        f"'{placeholder}' exactly once; found {count}."
-                    )
+            content = "no skills placeholder"
+            count = content.count(SKILLS_PLACEHOLDER)
+            if count != 1:
+                raise ValueError(
+                    f"Alignment seed must contain placeholder "
+                    f"'{SKILLS_PLACEHOLDER}' exactly once; found {count}."
+                )
             return content
 
         creator._load_seed = fake_seed  # type: ignore[assignment]
@@ -120,18 +48,17 @@ class AlignmentSpecPlaceholderValidationTests(unittest.TestCase):
             creator._load_seed()
         self.assertIn("found 0", str(ctx.exception))
 
-    def test_seed_with_multiple_agent_souls_placeholders_rejected(self) -> None:
+    def test_seed_with_multiple_skills_placeholders_rejected(self) -> None:
         creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
 
         def fake_seed() -> str:
-            content = f"{SKILLS_PLACEHOLDER} {AGENT_SOULS_PLACEHOLDER} {AGENT_SOULS_PLACEHOLDER}"
-            for placeholder in (SKILLS_PLACEHOLDER, AGENT_SOULS_PLACEHOLDER):
-                count = content.count(placeholder)
-                if count != 1:
-                    raise ValueError(
-                        f"Alignment seed must contain placeholder "
-                        f"'{placeholder}' exactly once; found {count}."
-                    )
+            content = f"{SKILLS_PLACEHOLDER} {SKILLS_PLACEHOLDER}"
+            count = content.count(SKILLS_PLACEHOLDER)
+            if count != 1:
+                raise ValueError(
+                    f"Alignment seed must contain placeholder "
+                    f"'{SKILLS_PLACEHOLDER}' exactly once; found {count}."
+                )
             return content
 
         creator._load_seed = fake_seed  # type: ignore[assignment]
@@ -140,104 +67,9 @@ class AlignmentSpecPlaceholderValidationTests(unittest.TestCase):
         self.assertIn("found 2", str(ctx.exception))
 
 
-class AlignmentSpecLoadsOnlyDeclaredSoulsTests(unittest.TestCase):
-    def test_unlisted_agent_files_are_excluded(self) -> None:
-        """Verify _load_declared_agent_souls loads only plan-declared agents."""
-        import tempfile
-        import shutil
-
-        tmpdir = Path(tempfile.mkdtemp())
-        try:
-            agents_dir = tmpdir / "agents"
-            agents_dir.mkdir()
-            # Write declared soul
-            (agents_dir / "builder.md").write_text("I build things.\n", encoding="utf-8")
-            # Write an undeclared soul that should be ignored
-            (agents_dir / "stranger.md").write_text("I am not declared.\n", encoding="utf-8")
-
-            plan_path = _write_plan(tmpdir, ["builder"])
-
-            creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
-
-            # Patch module-level paths for this test
-            import core.alignment_spec as mod
-            orig_plan = mod.PLAN_FILE
-            orig_dir = mod.AGENTS_DIR
-            mod.PLAN_FILE = plan_path
-            mod.AGENTS_DIR = agents_dir
-            try:
-                result = creator._load_declared_agent_souls()
-            finally:
-                mod.PLAN_FILE = orig_plan
-                mod.AGENTS_DIR = orig_dir
-
-            self.assertIn("builder", result)
-            self.assertNotIn("stranger", result)
-            self.assertNotIn("I am not declared", result)
-        finally:
-            shutil.rmtree(tmpdir)
-
-    def test_missing_declared_soul_raises(self) -> None:
-        import tempfile
-        import shutil
-
-        tmpdir = Path(tempfile.mkdtemp())
-        try:
-            agents_dir = tmpdir / "agents"
-            agents_dir.mkdir()
-            plan_path = _write_plan(tmpdir, ["builder"])
-
-            creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
-
-            import core.alignment_spec as mod
-            orig_plan = mod.PLAN_FILE
-            orig_dir = mod.AGENTS_DIR
-            mod.PLAN_FILE = plan_path
-            mod.AGENTS_DIR = agents_dir
-            try:
-                with self.assertRaises(FileNotFoundError) as ctx:
-                    creator._load_declared_agent_souls()
-                self.assertIn("builder", str(ctx.exception))
-                self.assertIn("missing", str(ctx.exception).lower())
-            finally:
-                mod.PLAN_FILE = orig_plan
-                mod.AGENTS_DIR = orig_dir
-        finally:
-            shutil.rmtree(tmpdir)
-
-    def test_empty_declared_soul_raises(self) -> None:
-        import tempfile
-        import shutil
-
-        tmpdir = Path(tempfile.mkdtemp())
-        try:
-            agents_dir = tmpdir / "agents"
-            agents_dir.mkdir()
-
-            (agents_dir / "builder.md").write_text("   \n  \n", encoding="utf-8")
-            plan_path = _write_plan(tmpdir, ["builder"])
-
-            creator = AlignmentSpecCreator.__new__(AlignmentSpecCreator)
-
-            import core.alignment_spec as mod
-            orig_plan = mod.PLAN_FILE
-            orig_dir = mod.AGENTS_DIR
-            mod.PLAN_FILE = plan_path
-            mod.AGENTS_DIR = agents_dir
-            try:
-                with self.assertRaises(ValueError) as ctx:
-                    creator._load_declared_agent_souls()
-                self.assertIn("empty", str(ctx.exception).lower())
-            finally:
-                mod.PLAN_FILE = orig_plan
-                mod.AGENTS_DIR = orig_dir
-        finally:
-            shutil.rmtree(tmpdir)
-
-
 class CLISubcommandTests(unittest.TestCase):
-    def test_both_skill_and_agent_commands_registered(self) -> None:
-        """Both skill and agent CLI commands must be registered."""
+    def test_skill_commands_registered(self) -> None:
+        """Skill and alignment CLI commands must be registered."""
         from core.cli import _build_parser
         parser = _build_parser()
         # Collect registered subcommand names
@@ -251,32 +83,16 @@ class CLISubcommandTests(unittest.TestCase):
         # Skill commands
         self.assertIn("build-skills", registered)
         self.assertIn("enhance-skill", registered)
-        # Agent commands
-        self.assertIn("build-agents", registered)
+        # Alignment command
         self.assertIn("build-alignment-spec", registered)
-        # Retired command
+        # Retired commands
+        self.assertNotIn("build-agents", registered)
         self.assertNotIn("build-soul", registered)
 
 
-class LegacyCleanupAbsentTests(unittest.TestCase):
-    def test_soul_creator_has_no_legacy_cleanup(self) -> None:
-        """soul_creator.py reads SOUL.md but never cleans up translation artifacts."""
-        source_path = Path(__file__).resolve().parent.parent / "core" / "soul_creator.py"
-        source = source_path.read_text(encoding="utf-8")
-        # SOUL.md is a read-only selection input; the posture and soul are owned
-        # by build-translation-layer and must never be written or removed here.
-        self.assertNotIn("SOUL_ARCHETYPE", source)
-        self.assertNotIn("SOUL_FILE.write_text", source)
-        self.assertNotIn("SOUL_FILE.unlink", source)
-        self.assertNotIn("POSTURE_FILE.write_text", source)
-        self.assertNotIn("POSTURE_FILE.unlink", source)
-        self.assertNotIn("legacy_path", source)
-        self.assertNotIn("legacy artifact", source.lower())
-
-
 class ActualSeedPlaceholderTests(unittest.TestCase):
-    def test_seed_file_contains_both_placeholders_exactly_once(self) -> None:
-        """The on-disk seed.md must contain both placeholders exactly once."""
+    def test_seed_file_contains_skills_placeholder_exactly_once(self) -> None:
+        """The on-disk seed.md must contain the skills placeholder exactly once."""
         from core.config import ROOT_DIR
         seed_path = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
         content = seed_path.read_text(encoding="utf-8")
@@ -285,10 +101,40 @@ class ActualSeedPlaceholderTests(unittest.TestCase):
             1,
             f"seed.md must contain '{SKILLS_PLACEHOLDER}' exactly once",
         )
-        self.assertEqual(
-            content.count(AGENT_SOULS_PLACEHOLDER),
-            1,
-            f"seed.md must contain '{AGENT_SOULS_PLACEHOLDER}' exactly once",
+
+    def test_seed_file_has_no_agent_souls_section(self) -> None:
+        """The on-disk seed.md must not reference agent souls."""
+        from core.config import ROOT_DIR
+        seed_path = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
+        content = seed_path.read_text(encoding="utf-8").lower()
+        self.assertNotIn("agent soul", content)
+        self.assertNotIn("agent_souls", content)
+
+
+class RetainedTranslationLayerTests(unittest.TestCase):
+    def test_spec_owns_verification_and_translation_layer_is_retained(self) -> None:
+        """The spec no longer consumes agent souls; the translation layer
+        artifacts remain owned by build-translation-layer."""
+        source = Path("core/alignment_spec.py").read_text(encoding="utf-8")
+        self.assertNotIn("AGENTS_DIR", source)
+        self.assertNotIn("PLAN_FILE", source)
+        self.assertNotIn("agent_plan", source)
+        self.assertNotIn("persona_map", source)
+        self.assertNotIn("agent_souls", source)
+        # Translation layer is not an input to the spec.
+        self.assertNotIn("translation_layer_creator", source)
+        # But it is still generated and exported by the repo.
+        self.assertTrue(
+            Path("core/translation_layer_creator.py").exists(),
+            "translation layer creator must be retained",
+        )
+        self.assertTrue(
+            Path("profiles/alignment/prompts/soul_seed.md").exists(),
+            "soul seed must be retained",
+        )
+        self.assertTrue(
+            Path("profiles/alignment/prompts/interaction_posture_seed.md").exists(),
+            "posture seed must be retained",
         )
 
 

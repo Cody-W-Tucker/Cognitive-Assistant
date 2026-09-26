@@ -26,8 +26,6 @@ SCRIPT_MODULES = [
     "core.skill_enhancer",
     "core.question_asker",
     "core.health_check",
-    "core.archetype_catalog",
-    "core.soul_creator",
     "core.translation_layer_creator",
     "core.alignment_spec",
 ]
@@ -61,7 +59,6 @@ _PLACEHOLDER_FIXTURES = {
     "agent_definition": "{\"id\": \"agent\"}",
     "skill_material": "<skill slug=\"sample\">sample</skill>",
     "skills_content": "<skill slug=\"sample\">sample</skill>",
-    "agent_souls_content": "<agent_soul slug=\"agent\">sample</agent_soul>",
 }
 
 
@@ -115,21 +112,7 @@ def check_required_paths(config: Config) -> List[str]:
 _ALIGNMENT_PROMPT_FIXTURES = {
     "interaction_posture_seed.md": ["profile_sources"],
     "soul_seed.md": ["profile_sources", "interaction_posture"],
-    "archetype_selection_seed.md": [
-        "catalog",
-        "interaction_posture",
-        "translation_layer",
-        "context_registry",
-        "human_source_registry",
-        "stakeholder_registry",
-        "synthetic_perspective_registry",
-        "provenance_policy",
-        "profile_evidence_registry",
-        "domain_tiers",
-        "trigger_vocabulary",
-    ],
-    "agent_soul_seed.md": ["agent_definition", "interaction_posture", "skill_material"],
-    "seed.md": ["skills_content", "agent_souls_content"],
+    "seed.md": ["skills_content"],
 }
 
 

@@ -67,21 +67,6 @@
         }) skillEntries
       );
 
-      # --- Agent souls ---
-      agentsDir = ./workspaces/alignment/artifacts/agents;
-      agentFilesRaw = if builtins.pathExists agentsDir then builtins.readDir agentsDir else { };
-      agentSoulEntries = builtins.filter
-        (entry: entry.type == "regular" && builtins.match ".*\\.md$" entry.name != null && entry.name != "README.md")
-        (nixpkgs.lib.mapAttrsToList (name: type: { inherit name type; }) agentFilesRaw);
-      agentSoulsByName = builtins.listToAttrs (
-        map
-          (entry: {
-            name = builtins.replaceStrings [ ".md" ] [ "" ] entry.name;
-            value = builtins.readFile (agentsDir + "/${entry.name}");
-          })
-          agentSoulEntries
-      );
-
       existential = mkLayerExports "existential" ./workspaces/existential;
       operational = (mkLayerExports "operational" ./workspaces/operational) // {
         toolSpecs = {
@@ -97,15 +82,6 @@
             spec = ./workspaces/alignment/artifacts/alignment_spec.md;
             translationLayer = ./workspaces/alignment/artifacts/SOUL.md;
             interactionPosture = ./workspaces/alignment/artifacts/INTERACTION_POSTURE.md;
-            # persona_map.md is a generated plan projection: it exists only
-            # after `build-agents` commits an agent_plan.json.
-          }
-          // nixpkgs.lib.optionalAttrs
-            (builtins.pathExists ./workspaces/alignment/artifacts/persona_map.md)
-            { personaMap = ./workspaces/alignment/artifacts/persona_map.md; }
-          // {
-            agentSouls = agentSoulsByName;
-            agentSoulNames = builtins.attrNames agentSoulsByName;
             toolSpecs = {
               verifyAlignment = ./workspaces/alignment/artifacts/tool_specs/verify_alignment.md;
             };
