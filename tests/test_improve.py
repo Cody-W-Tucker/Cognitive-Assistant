@@ -261,22 +261,12 @@ class ImproveDiscoveryTests(unittest.TestCase):
                 location = transcript.get("path") or transcript.get("db", "")
                 self.assertTrue(str(location).startswith(str(home)))
 
-    def test_synthesize_preserves_per_source_quotes(self) -> None:
+    def test_synthesize_emits_narrow_plans_annotation_owns_per_source_quotes(self) -> None:
         import subprocess as _sp
 
-        script = (
-            "import json;"
-            "from synthesize import synthesizeCandidates;"
-            "ledger={'clusters':[{'id':'g-abc','proposedInstruction':'exp-x',"
-            "'representativeQuote':'FIRST-QUOTE','mistake':'FIRST-MISTAKE',"
-            "'sources':['s1','s2'],'count':2,'eligible':True}]};"
-            "evidenceIndex=new Map([['s1',[{quote:'QUOTE-ONE',effect:'MOMENT-ONE'}]],"
-            "['s2',[{quote:'QUOTE-TWO',effect:'MOMENT-TWO'}]]]);"
-            "edits=synthesizeCandidates(ledger,{evidenceIndex});"
-            "console.log(JSON.stringify(edits))"
-        )
         node_script = (
             "import { synthesizeCandidates } from %r;\n" % str(REPO_ROOT / "improve" / "src" / "synthesize.js")
+            + "import { buildMockFinalAnnotation } from %r;\n" % str(REPO_ROOT / "improve" / "src" / "annotate.js")
             + "const ledger = { clusters: [{ id: 'g-abc', proposedInstruction: 'exp-x',"
             " representativeQuote: 'FIRST-QUOTE', mistake: 'FIRST-MISTAKE',"
             " sources: ['s1','s2'], count: 2, eligible: true,"
@@ -284,8 +274,9 @@ class ImproveDiscoveryTests(unittest.TestCase):
             " s2: { quote: 'QUOTE-TWO', mistake: 'MISTAKE-TWO' } } }] };\n"
             "const evidenceIndex = new Map([['s1', [{ quote: 'QUOTE-ONE', effect: 'MOMENT-ONE' }]],"
             " ['s2', [{ quote: 'QUOTE-TWO', effect: 'MOMENT-TWO' }]]]);\n"
-            "const edits = synthesizeCandidates(ledger, { evidenceIndex });\n"
-            "console.log(JSON.stringify(edits));\n"
+            "const plans = synthesizeCandidates(ledger, { evidenceIndex });\n"
+            "const finals = plans.map((p) => buildMockFinalAnnotation(p, { ledger, evidenceIndex }));\n"
+            "console.log(JSON.stringify({ plans, finals }));\n"
         )
         with tempfile.TemporaryDirectory() as directory:
             probe = Path(directory) / "probe.mjs"
@@ -295,8 +286,16 @@ class ImproveDiscoveryTests(unittest.TestCase):
                 capture_output=True, text=True, check=False,
             )
             self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr}")
-            edits = json.loads(proc.stdout.strip().splitlines()[-1])
-            by_source = {e["source"]: e for e in edits[0]["evidence"]}
+            payload = json.loads(proc.stdout.strip().splitlines()[-1])
+            plans = payload["plans"]
+            # Synthesis emits narrow plans only: no final record/evidence.
+            self.assertEqual(len(plans), 1)
+            for forbidden in ("record", "evidence", "title", "body", "counterevidence", "compilerImplication"):
+                self.assertNotIn(forbidden, plans[0], f"synth plan must not carry {forbidden}")
+            self.assertEqual(plans[0]["clusterId"], "g-abc")
+            # Annotation owns the durable per-source quote mappings.
+            finals = payload["finals"]
+            by_source = {e["source"]: e for e in finals[0]["record"]["evidence"]}
             self.assertIn("s1", by_source)
             self.assertIn("s2", by_source)
             self.assertIn("QUOTE-ONE", by_source["s1"]["text"])
@@ -304,7 +303,6 @@ class ImproveDiscoveryTests(unittest.TestCase):
             self.assertNotIn("FIRST-QUOTE", by_source["s2"]["text"])
             self.assertIn("MOMENT-ONE", by_source["s1"].get("moment", ""))
             self.assertIn("MOMENT-TWO", by_source["s2"].get("moment", ""))
-        _ = script
 
     def test_review_skip_does_not_satisfy_required_decision(self) -> None:
         import io
@@ -584,6 +582,33 @@ class ImproveApplyTests(unittest.TestCase):
             self.assertIn(edit["id"], rejections)
             self.assertIn("too-narrow", rejections)
 
+
+    def test_apply_refuses_unannotated_synth_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_dir = root / "xdg" / "improve"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            proposal = {
+                "id": "prop-unannotated",
+                "appliedAt": None,
+                "edits": [
+                    {
+                        "id": "e1",
+                        "kind": "add",
+                        "clusterId": "g-aaa",
+                        "provisionalIntent": "Bootstrap context once",
+                        "provisionalSources": ["s1", "s2"],
+                    }
+                ],
+            }
+            (state_dir / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "annotation|annotat"):
+                improve.apply(
+                    state_dir=state_dir,
+                    experience_root=root / "exp",
+                    decisions={"e1": "accepted"},
+                )
+            self.assertFalse((root / "exp").exists())
 
     def test_apply_staged_failure_rolls_back_authored_half(self) -> None:
         from unittest.mock import patch

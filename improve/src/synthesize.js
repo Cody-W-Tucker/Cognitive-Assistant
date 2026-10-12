@@ -59,59 +59,71 @@ export function renderDiff(recordId, stagedArtifact) {
 }
 
 /**
- * @param {{clusters}} ledger — folded ledger (eligible clusters only become edits)
+ * @param {{clusters}} ledger — folded ledger (eligible clusters only become plans)
  * @param {{positiveBySession: Map}} evidenceIndex — sessionId -> positive entries
- * @param {string} soulBaseline — SOUL.md text (read-only context)
- * @returns edits [{id, kind, title, rationale, instructions, evidence, record, stagedArtifact, diff}]
+ * @param {string} soulBaseline — SOUL.md text (read-only context, unused for plans)
+ * @returns plans [{id, kind, clusterId, provisionalIntent, provisionalSources, provisionalCount}]
+ *
+ * Narrow staged change plans ONLY. Plans may hold the untrusted provisional
+ * proposal/cluster ref/intent and eligible source ids for private
+ * stage/measure context. They NEVER carry authoritative final fields:
+ * no record, title, body, evidence, session quote mappings,
+ * counterevidence, compilerImplication, stagedArtifact, or diff.
+ * Annotation is the sole full-record origin.
  */
 export function synthesizeCandidates(ledger, { evidenceIndex = new Map(), soulBaseline = "" } = {}) {
-  const edits = [];
+  void evidenceIndex;
+  void soulBaseline;
+  const plans = [];
   let index = 0;
   for (const cluster of ledger.clusters || []) {
     if (!cluster.eligible) continue;
     index += 1;
-    const recordId = `exp-${slugify(cluster.proposedInstruction).slice(0, 40)}-${shortHash(cluster.id)}`;
-    const evidence = cluster.sources.map((source) => {
-      const positives = evidenceIndex.get(source) || [];
-      const first = positives[0];
-      // Per-source quote-backed evidence: never replicate the cluster's
-      // first quote/mistake across all sources. Prefer the folded per-source
-      // gap sighting, fall back to this source's positive quote.
-      const per = (cluster.perSource || {})[source] || {};
-      return {
-        polarity: "negative",
-        text: per.quote || first?.quote || cluster.representativeQuote,
-        effect: per.mistake || cluster.mistake,
-        moment: first?.effect || "",
-        source,
-      };
-    });
-    const record = {
-      id: recordId,
-      title: cluster.proposedInstruction,
-      body: `Recurring gap seen in ${cluster.count} session(s): ${cluster.mistake}`,
-      sources: cluster.sources,
-      clusterId: cluster.id,
-      evidence,
-      counterevidence: "none observed",
-      compilerImplication: "compiler appends this record to the experience block; no SOUL, skill, or Hermes changes.",
-    };
-    const stagedArtifact = renderStagedArtifact(record, soulBaseline);
-    edits.push({
+    plans.push({
       id: `e${index}`,
       kind: "add",
-      title: `Experience record: ${cluster.proposedInstruction}`,
-      rationale: cluster.mistake,
-      instructions: [cluster.proposedInstruction],
-      evidence,
-      record,
-      counterevidence: record.counterevidence,
-      compilerImplication: record.compilerImplication,
-      stagedArtifact,
-      diff: renderDiff(recordId, stagedArtifact),
+      clusterId: cluster.id,
+      provisionalIntent: cluster.proposedInstruction,
+      provisionalSources: [...(cluster.sources || [])],
+      provisionalCount: cluster.count || (cluster.sources || []).length,
     });
   }
-  return edits;
+  return plans;
+}
+
+/**
+ * Validate a narrow staged change plan. Plans must reference an eligible
+ * ledger cluster and carry only provisional intent/context. Any authoritative
+ * final field (record/title/body/evidence/counterevidence/
+ * compilerImplication/stagedArtifact/diff) fails the plan.
+ */
+export function validateChangePlan(plan, { ledger } = {}) {
+  const errors = [];
+  if (!plan || typeof plan !== "object") return { ok: false, errors: ["change plan is required"] };
+  if (plan.kind !== "add") errors.push(`kind must be "add" (got ${JSON.stringify(plan.kind)})`);
+  if (!plan.clusterId || !String(plan.clusterId).trim()) {
+    errors.push("clusterId is required");
+  } else {
+    const cluster = (ledger?.clusters || []).find((c) => String(c?.id) === String(plan.clusterId));
+    if (!cluster) errors.push(`unknown cluster ${JSON.stringify(plan.clusterId)}`);
+    else if (!cluster.eligible) errors.push(`cluster ${JSON.stringify(plan.clusterId)} is not eligible`);
+    else if (Array.isArray(plan.provisionalSources) && plan.provisionalSources.length) {
+      const clusterSources = new Set((cluster.sources || []).map(String));
+      for (const s of plan.provisionalSources) {
+        if (!clusterSources.has(String(s))) errors.push(`provisional source ${JSON.stringify(s)} is not evidence from cluster ${cluster.id}`);
+      }
+    }
+  }
+  const intent = plan.provisionalIntent ?? plan.intent;
+  if (!intent || !String(intent).trim()) errors.push("provisionalIntent is required (untrusted provisional intent)");
+  const provisionalSources = plan.provisionalSources;
+  if (!Array.isArray(provisionalSources) || provisionalSources.length < 2) {
+    errors.push("provisionalSources needs >=2 distinct sessions of eligible context");
+  }
+  for (const forbidden of ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff", "rationale", "instructions"]) {
+    if (plan[forbidden] !== undefined) errors.push(`authoritative field ${forbidden} must not appear on a staged change plan (annotation owns it)`);
+  }
+  return { ok: errors.length === 0, errors };
 }
 
 // --- production (acpx-only) synthesis -------------------------------------
@@ -169,7 +181,7 @@ function allowedQuotesForSource(cluster, source, evidenceIndex) {
 }
 
 /**
- * Strict candidate validation against folded evidence.
+ * Strict final-record validation for ANNOTATION-origin records only.
  * Checks title, bounded body, >=2 distinct known sources, exact
  * per-source quote binding (the cited text must be an exact quote
  * attributable to the cited source, never a swapped/global quote),
@@ -177,7 +189,8 @@ function allowedQuotesForSource(cluster, source, evidenceIndex) {
  * counterevidence/compilerImplication, and cluster linkage (clusterId
  * must resolve an eligible ledger cluster; every cited source/quote
  * must be evidence from that cluster, so the floor cannot be met with
- * global evidenceIndex or ineligible sources).
+ * global evidenceIndex or ineligible sources). Synth plans never satisfy
+ * this: they carry no record/evidence by contract.
  */
 export function validateCandidate(candidate, { ledger, evidenceIndex = new Map() } = {}) {
   const errors = [];
@@ -258,17 +271,19 @@ function rejectionSources(r) {
 }
 
 /**
- * True when a candidate repeats a rejected identity without higher/new
- * evidence. Higher = more distinct sessions; new = a session id the
- * rejection did not cite. Rejections with insufficient identity or source
- * metadata never suppress (fail-open for reappearance, still rendered).
+ * True when an ANNOTATED FINAL candidate repeats a rejected identity
+ * without higher/new evidence. Operates only on annotation final records
+ * (record/finalRecord plus annotation verdict keep). Higher = more distinct
+ * sessions; new = a session id the rejection did not cite. Rejections with
+ * insufficient identity or source metadata never suppress (fail-open for
+ * reappearance, still rendered).
  */
 export function isSuppressedByRejection(candidate, rejections) {
-  const record = candidate?.record || {};
-  const candCluster = String(record.clusterId || "").trim();
+  const record = candidate?.finalRecord || candidate?.record || {};
+  const candCluster = String(record.clusterId || candidate?.clusterId || "").trim();
   const candTitle = String(record.title || candidate?.title || "").trim();
   if (!candCluster && !candTitle) return false;
-  const candSources = new Set((record.sources || []).map(String));
+  const candSources = new Set(((record.sources || candidate?.provisionalSources) || []).map(String));
   for (const r of rejections || []) {
     const rejKey = rejectionKey(r);
     if (!rejKey) continue;
@@ -327,21 +342,25 @@ export function buildSynthesisPrompt(
 
 /**
  * Strict raw-acpx parser: the model must return exactly
- * `{"candidates": [...]}`. Anything else (missing key, non-array, an
- * `edits` key, a non-object) is malformed and fails closed. Returns the
- * candidate list or null.
+ * `{"plans": [...]}` — narrow staged change plans only. Anything else
+ * (missing key, non-array, a `candidates`/`edits` key carrying full
+ * records, a non-object) is malformed and fails closed. Returns the
+ * plan list or null. Production invents nothing.
  */
 export function parseAcpxSynthesisResult(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  if (!Array.isArray(raw.candidates)) return null;
-  return raw.candidates;
+  if (!Array.isArray(raw.plans)) return null;
+  return raw.plans;
 }
 
 /**
- * Production synthesis: acpx-only, strict validation, fail-closed.
+ * Production synthesis: acpx-only, narrow plans, fail-closed.
  * Persists the rendered prompt privately with run/stage metadata.
- * Returns {edits, note?, failed?, promptFile?}; failure yields no edits
- * plus a visible note for the proposal.
+ * Returns {edits: plans, note?, failed?, promptFile?}; failure yields no
+ * plans plus a visible note for the proposal. Plans are NEVER final
+ * records: no record/title/body/evidence/counterevidence/
+ * compilerImplication/stagedArtifact/diff. Suppression and final-record
+ * validation happen only on annotated finals downstream.
  */
 export function synthesizeWithAcpx(
   ledger,
@@ -391,12 +410,15 @@ export function synthesizeWithAcpx(
     outcome = { status: "failed", error: err?.message || String(err) };
   }
   // Two invoke-output shapes: production invokes return
-  // {status:"ok", result:<raw acpx JSON>} (parsed strictly above);
-  // injected test doubles may return {status:"ok", candidates:[...]}
-  // directly. A raw `result` is never read loosely.
+  // {status:"ok", result:<raw acpx JSON>} (parsed strictly as {plans});
+  // injected test doubles may return {status:"ok", plans:[...]}
+  // directly (legacy {status:"ok", candidates:[...]} is accepted only
+  // when every entry is already a narrow plan). A raw `result` is never
+  // read loosely. Production invents nothing: invalid plans are dropped.
   let rawCandidates = null;
   if (outcome && outcome.status === "ok") {
     if (outcome.result !== undefined) rawCandidates = parseAcpxSynthesisResult(outcome.result);
+    else if (Array.isArray(outcome.plans)) rawCandidates = outcome.plans;
     else if (Array.isArray(outcome.candidates)) rawCandidates = outcome.candidates;
   }
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
@@ -411,47 +433,36 @@ export function synthesizeWithAcpx(
   const edits = [];
   let index = 0;
   for (const raw of rawCandidates) {
-    // Normalize: model returns record-shaped candidates; wrap into edits.
-    const record = raw?.record || raw;
-    const edit = raw?.record
-      ? raw
-      : {
-          id: raw.id || `e${index + 1}`,
-          kind: "add",
-          title: record.title,
-          rationale: record.rationale || "",
-          instructions: record.instructions || (record.title ? [record.title] : []),
-          evidence: record.evidence || [],
-          record,
-          counterevidence: record.counterevidence,
-          compilerImplication: record.compilerImplication,
-        };
-    const check = validateCandidate(edit, { ledger, evidenceIndex });
+    // Narrow plans only: accept {clusterId, provisionalIntent, provisionalSources}.
+    // Anything carrying authoritative final fields is dropped fail-closed.
+    const plan = {
+      id: raw?.id || `e${index + 1}`,
+      kind: raw?.kind || "add",
+      clusterId: raw?.clusterId || raw?.record?.clusterId,
+      provisionalIntent: raw?.provisionalIntent ?? raw?.intent ?? raw?.record?.title ?? raw?.title,
+      provisionalSources: raw?.provisionalSources ?? raw?.record?.sources ?? raw?.sources,
+      provisionalCount: raw?.provisionalCount ?? raw?.count,
+    };
+    if (raw?.record !== undefined || raw?.evidence !== undefined || raw?.title !== undefined || raw?.body !== undefined || raw?.counterevidence !== undefined || raw?.compilerImplication !== undefined || raw?.stagedArtifact !== undefined || raw?.diff !== undefined) {
+      continue;
+    }
+    const check = validateChangePlan(plan, { ledger });
     if (!check.ok) continue;
-    if (isSuppressedByRejection(edit, rejections)) continue;
     index += 1;
-    const recordId = record.id || `exp-${slugify(record.title).slice(0, 40)}-${shortHash(record.clusterId || record.title)}`;
-    const fullRecord = { ...record, id: recordId };
-    const stagedArtifact = renderStagedArtifact(fullRecord, soulBaseline);
     edits.push({
       id: `e${index}`,
       kind: "add",
-      title: record.title?.startsWith("Experience record:") ? record.title : `Experience record: ${record.title}`,
-      rationale: record.rationale || edit.rationale || "",
-      instructions: edit.instructions?.length ? edit.instructions : [record.title],
-      evidence: fullRecord.evidence,
-      record: fullRecord,
-      counterevidence: fullRecord.counterevidence,
-      compilerImplication: fullRecord.compilerImplication,
-      stagedArtifact,
-      diff: renderDiff(recordId, stagedArtifact),
+      clusterId: String(plan.clusterId),
+      provisionalIntent: String(plan.provisionalIntent),
+      provisionalSources: [...plan.provisionalSources].map(String),
+      provisionalCount: Number(plan.provisionalCount || plan.provisionalSources.length),
     });
   }
   if (!edits.length) {
     return withPersist({
       edits: [],
-      failed: "no valid candidates",
-      note: "synthesis produced no valid candidates; fail-closed with no candidate edits for this run",
+      failed: "no valid change plans",
+      note: "synthesis produced no valid change plans; fail-closed with no candidate edits for this run",
       promptFile,
     });
   }

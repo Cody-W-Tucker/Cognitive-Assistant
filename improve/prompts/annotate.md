@@ -3,19 +3,21 @@
   Adapted from Backpass src/prompts/annotate.md
   (Backpass MIT (c) 2026 Kun Chen, https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md,
   commit 0268201c3896f45d3002de0d439b6cefccb39063, tag backpass-v0.1.32).
-  CA-native changes: strict JSON annotation contract over the staged change
-  plan (coverage-or-revert per candidate, exact quote/session binding,
-  counterevidence, compilerImplication); the proposal stays non-authoritative
-  until the human apply gate; the self-session sentinel is prepended by
-  improve/src/prompts.js, not baked into this file. See improve/LICENSE.NOTICE.
+  CA-native changes: annotation is the SOLE FULL-RECORD ORIGIN over the
+  narrow staged change plan (coverage-or-revert per plan, exact
+  quote/session binding, counterevidence, compilerImplication); staged
+  plans carry no record/evidence. The proposal stays non-authoritative
+  until the human apply gate consumes annotated finals; the self-session
+  sentinel is prepended by improve/src/prompts.js, not baked into this
+  file. See improve/LICENSE.NOTICE.
 -->
-You are annotating the staged change plan of a CA improvement pass. The staged candidates below are proposals only — nothing here is authoritative until a human applies it.
+You are annotating the narrow staged change plan of a CA improvement pass. The staged plans below are provisional only — nothing here is authoritative until annotation authors the final record and a human applies it.
 
 ## Run
 
-{{RUN_ID}} — {{COUNT}} staged candidate(s) to annotate.
+{{RUN_ID}} — {{COUNT}} staged change plan(s) to annotate.
 
-## Staged candidates
+## Staged change plans (provisional, no records)
 
 {{STAGED_CANDIDATES}}
 
@@ -26,17 +28,17 @@ Return ONE JSON object and nothing else. No prose, no markdown fence.
 ```
 {
   "annotations": [
-    {"id": "<staged candidate id>", "verdict": "keep|drop", "reason": "one line"},
-    {"id": "<staged candidate id>", "verdict": "revert", "reason": "measurement does not support this candidate"}
+    {"id": "<staged plan id>", "verdict": "keep", "reason": "one line", "record": {"title": "one imperative sentence", "body": "bounded recurrence description (at most 2000 chars)", "clusterId": "<folded cluster id>", "sources": ["<session id>", "<session id>"], "evidence": [{"polarity": "negative", "text": "verbatim quote from the evidence", "source": "<session id>", "effect": "what it cost"}], "counterevidence": "what argues against this record, or 'none observed'", "compilerImplication": "how the experience compiler consumes this record"}},
+    {"id": "<staged plan id>", "verdict": "drop", "reason": "one line"},
+    {"id": "<staged plan id>", "verdict": "revert", "reason": "measurement does not support this plan"}
   ]
 }
 ```
 
-Annotation contract:
+Annotation contract (sole full-record origin):
 
-1. Coverage or revert: every staged candidate gets exactly one annotation. A `keep` or `drop` verdict covers the candidate; a `revert` verdict explicitly reverts it when measurement does not support it. No candidate is left without coverage or explicit revert.
-2. Exact source quote and session binding: each `keep` verdict must rest on a verbatim `text` quote copied exactly from the staged evidence rows and its `source` session id. A paraphrase is not evidence; a quote cited against the wrong session fails.
-3. `counterevidence` is required on the staged record: either the strongest observation against the record or the literal string `none observed` when nothing argues against it.
-4. `compilerImplication` is required on the staged record: one line stating how the experience compiler consumes the record (appended to the experience block; never a live, tracked, SOUL, skill, or Hermes change).
-5. Change only the annotation: never edit live files, tracked files, SOUL, posture, skills, or Hermes. Nothing here reaches the repository until a human applies it.
-6. An empty `{"annotations": []}` is valid only when the staged set is empty.
+1. Coverage or revert: every staged plan gets exactly one annotation. A `keep` or `drop` verdict covers the plan; a `revert` verdict explicitly reverts it when measurement does not support it. No plan is left without coverage or explicit revert.
+2. Keep authors the complete durable record: `title` (one imperative sentence), `body` (at most 2000 chars), `clusterId` (eligible folded cluster), `sources` (at least 2 distinct session ids from that cluster), `evidence` (exact session-bound verbatim `text` quotes, each copied exactly from staged eligible evidence for its `source` session), `counterevidence` (strongest observation against the record or `none observed`), `compilerImplication` (how the experience compiler consumes the record: appended to the experience block; never a live, tracked, SOUL, skill, or Hermes change), and `reason`/`rationale` (one line). A paraphrase is not evidence; a quote cited against the wrong session fails; anything less than the complete record fails closed.
+3. Exact source quote and session binding: each `keep` verdict must rest on verbatim quotes attributable to the cited sessions within the referenced eligible cluster. Global or swapped quotes fail.
+4. Change only the annotation: never edit live files, tracked files, SOUL, posture, skills, or Hermes. Nothing here reaches the repository until a human applies the annotated final.
+5. An empty `{"annotations": []}` is valid only when the staged set is empty. Production invents nothing: missing/invalid finals fail closed with no edits.

@@ -7,6 +7,7 @@ import os from "node:os";
 import { runPipeline } from "../src/pipeline.js";
 import { synthesizeWithAcpx } from "../src/synthesize.js";
 import { consolidateLedger } from "../src/consolidate.js";
+import { buildMockFinalAnnotation } from "../src/annotate.js";
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ca-pipe-"));
@@ -37,31 +38,28 @@ function gapEvidence() {
   return { status: "ok", positive: [], negative: [], gaps: [gap(GAP_QUOTE), gap(GAP_QUOTE_B)] };
 }
 
-/** Build a strictly valid candidate from the actual folded ledger. */
-function candidateForLedger(ledger) {
+/** Build a strictly valid NARROW plan from the actual folded ledger. */
+function planForLedger(ledger) {
   const cluster = (ledger?.clusters || []).find((c) => c.eligible);
   assert.ok(cluster, "ledger must hold an eligible cluster");
   assert.ok(cluster.sources.length >= 2);
   return {
-    record: {
-      title: cluster.proposedInstruction,
-      body: `Recurring gap seen in ${cluster.count} session(s): ${cluster.mistake}`,
-      clusterId: cluster.id,
-      sources: [...cluster.sources],
-      evidence: cluster.sources.map((source) => ({
-        polarity: "negative",
-        text: (cluster.perSource || {})[source]?.quote || cluster.representativeQuote,
-        source,
-        effect: cluster.mistake,
-      })),
-      counterevidence: "none observed",
-      compilerImplication: "compiler appends this record to the experience block",
-    },
+    clusterId: cluster.id,
+    provisionalIntent: cluster.proposedInstruction,
+    provisionalSources: [...cluster.sources],
   };
 }
 
+/** Build a strictly valid ANNOTATION final for one plan. */
+function finalAnnotationForPlan(plan, ledger, evidenceIndex) {
+  return buildMockFinalAnnotation(
+    { id: "e1", kind: "add", ...plan },
+    { ledger, evidenceIndex },
+  );
+}
+
 describe("pipeline production wiring (injectable invokes, no real acpx)", () => {
-  it("production success persists prompts + proposal notes with injected invokes", async () => {
+  it("production success persists prompts + proposal notes with injected invokes (annotate owns finals)", async () => {
     const home = homeWithTranscripts(2);
     const stateDir = tmpDir();
     const proposal = await runPipeline({
@@ -71,13 +69,84 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
       runId: "run-PIPE1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { candidates: [candidateForLedger(ledger)] } }),
+      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
+      annotateInvoke: (args) => {
+        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
+        const plans = args?.staged || [];
+        // Production invoke supplies complete finals; the test double builds
+        // them from the staged plans without inventing sessions.
+        return {
+          status: "ok",
+          annotations: plans.map((p, i) => ({
+            id: p.id || `e${i + 1}`,
+            verdict: "keep",
+            reason: String(p.provisionalIntent || "keep"),
+            record: {
+              id: `exp-test-${i}`,
+              title: String(p.provisionalIntent),
+              body: `Recurring gap: ${p.provisionalIntent}`,
+              clusterId: String(p.clusterId),
+              sources: [...p.provisionalSources],
+              evidence: p.provisionalSources.map((source) => ({
+                polarity: "negative",
+                text: GAP_QUOTE,
+                source,
+                effect: GAP_QUOTE,
+              })),
+              counterevidence: "none observed",
+              compilerImplication: "compiler appends this record to the experience block",
+            },
+          })),
+        };
+      },
     });
     assert.equal(proposal.edits.length, 1);
+    assert.ok(proposal.edits[0].annotation && proposal.edits[0].annotation.verdict === "keep");
+    assert.ok(proposal.edits[0].record && proposal.edits[0].record.title.length > 0);
     assert.ok(fs.existsSync(path.join(stateDir, "prompts", "run-PIPE1__consolidate.md")));
     assert.ok(fs.existsSync(path.join(stateDir, "prompts", "run-PIPE1__synthesis.md")));
     assert.ok(Array.isArray(proposal.notes));
     assert.equal(proposal.synthesis.failed, false);
+  });
+
+  it("mock follows the same plan->measure->preface->annotate-final path (annotation builds finals)", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    const proposal = await runPipeline({
+      home,
+      stateDir,
+      analyzer: "mock",
+      runId: "run-MOCK1",
+      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+    });
+    assert.ok(proposal.edits.length >= 1);
+    for (const edit of proposal.edits) {
+      assert.equal(edit.annotation.verdict, "keep");
+      assert.ok(edit.record.title && edit.record.body);
+      assert.ok(Array.isArray(edit.record.sources) && edit.record.sources.length >= 2);
+      assert.ok(edit.stagedArtifact.includes(edit.record.id));
+    }
+  });
+
+  it("production without annotation finals fails closed (invents nothing)", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    const proposal = await runPipeline({
+      home,
+      stateDir,
+      analyzer: "acpx",
+      runId: "run-PIPE-CLOSED",
+      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
+      annotateInvoke: (args) => {
+        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [] };
+      },
+    });
+    assert.deepEqual(proposal.edits, []);
+    assert.ok(proposal.staging.failed);
   });
 
   it("production synthesis failure yields no edits plus a visible proposal note", async () => {
@@ -130,7 +199,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     };
     const synth = synthesizeWithAcpx(ledger, {
       evidenceIndex: new Map(),
-      invoke: ({ ledger: led }) => ({ status: "ok", candidates: [candidateForLedger(led)] }),
+      invoke: ({ ledger: led }) => ({ status: "ok", plans: [planForLedger(led)] }),
       stateDir: badState,
       runId: "run-PP1",
     });

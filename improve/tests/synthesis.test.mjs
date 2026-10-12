@@ -10,6 +10,7 @@ import {
   synthesizeCandidates,
   buildSynthesisPrompt,
   validateCandidate,
+  validateChangePlan,
   synthesizeWithAcpx,
   renderRejectionsForPrompt,
   isSuppressedByRejection,
@@ -86,7 +87,7 @@ function candidate(overrides = {}) {
   };
 }
 
-describe("synthesis.md durable-record contract (Backpass src/prompts/synthesis.md @ 0268201)", () => {
+describe("synthesis.md narrow-plan contract (Backpass src/prompts/synthesis.md @ 0268201)", () => {
   it("exists with exact upstream provenance", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
     assert.ok(text.includes("Backpass"));
@@ -111,16 +112,17 @@ describe("synthesis.md durable-record contract (Backpass src/prompts/synthesis.m
     assert.ok(!fs.readFileSync(SYNTH_MD, "utf8").includes("ca-improve:self-session"));
   });
 
-  it("contracts title, bounded body, evidence sessions+verbatim quotes, counterevidence, compilerImplication", () => {
+  it("contracts narrow plans only; annotation owns durable fields", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
-    assert.ok(/title/i.test(text));
-    assert.ok(/body/i.test(text) && /\b2000\b/.test(text));
-    assert.ok(/verbatim/i.test(text) && /quote/i.test(text));
-    assert.ok(/counterevidence/i.test(text) && /none observed/i.test(text));
-    assert.ok(/compilerImplication/i.test(text));
+    assert.ok(/change plan/i.test(text));
+    assert.ok(/provisional/i.test(text));
+    assert.ok(/clusterId/i.test(text));
+    // Synthesis never authors final durable fields; annotation does.
+    assert.ok(/never.*(record|final)|annotation.*(sole|origin)/is.test(text));
+    assert.ok(/counterevidence/i.test(text) || /compilerImplication/i.test(text));
   });
 
-  it("contracts staged artifact/diff, no live/tracked/SOUL/skills/Hermes changes, proposal not authoritative", () => {
+  it("contracts staged artifact/diff from annotated finals, no live/tracked/SOUL/skills/Hermes changes, plan not authoritative", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
     assert.ok(/staged artifact/i.test(text) && /diff/i.test(text));
     assert.ok(/never.*(SOUL|tracked|live|Hermes)|no .*SOUL/i.test(text));
@@ -190,20 +192,23 @@ describe("synthesis render + persistence (exact)", () => {
   });
 });
 
-describe("mock deterministic synthesis path (unchanged, reviewable, no real calls)", () => {
-  it("synthesizeCandidates still produces reviewable edits with no invoke", () => {
-    const edits = synthesizeCandidates(ledger(), { evidenceIndex: evidenceIndex(), soulBaseline: "" });
-    assert.equal(edits.length, 1);
-    assert.ok(edits[0].record.title.length > 0);
-    assert.ok(edits[0].stagedArtifact.includes(edits[0].record.id));
-    assert.ok(edits[0].diff.includes(edits[0].record.id));
+describe("mock deterministic synthesis path (narrow plans, reviewable, no real calls)", () => {
+  it("synthesizeCandidates produces narrow plans with no invoke and no final record", () => {
+    const plans = synthesizeCandidates(ledger(), { evidenceIndex: evidenceIndex(), soulBaseline: "" });
+    assert.equal(plans.length, 1);
+    assert.equal(plans[0].clusterId, "g-aaa");
+    assert.ok(String(plans[0].provisionalIntent).length > 0);
+    assert.deepEqual([...plans[0].provisionalSources].sort(), ["s1", "s2"]);
+    for (const forbidden of ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff"]) {
+      assert.equal(plans[0][forbidden], undefined, `plan must not carry ${forbidden}`);
+    }
   });
 
-  it("mock records carry counterevidence and compilerImplication", () => {
-    const edits = synthesizeCandidates(ledger(), { evidenceIndex: evidenceIndex() });
-    assert.equal(edits[0].record.counterevidence, "none observed");
-    assert.ok(typeof edits[0].record.compilerImplication === "string");
-    assert.ok(edits[0].record.compilerImplication.length > 0);
+  it("narrow plans validate as plans; final fields belong to annotation only", () => {
+    const plans = synthesizeCandidates(ledger(), { evidenceIndex: evidenceIndex() });
+    assert.equal(validateChangePlan(plans[0], { ledger: ledger() }).ok, true);
+    // A plan carrying a final record is invalid.
+    assert.equal(validateChangePlan({ ...plans[0], record: { title: "x" } }, { ledger: ledger() }).ok, false);
   });
 });
 
@@ -262,25 +267,44 @@ describe("strict candidate validation (production acpx)", () => {
   });
 });
 
-describe("synthesizeWithAcpx (production only, fail-closed)", () => {
-  it("validates acpx candidates and renders staged artifact/diff", () => {
+describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () => {
+  function plan(overrides = {}) {
+    return {
+      clusterId: "g-aaa",
+      provisionalIntent: "Bootstrap context once",
+      provisionalSources: ["s1", "s2"],
+      ...overrides,
+    };
+  }
+  it("validates acpx plans and returns narrow plans only (no final record)", () => {
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", candidates: [candidate()] }),
+      invoke: () => ({ status: "ok", plans: [plan()] }),
     });
     assert.equal(out.failed, undefined);
     assert.equal(out.edits.length, 1);
-    assert.ok(out.edits[0].stagedArtifact.includes(out.edits[0].record.id));
-    assert.ok(out.edits[0].diff.includes(out.edits[0].record.id));
+    assert.equal(out.edits[0].clusterId, "g-aaa");
+    for (const forbidden of ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff"]) {
+      assert.equal(out.edits[0][forbidden], undefined, `synth plan must not carry ${forbidden}`);
+    }
   });
 
-  it("drops invalid candidates; fails closed with visible note when none remain", () => {
-    const bad = candidate();
-    bad.evidence = [{ polarity: "negative", text: "made up", source: "ghost" }];
-    bad.record = { ...bad.record, evidence: bad.evidence, sources: ["ghost"] };
+  it("drops plans carrying authoritative final fields; fails closed when none remain", () => {
+    const leaked = { ...plan(), record: { title: "leaked" } };
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", candidates: [bad] }),
+      invoke: () => ({ status: "ok", plans: [leaked] }),
+    });
+    assert.deepEqual(out.edits, []);
+    assert.ok(out.failed);
+    assert.ok(typeof out.note === "string" && /no valid|fail/i.test(out.note));
+  });
+
+  it("drops invalid plans (unknown cluster); fails closed with visible note", () => {
+    const bad = plan({ clusterId: "g-ghost" });
+    const out = synthesizeWithAcpx(ledger(), {
+      evidenceIndex: evidenceIndex(),
+      invoke: () => ({ status: "ok", plans: [bad] }),
     });
     assert.deepEqual(out.edits, []);
     assert.ok(out.failed);
@@ -301,7 +325,7 @@ describe("synthesizeWithAcpx (production only, fail-closed)", () => {
     const stateDir = tmpDir();
     synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", candidates: [] }),
+      invoke: () => ({ status: "ok", plans: [] }),
       stateDir,
       runId: "run-SY2",
     });
@@ -314,10 +338,20 @@ describe("synthesizeWithAcpx (production only, fail-closed)", () => {
       evidenceIndex: evidenceIndex(),
       invoke: (args) => {
         seen = args;
-        return { status: "ok", candidates: [] };
+        return { status: "ok", plans: [] };
       },
     });
     assert.ok(seen.prompt.includes("ca-improve:self-session"));
+  });
+
+  it("does not suppress at synthesis; suppression operates on annotated finals downstream", () => {
+    const rejections = [{ edit: "e9", title: "Bootstrap context once", clusterId: "g-aaa", sources: ["s1", "s2"] }];
+    const out = synthesizeWithAcpx(ledger(), {
+      evidenceIndex: evidenceIndex(),
+      invoke: () => ({ status: "ok", plans: [plan()] }),
+      rejections,
+    });
+    assert.equal(out.edits.length, 1);
   });
 });
 
@@ -359,7 +393,8 @@ describe("rejected-identity suppression", () => {
     assert.equal(isSuppressedByRejection(novel, rejections, { evidenceIndex: idx }), false);
   });
 
-  it("synthesizeWithAcpx suppresses rejected identities but keeps novel ones", () => {
+  it("annotation finals suppress rejected identities but keep novel ones (suppression on finals only)", async () => {
+    const { applyRejectionSuppression } = await import("../src/annotate.js");
     const led = ledger();
     led.clusters.push({
       id: "g-new",
@@ -374,16 +409,12 @@ describe("rejected-identity suppression", () => {
         s2: { quote: "sessions re-derive project context from scratch", mistake: "m" },
       },
     });
+    const same = { ...candidate(), annotation: { verdict: "keep", record: candidate().record } };
     const novel = candidate();
     novel.record = { ...novel.record, title: "Brand new", clusterId: "g-new", sources: ["s1", "s2"] };
-    novel.title = "Brand new";
-    const out = synthesizeWithAcpx(led, {
-      evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", candidates: [candidate(), novel] }),
-      rejections,
-    });
-    assert.equal(out.edits.length, 1);
-    assert.equal(out.edits[0].record.clusterId, "g-new");
+    const novelFinal = { ...novel, annotation: { verdict: "keep", record: novel.record } };
+    assert.equal(applyRejectionSuppression([same], rejections).length, 0);
+    assert.equal(applyRejectionSuppression([novelFinal], rejections).length, 1);
   });
 });
 
@@ -523,18 +554,20 @@ describe("review findings: quote/session binding + cluster linkage + suppression
     assert.ok(renderRejectionsForPrompt(rej).includes("g-aaa"));
   });
 
-  it("RED: model {edits:[...]} shape is rejected (strict {candidates:[...]} only)", () => {
+  it("RED: model {edits:[...]}/{candidates:[...]} full-record shapes are rejected (strict {plans:[...]} only)", () => {
     const rec = boundCandidate().record;
-    const out = synthesizeWithAcpx(boundLedger(), {
-      evidenceIndex: boundIndex(),
-      invoke: () => ({ status: "ok", result: { edits: [{ record: rec }] } }),
-    });
-    assert.deepEqual(out.edits, []);
-    assert.ok(out.failed);
+    for (const result of [{ edits: [{ record: rec }] }, { candidates: [{ record: rec }] }]) {
+      const out = synthesizeWithAcpx(boundLedger(), {
+        evidenceIndex: boundIndex(),
+        invoke: () => ({ status: "ok", result }),
+      });
+      assert.deepEqual(out.edits, []);
+      assert.ok(out.failed);
+    }
   });
 
   it("RED: malformed model shapes fail closed", () => {
-    for (const result of [{}, { candidates: "nope" }, { candidates: [{ record: { title: "" } }] }]) {
+    for (const result of [{}, { plans: "nope" }, { plans: [{ clusterId: "" }] }, { candidates: [{ record: { title: "" } }] }]) {
       const out = synthesizeWithAcpx(boundLedger(), {
         evidenceIndex: boundIndex(),
         invoke: () => ({ status: "ok", result }),

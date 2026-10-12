@@ -10,8 +10,65 @@ import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt } from "./analyze.js";
-import { validateCandidate, isSuppressedByRejection } from "./synthesize.js";
+import { validateCandidate, isSuppressedByRejection, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
+import { createHash } from "node:crypto";
+
+function shortHash(text) {
+  return createHash("sha256").update(text).digest("hex").slice(0, 12);
+}
+
+function slugify(text) {
+  const slug = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "untitled";
+}
+
+/**
+ * Deterministically build a mock-only final annotation record from folded
+ * ledger context. MOCK ONLY: production must fail closed and invent
+ * nothing. The mock follows the same plan->stage/measure->preface->
+ * annotate-final path but is allowed to construct the equivalent final
+ * annotation deterministically so the pipeline stays reviewable with
+ * zero model traffic.
+ */
+export function buildMockFinalAnnotation(plan, { ledger, evidenceIndex = new Map(), soulBaseline = "" } = {}) {
+  void soulBaseline;
+  const cluster = (ledger?.clusters || []).find((c) => String(c?.id) === String(plan?.clusterId));
+  const sources = [...(plan?.provisionalSources || cluster?.sources || [])].map(String);
+  const intent = String(plan?.provisionalIntent ?? plan?.intent ?? cluster?.proposedInstruction ?? "untitled");
+  const mistake = String(cluster?.mistake || "");
+  const per = cluster?.perSource || {};
+  const evidence = sources.map((source) => {
+    const positives = evidenceIndex.get(source) || [];
+    const first = positives[0];
+    return {
+      polarity: "negative",
+      text: per[source]?.quote || first?.quote || cluster?.representativeQuote || "",
+      effect: per[source]?.mistake || mistake,
+      moment: first?.effect || "",
+      source,
+    };
+  });
+  const recordId = `exp-${slugify(intent).slice(0, 40)}-${shortHash(String(plan?.clusterId || intent))}`;
+  return {
+    id: String(plan?.id),
+    verdict: "keep",
+    reason: mistake || intent,
+    record: {
+      id: recordId,
+      title: intent,
+      body: `Recurring gap seen in ${sources.length} session(s): ${mistake}`,
+      sources,
+      clusterId: String(plan?.clusterId || cluster?.id || ""),
+      evidence,
+      counterevidence: "none observed",
+      compilerImplication: "compiler appends this record to the experience block; no SOUL, skill, or Hermes changes.",
+    },
+  };
+}
 
 function asList(input) {
   if (Array.isArray(input)) return input;
@@ -20,20 +77,18 @@ function asList(input) {
 }
 
 function stagedSummary(list) {
-  if (list.length === 0) return "(no staged candidates)";
+  if (list.length === 0) return "(no staged change plans)";
   return list
-    .map((c) => `- ${c.id}: ${c.title || c.record?.title || "untitled"} (sources=${(c.record?.sources || []).length})`)
+    .map((c) => `- ${c.id}: ${c.provisionalIntent || c.intent || "untitled"} (cluster=${c.clusterId || "unknown"} eligibleSources=${((c.provisionalSources) || []).length})`)
     .join("\n");
 }
 
 function stagedCandidatesBlock(list) {
-  if (list.length === 0) return "(no staged candidates)";
+  if (list.length === 0) return "(no staged change plans)";
   return list
     .map((c) => {
-      const record = c?.record || {};
-      const evidence = Array.isArray(c?.evidence) ? c.evidence : Array.isArray(record.evidence) ? record.evidence : [];
-      const lines = evidence.map((e) => `    - (${e.source}) ${e.text}`).join("\n");
-      return `- [${c.id}] ${c.title || record.title || "untitled"}\n    record: ${record.id || "unknown"} cluster=${record.clusterId || "unknown"} sources=${(record.sources || []).join(", ")}\n${lines || "    - (no evidence rows)"}`;
+      const sources = c?.provisionalSources || [];
+      return `- [${c.id}] ${c.provisionalIntent || c.intent || "untitled"}\n    cluster=${c.clusterId || "unknown"} eligibleSources=${sources.join(", ") || "(none)"}\n    provisional intent (untrusted): ${c.provisionalIntent || c.intent || "(missing)"}`;
     })
     .join("\n");
 }
@@ -108,15 +163,18 @@ function annotationsFrom(outcome) {
 /**
  * Run annotate-preface then annotate as two fresh logical invocations.
  * Persists both rendered prompts privately (run/stage naming, 0600).
- * Strict: measurement coverage is enforced downstream by buildFinalProposal;
- * here every non-reverted staged candidate needs a verdict annotation with
- * exact quote/session binding when ledger context is available.
- * Fail-closed: invalid/failure (including prompt render failure) marks
- * staging (annotate.failed, candidates cleared) and returns no edits.
+ * Annotation is the SOLE full-record origin: for verdict keep the
+ * annotation must carry the complete durable record (title/body/
+ * clusterId/sources/evidence/counterevidence/compilerImplication/
+ * rationale); staged plans contribute no record/evidence. Mechanical
+ * validation (exact session-bound quotes) applies to annotation finals;
+ * production fails closed and invents nothing. Fail-closed: invalid/
+ * failure (including prompt render failure) marks staging
+ * (annotate.failed, candidates cleared) and returns no edits.
  */
 export async function annotateStaging(
   staged,
-  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null } = {},
+  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null, soulBaseline = "" } = {},
 ) {
   const list = Array.isArray(staged) ? staged : [];
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
@@ -206,14 +264,53 @@ export async function annotateStaging(
     if (!ann || !ann.verdict || !String(ann.verdict).trim()) {
       return fail(`missing annotation for ${String(c?.id || "unknown")}`);
     }
-    const merged = { ...c, annotation: { verdict: String(ann.verdict), reason: ann.reason || ann.note || "", ...(ann.quote ? { quote: ann.quote } : {}) } };
-    // Strict binding when ledger context is available; fail closed on fake quote/session.
+    const verdict = String(ann.verdict).trim();
+    if (verdict !== "keep" && verdict !== "drop" && verdict !== "revert") {
+      return fail(`annotation invalid for ${String(c?.id)} (verdict must be keep|drop|revert)`);
+    }
+    if (verdict !== "keep") {
+      annotated.push({ ...c, annotation: { verdict, reason: ann.reason || ann.note || "" } });
+      continue;
+    }
+    // Keep MUST carry the complete durable record from annotation.
+    // No inherited synth record/evidence: staged plans carry none.
+    const finalRecord = ann.record || ann.finalRecord;
+    if (!finalRecord || typeof finalRecord !== "object") {
+      return fail(`annotation invalid for ${String(c?.id)} (keep requires a complete annotation final record; synth plans carry no record)`);
+    }
+    if (c?.record !== undefined || c?.evidence !== undefined || c?.title !== undefined) {
+      return fail(`annotation invalid for ${String(c?.id)} (synth final record leaked into staging; annotation is the sole full-record origin)`);
+    }
+    const merged = {
+      ...c,
+      annotation: {
+        verdict: "keep",
+        reason: ann.reason || ann.note || ann.rationale || "",
+        ...(ann.rationale ? { rationale: ann.rationale } : {}),
+        ...(Array.isArray(ann.instructions) ? { instructions: ann.instructions } : {}),
+        record: finalRecord,
+      },
+      finalRecord,
+    };
+    // Mechanical final-record validation; fail closed on fake quote/session.
     if (ledger) {
       const idx = evidenceIndex instanceof Map ? evidenceIndex : new Map();
-      const check = c?.record ? validateStaged(merged, { ledger, evidenceIndex: idx }) : validateCandidate(merged, { ledger, evidenceIndex: idx });
+      const check = validateCandidate({ record: finalRecord, evidence: finalRecord.evidence }, { ledger, evidenceIndex: idx });
       if (!check.ok) {
         return fail(`annotation invalid for ${String(c?.id)} (${(check.errors || []).join("; ") || "validation failed"})`);
       }
+    } else {
+      if (!finalRecord.title || !String(finalRecord.title).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.title is required)`);
+      if (!finalRecord.body || !String(finalRecord.body).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.body is required)`);
+      if (!finalRecord.counterevidence || !String(finalRecord.counterevidence).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.counterevidence is required)`);
+      if (!finalRecord.compilerImplication || !String(finalRecord.compilerImplication).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.compilerImplication is required)`);
+    }
+    // Render the staged artifact/diff from the annotation final record.
+    try {
+      merged.stagedArtifact = renderStagedArtifact(finalRecord, soulBaseline);
+      merged.diff = renderDiff(finalRecord.id || String(c?.id), merged.stagedArtifact);
+    } catch (err) {
+      return fail(`annotation invalid for ${String(c?.id)} (artifact render failed: ${err?.message || err})`);
     }
     annotated.push(merged);
   }
@@ -241,5 +338,12 @@ export function applyRejectionSuppression(annotated, rejections, { evidenceIndex
   const list = Array.isArray(annotated) ? annotated : [];
   const rej = Array.isArray(rejections) ? rejections : [];
   void evidenceIndex;
-  return list.filter((c) => !isSuppressedByRejection(c, rej));
+  return list.filter((c) => {
+    // Preserve explicit drop/revert (and any non-keep) annotations:
+    // suppression operates only on annotated final keep records.
+    if (!c || typeof c !== "object") return true;
+    if (c?.annotation?.verdict !== "keep") return true;
+    if (!c?.finalRecord && !c?.annotation?.record && !c?.record) return true;
+    return !isSuppressedByRejection(c, rej);
+  });
 }

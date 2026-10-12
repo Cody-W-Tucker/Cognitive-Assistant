@@ -125,41 +125,41 @@ deterministic lexical current result with a visible proposal/run note
 
 Adapted from the Backpass operational sources (`src/prompts/synthesis.md` +
 `src/prompts/annotate.md` at commit 0268201; see `improve/LICENSE.NOTICE`)
-but CA-native: instead of editing a staging copy, the model proposes strict
-JSON candidate durable experience records. Each candidate carries `title`
-(one imperative sentence), `body` (bounded, at most 2000 chars), `evidence`
-(`>=2` distinct sessions with verbatim quotes copied exactly from the folded
-evidence), `counterevidence` (strongest contrary observation or the literal
-`none observed`), `compilerImplication` (how the experience compiler consumes
-the record), plus the downstream-rendered staged artifact and informational
-diff. The prompt states explicitly: change only the proposal -- never live
-files, tracked files, SOUL, posture, skills, or Hermes -- and the proposal is
-not authoritative pre-apply (the apply gate is the sole writer). Production
-runs are acpx-only with strict candidate validation against the folded
-evidence (source IDs must be folded session IDs; quotes must match exactly;
-title/body/counterevidence/compilerImplication required; overlong bodies
-rejected). The mock analyzer path is unchanged: deterministic
-`synthesizeCandidates` with no real calls, still reviewable, now carrying
-`counterevidence: none observed` and a compiler implication. Production
-failure (acpx error or zero valid candidates) fails closed: no candidate
-edits plus a visible proposal note (`proposal.notes` +
-`proposal.synthesis.note`). Prior rejections (`state/rejections.jsonl`) are
-rendered into `{{REJECTIONS}}` and suppress a rejected identity (matching
-`clusterId`/`title`) unless the new candidate carries higher evidence (more
-distinct sessions) or genuinely new evidence (an unseen session id). The
-rendered synthesis prompt is persisted privately as
+but CA-native: the model proposes narrow private staged change plans only
+(`clusterId` + untrusted `provisionalIntent` + `provisionalSources` with
+`>=2` distinct eligible sessions), never final `title`/`body`/`evidence`/
+quote mappings/`counterevidence`/`compilerImplication`/staged artifact/diff.
+Annotation is the sole full-record author; staged plans carry no
+record/evidence. The prompt states explicitly: change only the plan -- never live
+files, tracked files, SOUL, posture, skills, or Hermes -- and the plan is
+not authoritative pre-apply (the terminal review/apply gate consumes only
+annotated finals). Production runs are acpx-only with strict plan validation
+(eligible folded cluster; `>=2` distinct eligible sessions; any final field
+present is invalid and dropped). The mock path is deterministic
+`synthesizePlans` with no real calls, still reviewable. Production failure
+(acpx error or zero valid plans) fails closed: no plans plus a visible
+proposal note (`proposal.notes` +
+`proposal.synthesis.note`). Prior rejections (`state/rejections.jsonl`) render
+into `{{REJECTIONS}}`; synthesis itself does not suppress -- suppression
+applies downstream on annotated finals unless the final carries higher
+evidence (more distinct sessions) or genuinely new evidence (an unseen session
+id). The rendered synthesis prompt is persisted privately as
 `prompts/<runId>__synthesis.md` plus a `.json` sidecar (`stage: synthesis`),
 both `0600` where supported.
 
 ## Annotate-preface contract (`improve/prompts/annotate-preface.md`)
 
 CA-native preface with no direct Backpass counterpart (see
-`improve/LICENSE.NOTICE`): it frames the staged candidates that already exist
+`improve/LICENSE.NOTICE`), one of five prompt roles (`analysis`,
+`consolidate`, `synthesis`, `annotate-preface`, `annotate`): it frames the
+narrow private staged change plans (with measured plan context from
+deterministic stage/measure) that already exist
 and opens the fresh logical annotate session. Placeholders `{{COUNT}}`,
 `{{STAGED_SUMMARY}}`, `{{RUN_ID}}` render the staged-existing set through the
 existing strict loader/renderer (`improve/src/prompts.js`), sentinel FIRST and
 never baked into the file. The preface outcome is revert-only readiness
-metadata (`{"ready": true}`): it never annotates and never edits live files,
+metadata (`{"ready": true}`): it never annotates, never authors
+records/evidence, and never edits live files,
 tracked files, SOUL, posture, skills, or Hermes. An empty staged set stays
 sequenced as annotate-preface then annotate. Rendered as
 `prompts/<runId>__annotate-preface.md` plus a `.json` sidecar
@@ -169,18 +169,25 @@ sequenced as annotate-preface then annotate. Rendered as
 
 Adapted from the Backpass operational source (`src/prompts/annotate.md` at
 commit 0268201; see `improve/LICENSE.NOTICE`) but CA-native: strict JSON
-annotations over the staged change plan. Each staged candidate gets exactly one
+annotations over the narrow private staged change plans with measured plan
+context. Each staged plan gets exactly one
 annotation -- coverage (`keep`/`drop`) or explicit `revert` when measurement
-does not support it. Every `keep` rests on exact source quote/session binding
-(a verbatim `text` quote copied exactly from the staged evidence rows with its
-`source` session id; paraphrases and swapped sessions fail), plus required
+does not support it. Annotation is the sole full durable-record author: every
+`keep` authors the complete record (`title`, `body` at most 2000 chars,
+`clusterId`, `sources` with `>=2` distinct sessions, exact session-bound
+verbatim `evidence`, `counterevidence` or literal `none observed`,
+`compilerImplication`), resting on exact source quote/session binding
+(a verbatim `text` quote copied exactly from the staged eligible evidence rows
+with its `source` session id; paraphrases and swapped sessions fail), plus required
 `counterevidence` (strongest contrary observation or literal `none observed`)
 and `compilerImplication` on the staged record. Prohibited operations are
 explicit: never live files, tracked files, SOUL, posture, skills, or Hermes;
-the proposal stays non-authoritative until the human apply gate. Failure or
-invalid annotations fail closed (staging marked via `staging/annotate.failed`,
-candidates cleared, no final proposal edits); the terminal review/apply gate
-consumes only final annotated candidates. Placeholders `{{COUNT}}`,
+the proposal stays non-authoritative until the human apply gate consumes only
+annotated finals. Production is acpx-only with strict final validation and
+fail-closed (staging marked via `staging/annotate.failed`,
+candidates cleared, no final proposal edits); the mock path is deterministic
+final annotation with no real calls, still reviewable. The terminal
+review/apply gate consumes only final annotated candidates. Placeholders `{{COUNT}}`,
 `{{STAGED_CANDIDATES}}`, `{{RUN_ID}}` render through the existing strict
 loader/renderer, sentinel FIRST. Rendered as
 `prompts/<runId>__annotate.md` plus a `.json` sidecar (`stage: annotate`),

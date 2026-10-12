@@ -41,30 +41,41 @@ function evidenceIndex() {
   ]);
 }
 
-function stagedCandidate(overrides = {}) {
+function changePlan(overrides = {}) {
   return {
     id: "e1",
     kind: "add",
+    clusterId: "g-aaa",
+    provisionalIntent: "Bootstrap context once",
+    provisionalSources: ["s1", "s2"],
+    provisionalCount: 2,
+    ...overrides,
+  };
+}
+
+function finalRecord(overrides = {}) {
+  return {
+    id: "exp-bootstrap-aaa",
     title: "Bootstrap context once",
-    record: {
-      id: "exp-x",
-      title: "Bootstrap context once",
-      body: "Recurring gap seen in 2 session(s): sessions re-derive project context from scratch",
-      sources: ["s1", "s2"],
-      clusterId: "g-aaa",
-      evidence: [
-        { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s1", effect: "m" },
-        { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s2", effect: "m" },
-      ],
-      counterevidence: "none observed",
-      compilerImplication: "compiler appends this record to the experience block",
-    },
+    body: "Recurring gap seen in 2 session(s): sessions re-derive project context from scratch",
+    sources: ["s1", "s2"],
+    clusterId: "g-aaa",
     evidence: [
       { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s1", effect: "m" },
       { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s2", effect: "m" },
     ],
-    stagedArtifact: "artifact",
-    diff: "diff",
+    counterevidence: "none observed",
+    compilerImplication: "compiler appends this record to the experience block",
+    ...overrides,
+  };
+}
+
+function annotationKeep(overrides = {}) {
+  return {
+    id: "e1",
+    verdict: "keep",
+    reason: "sessions re-derive project context from scratch",
+    record: finalRecord(),
     ...overrides,
   };
 }
@@ -81,71 +92,150 @@ async function loadMeasure() {
   return import("../src/measure.js");
 }
 
-describe("synth->private stage / measure->annotate-preface->annotate (RED)", () => {
+describe("synth->private stage / measure->annotate-preface->annotate (annotation ownership)", () => {
   it("preface precedes annotate with sentinel first", async () => {
     const annotate = await loadAnnotate();
     assert.equal(typeof annotate.renderAnnotatePreface, "function");
     assert.equal(typeof annotate.annotateStaging, "function");
     const calls = [];
     const stateDir = tmpDir();
-    const preface = annotate.renderAnnotatePreface(stagedCandidate(), { stateDir });
+    const preface = annotate.renderAnnotatePreface(changePlan(), { stateDir });
     assert.ok(String(preface).startsWith("<!-- ca-improve:self-session -->\n"));
-    await annotate.annotateStaging([stagedCandidate()], {
+    await annotate.annotateStaging([changePlan()], {
       stateDir,
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
       invoke: (args) => {
         calls.push(args.stage);
-        return { status: "ok", annotations: [{ id: "e1", verdict: "keep" }] };
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [annotationKeep()] };
       },
     });
     assert.deepEqual(calls, ["annotate-preface", "annotate"]);
   });
 
-  it("unannotated staged candidates cannot reach apply/final proposal", async () => {
+  it("synthesis plans carry no final record; annotation is the sole full-record origin", async () => {
+    const { synthesizeCandidates } = await import("../src/synthesize.js");
+    const plans = synthesizeCandidates(ledger(), { evidenceIndex: evidenceIndex() });
+    assert.equal(plans.length, 1);
+    for (const forbidden of ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff"]) {
+      assert.equal(plans[0][forbidden], undefined, `synth plan must not carry ${forbidden}`);
+    }
+    // Staging strips any leaked final fields so no synth final record applies.
+    const stage = await loadStage();
+    const leaked = { ...changePlan(), record: finalRecord(), evidence: finalRecord().evidence, title: "leaked" };
+    const staged = stage.stageCandidates([leaked], { stateDir: tmpDir(), runId: "run-STRIP1" });
+    assert.equal(staged[0].record, undefined);
+    assert.equal(staged[0].evidence, undefined);
+    assert.equal(staged[0].title, undefined);
+    assert.equal(staged[0].clusterId, "g-aaa");
+  });
+
+  it("unannotated staged plans cannot reach apply/final proposal", async () => {
     const stage = await loadStage();
     assert.equal(typeof stage.stageCandidates, "function");
     assert.equal(typeof stage.buildFinalProposal, "function");
     const stateDir = tmpDir();
-    const staged = stage.stageCandidates([stagedCandidate()], { stateDir, runId: "run-STAGE1" });
+    const staged = stage.stageCandidates([changePlan()], { stateDir, runId: "run-STAGE1" });
     assert.ok(staged && staged.length === 1);
-    assert.throws(() => stage.buildFinalProposal(staged, { stateDir }), /annotat/i);
+    assert.throws(() => stage.buildFinalProposal(staged, { stateDir, ledger: ledger(), evidenceIndex: evidenceIndex() }), /annotat/i);
   });
 
-  it("all measurements need annotation or explicit revert", async () => {
+  it("no synth final record applies: final proposal requires annotation finals", async () => {
+    const stage = await loadStage();
+    const stateDir = tmpDir();
+    // A staged plan plus a synth-shaped record (no annotation) must not build.
+    const synthShaped = { ...changePlan(), record: finalRecord(), stagedArtifact: "x", diff: "y" };
+    assert.throws(() => stage.buildFinalProposal([synthShaped], { stateDir, ledger: ledger(), evidenceIndex: evidenceIndex() }), /annotat|sole full-record/i);
+    // An annotated keep builds a final with the annotation record only.
+    const annotated = [{ ...changePlan(), annotation: { verdict: "keep", reason: "m", record: finalRecord() }, finalRecord: finalRecord() }];
+    const finals = stage.buildFinalProposal(annotated, { stateDir, ledger: ledger(), evidenceIndex: evidenceIndex() });
+    assert.equal(finals.length, 1);
+    assert.equal(finals[0].record.title, "Bootstrap context once");
+    assert.ok(finals[0].stagedArtifact.includes(finals[0].record.id));
+    assert.equal(finals[0].annotation.verdict, "keep");
+  });
+
+  it("annotation owns durable fields: keep without a complete record fails closed", async () => {
+    const annotate = await loadAnnotate();
+    const stateDir = tmpDir();
+    const out = await annotate.annotateStaging([changePlan()], {
+      stateDir,
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e1", verdict: "keep", reason: "no record supplied" }] };
+      },
+    });
+    assert.deepEqual(out.edits || [], []);
+    assert.ok(out.failed);
+  });
+
+  it("all measurements need annotation or explicit revert; measurements carry provisional context only", async () => {
     const measure = await loadMeasure();
     assert.equal(typeof measure.measureStaging, "function");
     const stateDir = tmpDir();
-    const measurements = measure.measureStaging([stagedCandidate()], { stateDir });
+    const measurements = measure.measureStaging([changePlan()], { stateDir, ledger: ledger(), evidenceIndex: evidenceIndex() });
     assert.ok(Array.isArray(measurements) && measurements.length === 1);
     for (const m of measurements) {
       assert.ok(m.annotation || m.reverted === true, "measurement needs annotation or explicit revert");
+      assert.ok(m.candidateId === "e1");
+      assert.ok(m.clusterId === "g-aaa");
+      assert.ok(Array.isArray(m.eligibleSources) && m.eligibleSources.length >= 2);
+      assert.equal(m.recordId, null, "measurements never carry a final record");
     }
   });
 
-  it("invalid/fake quote/session fails", async () => {
-    const stage = await loadStage();
-    assert.equal(typeof stage.validateStaged, "function");
-    const badQuote = stagedCandidate({
-      evidence: [{ polarity: "negative", text: "made up quote", source: "s1" }],
+  it("invalid/fake quote/session fails on annotation finals", async () => {
+    const annotate = await loadAnnotate();
+    const stateDir = tmpDir();
+    const badQuote = finalRecord({ evidence: [{ polarity: "negative", text: "made up quote", source: "s1", effect: "m" }] });
+    const outQuote = await annotate.annotateStaging([changePlan()], {
+      stateDir: tmpDir(),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e1", verdict: "keep", reason: "m", record: badQuote }] };
+      },
     });
-    assert.equal(stage.validateStaged(badQuote, { ledger: ledger(), evidenceIndex: evidenceIndex() }).ok, false);
-    const badSession = stagedCandidate({
+    assert.ok(outQuote.failed, "fake quote must fail closed");
+    assert.deepEqual(outQuote.edits || [], []);
+    const badSession = finalRecord({
+      sources: ["ghost", "s1"],
       evidence: [
-        { polarity: "negative", text: "sessions re-derive project context from scratch", source: "ghost" },
+        { polarity: "negative", text: "sessions re-derive project context from scratch", source: "ghost", effect: "m" },
+        { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s1", effect: "m" },
       ],
     });
-    assert.equal(stage.validateStaged(badSession, { ledger: ledger(), evidenceIndex: evidenceIndex() }).ok, false);
+    const outSession = await annotate.annotateStaging([changePlan()], {
+      stateDir: tmpDir(),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e1", verdict: "keep", reason: "m", record: badSession }] };
+      },
+    });
+    assert.ok(outSession.failed, "unknown session must fail closed");
+    void stateDir;
+    void annotate;
   });
 
   it("annotation failure clears/marks staging and no edits", async () => {
     const annotate = await loadAnnotate();
     const stage = await loadStage();
     const stateDir = tmpDir();
-    const staged = (await import("../src/stage.js")).stageCandidates
-      ? stage.stageCandidates([stagedCandidate()], { stateDir, runId: "run-STAGE2" })
-      : [stagedCandidate()];
+    const staged = stage.stageCandidates([changePlan()], { stateDir, runId: "run-STAGE2" });
     const out = await annotate.annotateStaging(staged, {
       stateDir,
-      invoke: () => ({ status: "failed", error: "boom-annotate" }),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "failed", error: "boom-annotate" };
+      },
     });
     assert.deepEqual(out.edits || [], []);
     assert.ok(out.failed);
@@ -154,15 +244,50 @@ describe("synth->private stage / measure->annotate-preface->annotate (RED)", () 
     assert.ok(cleared, "staging must be cleared or marked on annotation failure");
   });
 
-  it("mock invokes same sequence", async () => {
+  it("production annotate without final records fails closed (invents nothing)", async () => {
+    const annotate = await loadAnnotate();
+    const out = await annotate.annotateStaging([changePlan()], {
+      stateDir: tmpDir(),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e1", verdict: "keep" }] };
+      },
+    });
+    assert.ok(out.failed);
+    assert.deepEqual(out.edits || [], []);
+  });
+
+  it("explicit revert/drop yields no final edits", async () => {
+    const annotate = await loadAnnotate();
+    const stage = await loadStage();
+    for (const verdict of ["revert", "drop"]) {
+      const out = await annotate.annotateStaging([changePlan()], {
+        stateDir: tmpDir(),
+        ledger: ledger(),
+        evidenceIndex: evidenceIndex(),
+        invoke: (args) => {
+          if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+          return { status: "ok", annotations: [{ id: "e1", verdict, reason: "not supported" }] };
+        },
+      });
+      assert.equal(out.failed, false);
+      const finals = stage.buildFinalProposal(out.annotated, { ledger: ledger(), evidenceIndex: evidenceIndex() });
+      assert.deepEqual(finals, [], `verdict ${verdict} must yield no finals`);
+    }
+  });
+
+  it("mock invokes same plan->measure->preface->annotate-final sequence", async () => {
     const pipeline = await import("../src/pipeline.js");
     assert.equal(typeof pipeline.runPipeline, "function");
     const seen = [];
     const trackingInvoke = (stageName) => (args) => {
       seen.push(args?.stage ?? stageName);
-      if (stageName === "synthesize") return { status: "ok", candidates: [stagedCandidate()] };
-      if (stageName === "annotate-preface" || stageName === "annotate") {
-        return { status: "ok", annotations: [{ id: "e1", verdict: "keep" }] };
+      if (stageName === "synthesize") return { status: "ok", plans: [changePlan()] };
+      if (stageName === "annotate-preface") return { status: "ok", ready: true };
+      if (stageName === "annotate") {
+        return { status: "ok", annotations: [annotationKeep()] };
       }
       return { status: "ok", result: {} };
     };
@@ -196,7 +321,7 @@ describe("synth->private stage / measure->annotate-preface->annotate (RED)", () 
       runId: "run-PRIV1",
       analyzeInvoke: () => ({ status: "ok", evidence: { status: "ok", positive: [], negative: [], gaps: [] } }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      synthesizeInvoke: () => ({ status: "ok", result: { candidates: [] } }),
+      synthesizeInvoke: () => ({ status: "ok", result: { plans: [] } }),
     });
     const promptsDir = path.join(stateDir, "prompts");
     assert.ok(fs.existsSync(promptsDir));
@@ -214,23 +339,35 @@ describe("synth->private stage / measure->annotate-preface->annotate (RED)", () 
     assert.ok(!fs.existsSync(path.join(SRC, "prompts-rendered.md")));
   });
 
-  it("rejection suppression applies final annotations", async () => {
+  it("rejection suppression applies to annotated final records only", async () => {
     const annotate = await loadAnnotate();
     assert.equal(typeof annotate.applyRejectionSuppression, "function");
     const rejections = [{ edit: "e1", title: "Bootstrap context once", clusterId: "g-aaa", sources: ["s1", "s2"] }];
-    const annotated = [{ ...stagedCandidate(), annotation: { verdict: "keep" } }];
+    const annotated = [{ ...changePlan(), annotation: { verdict: "keep", reason: "m", record: finalRecord() }, finalRecord: finalRecord() }];
     const out = annotate.applyRejectionSuppression(annotated, rejections, { evidenceIndex: evidenceIndex() });
     assert.equal(out.length, 0);
-    const higher = {
-      ...stagedCandidate(),
-      annotation: { verdict: "keep" },
-      record: { ...stagedCandidate().record, sources: ["s1", "s2", "s3"] },
-    };
+    const higherRecord = { ...finalRecord(), sources: ["s1", "s2", "s3"], evidence: [...finalRecord().evidence, { polarity: "negative", text: "sessions re-derive project context from scratch", source: "s3", effect: "m" }] };
+    const higher = { ...changePlan(), annotation: { verdict: "keep", reason: "m", record: higherRecord }, finalRecord: higherRecord };
     const idx = new Map([
       ...evidenceIndex(),
       ["s3", [{ quote: "sessions re-derive project context from scratch", effect: "e3" }]],
     ]);
     const kept = annotate.applyRejectionSuppression([higher], rejections, { evidenceIndex: idx });
     assert.equal(kept.length, 1);
+  });
+
+  it("rejection suppression never erases explicit drop/revert annotations", async () => {
+    const annotate = await loadAnnotate();
+    const rejections = [{ edit: "e1", title: "Bootstrap context once", clusterId: "g-aaa", sources: ["s1", "s2"] }];
+    // Same rejected identity, but explicit drop/revert carry no final record.
+    const dropped = { ...changePlan({ id: "e1" }), annotation: { verdict: "drop", reason: "not supported" } };
+    const reverted = { ...changePlan({ id: "e2" }), annotation: { verdict: "revert", reason: "operator reverted" } };
+    const survived = annotate.applyRejectionSuppression([dropped, reverted], rejections, { evidenceIndex: evidenceIndex() });
+    assert.equal(survived.length, 2, "drop/revert annotations must survive rejection suppression");
+    assert.deepEqual(survived.map((c) => c?.annotation?.verdict).sort(), ["drop", "revert"]);
+    // Control: equivalent keep final record with the same identity IS suppressible.
+    const keep = { ...changePlan({ id: "e3" }), annotation: { verdict: "keep", reason: "m", record: finalRecord() }, finalRecord: finalRecord() };
+    const suppressed = annotate.applyRejectionSuppression([keep], rejections, { evidenceIndex: evidenceIndex() });
+    assert.equal(suppressed.length, 0, "equivalent keep final must stay suppressible");
   });
 });

@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { validateCandidate } from "./synthesize.js";
+import { validateCandidate, validateChangePlan, renderStagedArtifact, renderDiff } from "./synthesize.js";
 
 function stagingDir(stateDir) {
   return path.join(path.resolve(stateDir), "staging");
@@ -20,17 +20,28 @@ function ensureStaging(stateDir) {
 }
 
 /**
- * Deterministically stage synth candidates as a change plan.
+ * Deterministically stage narrow synth change plans.
+ * Strips any authoritative final fields if present so a synth final
+ * record can never flow through: only id/kind/clusterId/
+ * provisionalIntent/provisionalSources/provisionalCount survive.
  * Preserves input order and stable ids (assigns e<N> only when missing).
  * Persists machine-readable staging metadata privately (never the repo).
  *
- * @returns staged array (same objects, shallow-copied)
+ * @returns staged array (narrow plans only)
  */
 export function stageCandidates(candidates, { stateDir = null, runId = null } = {}) {
   const list = Array.isArray(candidates) ? candidates : [];
   const staged = list.map((c, i) => {
-    const copy = { ...(c || {}) };
-    if (!copy.id) copy.id = `e${i + 1}`;
+    const copy = {};
+    copy.id = c?.id || `e${i + 1}`;
+    copy.kind = "add";
+    if (c?.clusterId !== undefined) copy.clusterId = c.clusterId;
+    const intent = c?.provisionalIntent ?? c?.intent;
+    if (intent !== undefined) copy.provisionalIntent = intent;
+    if (c?.provisionalSources !== undefined) copy.provisionalSources = c.provisionalSources;
+    else if (c?.sources !== undefined) copy.provisionalSources = c.sources;
+    if (c?.provisionalCount !== undefined) copy.provisionalCount = c.provisionalCount;
+    if (c?.reverted === true) copy.reverted = true;
     return copy;
   });
   if (stateDir) {
@@ -61,22 +72,16 @@ export function stageCandidates(candidates, { stateDir = null, runId = null } = 
 }
 
 /**
- * Strict staged validation: structural kind/title/body/rationale/compiler
- * fields plus exact quote+session binding (delegates to synthesize's
- * validateCandidate so the floor cannot be met with swapped/global quotes).
+ * Strict staged validation: narrow plans only. Delegates to synth's
+ * validateChangePlan so the floor is cluster linkage + provisional intent/
+ * context. Any authoritative final field on the plan fails.
  */
 export function validateStaged(candidate, { ledger, evidenceIndex = new Map() } = {}) {
-  const errors = [];
-  if (!candidate || typeof candidate !== "object") return { ok: false, errors: ["staged candidate is required"] };
+  void evidenceIndex;
+  const check = validateChangePlan(candidate, { ledger });
+  const errors = [...(check.errors || [])];
+  if (!candidate || typeof candidate !== "object") return { ok: false, errors: ["staged change plan is required"] };
   if (candidate.kind !== "add") errors.push(`kind must be "add" (got ${JSON.stringify(candidate.kind)})`);
-  const title = candidate.title || candidate.record?.title;
-  if (!title || !String(title).trim()) errors.push("title is required");
-  const check = validateCandidate(candidate, { ledger, evidenceIndex });
-  for (const e of check.errors || []) errors.push(e);
-  // Rationale may live top-level (synth edits) or be implied by record.body;
-  // require at least one of them so staged plans stay reviewable.
-  const rationale = candidate.rationale || candidate.record?.body;
-  if (!rationale || !String(rationale).trim()) errors.push("rationale/body is required");
   return { ok: errors.length === 0, errors };
 }
 
@@ -91,35 +96,62 @@ function readMeasurements(stateDir) {
 }
 
 /**
- * Build the terminal final proposal from staged candidates only.
- * Throws when any non-reverted candidate lacks a final annotation —
+ * Build the terminal final proposal from ANNOTATED finals only.
+ * Throws when any non-reverted plan lacks a final annotation —
  * unannotated staging can never reach apply/final proposal.
+ * For verdict keep, the annotation must carry the complete durable
+ * record (title/body/clusterId/sources/evidence/counterevidence/
+ * compilerImplication/rationale); the record is mechanically validated
+ * (exact session-bound quotes) and the staged artifact/diff are rendered
+ * here from that final record. Synth plans contribute no record/evidence.
  * Measurement coverage (when measurements exist) requires each
- * non-reverted candidate to have a measurement carrying annotation or
- * explicit revert. Returns the kept finalists (reverted/dropped excluded).
+ * non-reverted plan to have a measurement carrying annotation or
+ * explicit revert. Returns the kept finalists (reverted/dropped
+ * excluded) as full edits for proposal/apply.
  */
-export function buildFinalProposal(staged, { stateDir = null } = {}) {
+export function buildFinalProposal(staged, { stateDir = null, ledger = null, evidenceIndex = new Map(), soulBaseline = "" } = {}) {
   const list = Array.isArray(staged) ? staged : [];
   const measurements = stateDir ? readMeasurements(stateDir) : null;
   const byCandidate = new Map((measurements || []).map((m) => [String(m.candidateId || m.id), m]));
+  const finals = [];
   for (const c of list) {
     const id = String(c?.id || "unknown");
     if (c?.reverted === true) continue;
     if (!c?.annotation) {
-      throw new Error(`candidate ${id} has no final annotation; staged candidates cannot reach final proposal without annotate`);
+      throw new Error(`candidate ${id} has no final annotation; staged change plans cannot reach final proposal without annotate`);
     }
     if (!c.annotation.verdict || !String(c.annotation.verdict).trim()) {
       throw new Error(`candidate ${id} annotation verdict is required`);
     }
-    if (c.kind !== "add") throw new Error(`candidate ${id} kind must be "add"`);
-    const record = c.record || {};
-    if (!record.title || !String(record.title).trim()) throw new Error(`candidate ${id} record.title is required`);
-    if (!record.body || !String(record.body).trim()) throw new Error(`candidate ${id} record.body is required`);
-    if (!record.counterevidence || !String(record.counterevidence).trim()) {
-      throw new Error(`candidate ${id} record.counterevidence is required`);
+    const verdict = String(c.annotation.verdict).trim();
+    if (verdict !== "keep" && verdict !== "drop" && verdict !== "revert") {
+      throw new Error(`candidate ${id} annotation verdict must be keep|drop|revert`);
     }
-    if (!record.compilerImplication || !String(record.compilerImplication).trim()) {
-      throw new Error(`candidate ${id} record.compilerImplication is required`);
+    if (c.kind !== "add") throw new Error(`candidate ${id} kind must be "add"`);
+    if (verdict !== "keep") continue;
+    const record = c.annotation.record || c.finalRecord || c.record;
+    if (!record || typeof record !== "object") {
+      throw new Error(`candidate ${id} keep requires an annotation final record; synth plans carry no record`);
+    }
+    // No inherited synth record: the staged plan must not carry one.
+    if (c.record !== undefined || c.evidence !== undefined || c.title !== undefined) {
+      throw new Error(`candidate ${id} carries a synth final record; annotation is the sole full-record origin`);
+    }
+    if (ledger) {
+      const idx = evidenceIndex instanceof Map ? evidenceIndex : new Map();
+      const check = validateCandidate({ record, evidence: record.evidence }, { ledger, evidenceIndex: idx });
+      if (!check.ok) {
+        throw new Error(`candidate ${id} annotation final record invalid (${(check.errors || []).join("; ") || "validation failed"})`);
+      }
+    } else {
+      if (!record.title || !String(record.title).trim()) throw new Error(`candidate ${id} record.title is required`);
+      if (!record.body || !String(record.body).trim()) throw new Error(`candidate ${id} record.body is required`);
+      if (!record.counterevidence || !String(record.counterevidence).trim()) {
+        throw new Error(`candidate ${id} record.counterevidence is required`);
+      }
+      if (!record.compilerImplication || !String(record.compilerImplication).trim()) {
+        throw new Error(`candidate ${id} record.compilerImplication is required`);
+      }
     }
     if (measurements) {
       const m = byCandidate.get(id) || byCandidate.get(String(`m-${id}`));
@@ -127,6 +159,24 @@ export function buildFinalProposal(staged, { stateDir = null } = {}) {
         throw new Error(`candidate ${id} has no measurement annotation or explicit revert`);
       }
     }
+    const finalRecord = { ...record };
+    const stagedArtifact = renderStagedArtifact(finalRecord, soulBaseline);
+    const rationale = c.annotation.reason || c.annotation.rationale || finalRecord.body || "";
+    finals.push({
+      id,
+      kind: "add",
+      title: finalRecord.title?.startsWith("Experience record:") ? finalRecord.title : `Experience record: ${finalRecord.title}`,
+      rationale,
+      instructions: Array.isArray(c.annotation.instructions) && c.annotation.instructions.length ? c.annotation.instructions : [finalRecord.title],
+      evidence: finalRecord.evidence,
+      record: finalRecord,
+      counterevidence: finalRecord.counterevidence,
+      compilerImplication: finalRecord.compilerImplication,
+      stagedArtifact,
+      diff: renderDiff(finalRecord.id || id, stagedArtifact),
+      annotation: { verdict: "keep", reason: rationale },
+      clusterId: finalRecord.clusterId,
+    });
   }
-  return list.filter((c) => c?.reverted !== true && c?.annotation?.verdict === "keep");
+  return finals;
 }

@@ -303,6 +303,30 @@ def apply(
     root = experience_root or experience.experience_root()
     accepted = [e for e in edit_ids if resolved[e] == "accepted"]
     rejected = [e for e in edit_ids if resolved[e] == "rejected"]
+    # Apply consumes only final annotated records: every edit must carry an
+    # annotate verdict, and accepted edits must be annotation keeps with a
+    # complete final record. Synth plans never reach here.
+    for edit in edits:
+        annotation = edit.get("annotation") or {}
+        verdict = annotation.get("verdict")
+        if verdict not in ("keep", "drop", "revert"):
+            raise RuntimeError(
+                f"edit {edit.get('id', '?')} has no final annotation;"
+                " staged change plans cannot reach apply without annotate"
+            )
+        if resolved.get(edit["id"]) == "accepted" and verdict != "keep":
+            raise RuntimeError(
+                f"edit {edit.get('id', '?')} cannot be accepted"
+                f" (annotation verdict is {verdict!r}, want 'keep')"
+            )
+        if resolved.get(edit["id"]) == "accepted":
+            record = edit.get("record") or {}
+            for field in ("id", "title", "body", "sources", "clusterId", "evidence", "counterevidence", "compilerImplication"):
+                if not record.get(field):
+                    raise RuntimeError(
+                        f"edit {edit.get('id', '?')} annotation final record"
+                        f" is missing {field}; annotation is the sole full-record origin"
+                    )
     written: List[str] = []
     if not dry_run:
         for edit in edits:

@@ -15,7 +15,7 @@ import { consolidateLedger } from "./consolidate.js";
 import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
-import { annotateStaging, applyRejectionSuppression } from "./annotate.js";
+import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation } from "./annotate.js";
 import { initStateDir, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
@@ -202,7 +202,9 @@ export async function runPipeline({
   let synthesisNote = "";
   let synthesisFailed = false;
   if (analyzer === "mock") {
-    // Deterministic reviewable path: no model traffic, no real acpx calls.
+    // Deterministic reviewable path: narrow change plans only, no model
+    // traffic, no real acpx calls. Final records come only from the mock
+    // annotate step below (same plan->stage/measure->preface->annotate path).
     edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline });
   } else {
     // Production acpx-only synthesis: strict validation, fail-closed.
@@ -223,16 +225,27 @@ export async function runPipeline({
     synthesisNote = out.note || "";
   }
   const notes = [runNote, synthesisNote].filter(Boolean);
-  // Staged change plan: synth output is never final. Stage deterministically,
-  // measure with stable IDs/deltas, annotate via fresh preface->annotate
-  // invocations, suppress rejections on final, then build the terminal
-  // proposal from annotated candidates only. Fail closed with no edits.
+  // Staged change plan: synth output is never final. Stage narrow plans
+  // deterministically, measure with stable change ids/deltas + provisional
+  // intent/eligible context, annotate via fresh preface->annotate
+  // invocations (sole full-record origin), suppress rejections on
+  // annotated finals, then build the terminal proposal from annotated
+  // finals only. Fail closed with no edits.
   const staged = stageCandidates(edits, { stateDir, runId: resolvedRun });
-  measureStaging(staged, { stateDir, runId: resolvedRun });
-  const defaultAnnotate = (args) => ({
-    status: "ok",
-    annotations: (args?.staged || staged).map((c) => ({ id: c.id, verdict: "keep" })),
-  });
+  measureStaging(staged, { stateDir, runId: resolvedRun, ledger, evidenceIndex });
+  // Mock follows the same plan->private stage/measure->preface->
+  // annotate-final path and may deterministically construct the equivalent
+  // final annotation (mock only). Production invents nothing: without an
+  // annotate invoke that supplies complete final records, annotate fails
+  // closed with no edits.
+  const mockFinalFor = (plans) =>
+    (plans || staged).map((c) => buildMockFinalAnnotation(c, { ledger, evidenceIndex, soulBaseline }));
+  const defaultAnnotate = (args) => {
+    if (analyzer === "mock") {
+      return { status: "ok", annotations: mockFinalFor(args?.staged || staged) };
+    }
+    return { status: "failed", error: "annotate invoke unavailable; production invents nothing" };
+  };
   const annInvoke = annotateInvoke || defaultAnnotate;
   const annOut = await annotateStaging(staged, {
     stateDir,
@@ -240,6 +253,7 @@ export async function runPipeline({
     runId: resolvedRun,
     ledger,
     evidenceIndex,
+    soulBaseline,
     ...(promptsDir ? { promptsDir } : {}),
   });
   let finalEdits = [];
@@ -251,7 +265,7 @@ export async function runPipeline({
   } else {
     const kept = applyRejectionSuppression(annOut.annotated || [], rejections, { evidenceIndex });
     try {
-      finalEdits = buildFinalProposal(kept, { stateDir });
+      finalEdits = buildFinalProposal(kept, { stateDir, ledger, evidenceIndex, soulBaseline });
     } catch (err) {
       annotateFailed = true;
       annotateNote = `final proposal blocked (${err?.message || err}); unannotated staging cannot reach apply`;
