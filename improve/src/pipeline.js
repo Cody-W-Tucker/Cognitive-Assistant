@@ -118,13 +118,26 @@ export async function runPipeline({
   harnesses = null,
   analyzer = "acpx",
   soulPath = null,
+  posturePath = null,
+  experienceRoot = null,
+  promptsDir = null,
+  runId = null,
   minGapEvidence = 2,
 } = {}) {
   initStateDir(stateDir);
+  const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
   const traces = await collectTraces(discovery.transcripts);
   const invoke = analyzer === "mock" ? mockInvoke : undefined;
-  const records = analyzeTraces(traces, invoke ? { invoke } : {});
+  const records = analyzeTraces(traces, {
+    ...(invoke ? { invoke } : {}),
+    stateDir,
+    runId: resolvedRun,
+    soulPath,
+    posturePath,
+    experienceRoot,
+    promptsDir,
+  });
   for (const record of records) {
     writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
   }

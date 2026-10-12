@@ -3,28 +3,173 @@
 // (commit 0268201): every model call goes through the `acpx` binary only —
 // this runtime owns no API keys and makes no direct model calls. The invoke
 // function is injectable so tests (and headless CI) can substitute a mock
-// with zero model traffic.
+// with zero model traffic. The model prompt itself is the checked-in
+// improve/prompts/analysis.md (adapted from Backpass
+// src/prompts/analysis.md), rendered by improve/src/prompts.js with the
+// self-session sentinel FIRST; no inline prompt text lives here.
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { renderPrompt } from "./prompts.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
 
+/** Repo root resolved relative to the runtime, never CWD. */
+export function defaultRepoRoot() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+function readBaselineFile(file) {
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    if (text.trim()) return text.slice(0, 6000);
+  } catch {
+    // fall through to the explicit-degradation marker below
+  }
+  return null;
+}
+
+function unavailable(label, lookedIn) {
+  return `(${label} unavailable: looked in ${lookedIn}; audit the trace alone and note the gap in changed_context.)`;
+}
+
+function readExperienceRecords(experienceRoot) {
+  const roots = [];
+  if (experienceRoot) roots.push(path.resolve(experienceRoot));
+  else roots.push(path.join(defaultRepoRoot(), "workspaces", "experience"));
+  const blocks = [];
+  for (const root of roots) {
+    for (const sub of ["authored", "staged"]) {
+      let entries = [];
+      try {
+        entries = fs.readdirSync(path.join(root, sub)).filter((f) => f.endsWith(".md")).sort();
+      } catch {
+        continue;
+      }
+      for (const entry of entries.slice(0, 20)) {
+        try {
+          const text = fs.readFileSync(path.join(root, sub, entry), "utf8");
+          blocks.push(`--- ${sub}/${entry} ---\n${text.slice(0, 2000)}`);
+        } catch {
+          // skip unreadable records; absence is reported explicitly below
+        }
+      }
+    }
+    if (blocks.length) return blocks.join("\n\n").slice(0, 6000);
+  }
+  return null;
+}
+
 /**
- * Default invoke: one acpx call per distilled trace. The prompt is passed on
- * stdin; JSON evidence is expected on stdout. Any failure is fail-soft
- * (status "failed") so one bad transcript never stops a run.
+ * Active artifact context for the analysis prompt. Every key degrades to an
+ * explicit "(... unavailable ...)" marker when its source is absent, so the
+ * model audits the trace alone instead of confabulating guidance.
  */
-export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000 }) {
+export function loadDefaultContexts({ repoRoot, soulPath, posturePath, experienceRoot } = {}) {
+  const root = repoRoot || defaultRepoRoot();
+  const soulFile = soulPath || path.join(root, "workspaces", "alignment", "artifacts", "SOUL.md");
+  const postureFile =
+    posturePath || path.join(root, "workspaces", "alignment", "artifacts", "INTERACTION_POSTURE.md");
+  const soulBaseline = readBaselineFile(soulFile) || unavailable("SOUL baseline", soulFile);
+  const interactionPosture =
+    readBaselineFile(postureFile) || unavailable("interaction posture", postureFile);
+  const experienceRecords =
+    readExperienceRecords(experienceRoot) ||
+    unavailable(
+      "accepted experience records",
+      experienceRoot || path.join(root, "workspaces", "experience"),
+    );
+  return { soulBaseline, interactionPosture, experienceRecords };
+}
+
+/**
+ * Render the analysis model prompt for one distilled trace. Missing context
+ * keys fall back to the active defaults (with explicit degradation); an
+ * explicit `contexts: null` renders the trace alone with markers.
+ */
+export function buildAnalysisPrompt(trace, contexts = {}, { promptsDir, repoRoot } = {}) {
+  const provided = contexts || {};
+  const defaults = loadDefaultContexts({ repoRoot });
+  return renderPrompt(
+    "analysis",
+    {
+      TRANSCRIPT_ID: String(trace.transcriptId || "unknown"),
+      HARNESS: String(trace.harness || "unknown"),
+      SOUL_BASELINE: provided.soulBaseline ?? defaults.soulBaseline,
+      INTERACTION_POSTURE: provided.interactionPosture ?? defaults.interactionPosture,
+      EXPERIENCE_RECORDS: provided.experienceRecords ?? defaults.experienceRecords,
+      TRACE: String(trace.distilled || ""),
+    },
+    { promptsDir },
+  );
+}
+
+function safeName(text) {
+  const clean = String(text || "unknown").replace(/[^a-zA-Z0-9-_.]+/g, "_").slice(0, 80);
+  return clean || "unknown";
+}
+
+/**
+ * Persist one rendered model prompt under private state (never the repo):
+ * `<stateDir>/prompts/<runId>__<transcriptId>.md` plus a `.json` sidecar
+ * naming the run/session relation. Both are 0600 where supported. The raw
+ * transcript is never written separately — the distilled trace travels only
+ * inside the rendered prompt.
+ *
+ * @returns the prompt file path
+ */
+export function persistPrompt(
+  stateDir,
+  { runId = "run-unknown", transcriptId = "unknown", harness = "unknown", prompt = "" } = {},
+) {
+  const dir = path.join(path.resolve(stateDir), "prompts");
+  fs.mkdirSync(dir, { recursive: true });
+  const base = `${safeName(runId)}__${safeName(transcriptId)}`;
+  const promptFile = path.join(dir, `${base}.md`);
+  const metaFile = path.join(dir, `${base}.json`);
+  fs.writeFileSync(promptFile, prompt, "utf8");
+  fs.writeFileSync(
+    metaFile,
+    `${JSON.stringify(
+      {
+        version: 1,
+        runId: String(runId),
+        transcriptId: String(transcriptId),
+        harness: String(harness),
+        promptFile: `${base}.md`,
+        createdAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  try {
+    fs.chmodSync(promptFile, 0o600);
+    fs.chmodSync(metaFile, 0o600);
+  } catch {
+    // mode bits unsupported here (e.g. Windows ACLs); private dir already scopes access
+  }
+  return promptFile;
+}
+
+/**
+ * Default invoke: one acpx call per distilled trace. The rendered analysis
+ * prompt is passed on stdin; JSON evidence is expected on stdout. Any
+ * failure is fail-soft (status "failed") so one bad transcript never stops
+ * a run.
+ */
+export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
+  const rendered = prompt || buildAnalysisPrompt(trace, contexts, { promptsDir });
   const args = [];
   if (agent) args.push(agent);
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   if (extra) args.push(...extra.split(/\s+/));
-  const prompt =
-    `${SELF_PROMPT_PREFIX}\n\n` +
-    `Read this distilled agent session and return JSON evidence ` +
-    `{status, positive[], negative[], gaps[]} only.\n\n${trace.distilled}\n`;
   const result = spawnSync(ACPX_BIN, args, {
-    input: prompt,
+    input: rendered,
     encoding: "utf8",
     timeout: timeoutMs,
   });
@@ -37,9 +182,6 @@ export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000 }) {
     return { status: "failed", error: "acpx returned unparseable output" };
   }
 }
-
-const SELF_PROMPT_PREFIX =
-  "<!-- ca-improve:self-session --> you are grading a past agent session.";
 
 /**
  * Deterministic test double: no model traffic. Every trace yields the same
@@ -74,14 +216,51 @@ export function mockInvoke({ trace }) {
 
 /**
  * @param {{transcriptId, harness, distilled}[]} traces
- * @param {{invoke?: (args) => object}} [options]
+ * @param {{invoke?: (args) => object, contexts?: object, promptsDir?: string, stateDir?: string, runId?: string}} [options]
+ *   `contexts` partially overrides the active defaults; `stateDir` enables
+ *   private prompt persistence (the pipeline always supplies it); `runId`
+ *   names the run/session relation on persisted prompts. Extra keys are
+ *   forwarded to `invoke` (mocks ignore them), so mock tests are unchanged.
  * @returns evidence records [{transcriptId, harness, status, positive, negative, gaps}]
  */
-export function analyzeTraces(traces, { invoke = acpxInvoke } = {}) {
+export function analyzeTraces(
+  traces,
+  {
+    invoke = acpxInvoke,
+    contexts,
+    promptsDir,
+    stateDir = null,
+    runId = null,
+    repoRoot,
+    soulPath,
+    posturePath,
+    experienceRoot,
+  } = {},
+) {
+  const merged = {
+    ...loadDefaultContexts({ repoRoot, soulPath, posturePath, experienceRoot }),
+    ...(contexts || {}),
+  };
+  const resolvedState = stateDir ? path.resolve(stateDir) : null;
+  const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   return traces.map((trace) => {
+    const prompt = buildAnalysisPrompt(trace, merged, { promptsDir });
+    if (resolvedState) {
+      try {
+        persistPrompt(resolvedState, {
+          runId: resolvedRun,
+          transcriptId: trace.transcriptId,
+          harness: trace.harness,
+          prompt,
+        });
+      } catch {
+        // persistence is best-effort next to analysis; a prompt write failure
+        // must not fail the trace (evidence still flows to fold)
+      }
+    }
     let outcome;
     try {
-      outcome = invoke({ trace });
+      outcome = invoke({ trace, prompt, contexts: merged, promptsDir });
     } catch (err) {
       outcome = { status: "failed", error: err?.message || String(err) };
     }

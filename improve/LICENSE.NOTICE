@@ -31,6 +31,8 @@ Per-file headers in improve/src/ name the Backpass module each file was
 adapted from. Actual adapted source mappings in this slice:
 
   - improve/src/analyze.js <- Backpass src/acpx.js + src/analyze.js
+  - improve/src/prompts.js <- Backpass src/prompts.js
+  - improve/prompts/analysis.md <- Backpass src/prompts/analysis.md (operational source)
   - improve/src/discovery.js <- Backpass src/discovery/index.js + src/discovery/adapters/{hermes,pi,claude,codex,opencode}.js
   - improve/src/distill.js <- Backpass src/distill.js
   - improve/src/fold.js <- Backpass src/fold.js

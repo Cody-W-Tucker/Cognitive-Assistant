@@ -44,6 +44,7 @@ async function main() {
     const since = flagValue(rest, "--since") || "30d";
     const analyzer = flagValue(rest, "--analyzer") || "acpx";
     const soulPath = flagValue(rest, "--soul-path") || null;
+    const posturePath = flagValue(rest, "--posture-path") || null;
     const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
     const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
     return runPipeline({
@@ -53,6 +54,7 @@ async function main() {
       harnesses: harnessFlags.length ? harnessFlags : null,
       analyzer,
       soulPath,
+      posturePath,
       minGapEvidence,
     }).then(
       (proposal) => {
