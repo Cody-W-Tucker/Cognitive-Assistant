@@ -87,12 +87,12 @@ export function render(template, values) {
       throw new Error(`unused placeholder value {{${key}}} (not declared by this prompt)`);
     }
   }
-  const out = text.replace(TOKEN_PATTERN, (match, key) => String(provided[key]));
-  const leftover = out.match(/\{\{[^}]*\}\}/);
-  if (leftover) {
-    throw new Error(`unrendered placeholder ${leftover[0]} left in prompt`);
+  for (const m of text.matchAll(/\{\{[^}]*\}\}/g)) {
+    if (!DECLARED_PATTERN.test(m[0].slice(2, -2))) {
+      throw new Error(`unexpected template token ${m[0]} (want UPPER_SNAKE)`);
+    }
   }
-  return out;
+  return text.replace(TOKEN_PATTERN, (match, key) => String(provided[key]));
 }
 
 /**

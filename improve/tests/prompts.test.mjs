@@ -125,4 +125,15 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
       /EXTRA/,
     );
   });
+
+  it("preserves literal placeholder-shaped text injected through values", () => {
+    const out = render("a {{TRACE}} b", {
+      TRACE: "literal {{TRACE}} and {{OTHER}} {{lower}} {{bad-key}} shapes",
+    });
+    assert.equal(out, "a literal {{TRACE}} and {{OTHER}} {{lower}} {{bad-key}} shapes b");
+  });
+
+  it("still fails on a missing declared key even with literal-shape values allowed", () => {
+    assert.throws(() => render("a {{TRACE}} {{MISSING}} b", { TRACE: "x {{TRACE}} y" }), /MISSING/);
+  });
 });
