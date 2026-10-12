@@ -36,7 +36,9 @@ export const ACPX_FRAMING_PREFIX = "[acpx]";
  *   `acpx --env KEY=value --format quiet pi ...` (never
  *   `acpx pi --format quiet --env KEY=value ...`).
  * - Extra non-format args come verbatim from CA_IMPROVE_ACPX_ARGS
- *   (whitespace-split).
+ *   (whitespace-split): leading `-`-flag groups with their values stay
+ *   before format as globals, bare positional subcommands such as
+ *   `pi exec` follow format and precede the agent.
  *
  * @param {{ agent?: string | null }} [options]
  * @returns {string[]} argv suitable for spawn; downstream appends prompt/input.
@@ -57,9 +59,28 @@ export function buildAcpxArgs({ agent = null } = {}) {
       `CA_IMPROVE_ACPX_ARGS must not override ${formatOverride} (production parsing requires ACPX text output --format quiet)`,
     );
   }
+  const flagArgs = [];
+  const positionalArgs = [];
+  let i = 0;
+  while (i < extraArgs.length) {
+    const token = extraArgs[i];
+    if (!token.startsWith("-")) {
+      positionalArgs.push(...extraArgs.slice(i));
+      break;
+    }
+    flagArgs.push(token);
+    const next = extraArgs[i + 1];
+    if (next !== undefined && !next.startsWith("-")) {
+      flagArgs.push(next);
+      i += 2;
+    } else {
+      i += 1;
+    }
+  }
   const args = [];
-  if (extraArgs.length) args.push(...extraArgs);
+  if (flagArgs.length) args.push(...flagArgs);
   args.push(...ACPX_TEXT_FORMAT_ARGS);
+  if (positionalArgs.length) args.push(...positionalArgs);
   if (agent) args.push(String(agent));
   return args;
 }

@@ -67,6 +67,12 @@ describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
     });
   });
 
+  it("places bare `pi exec` subcommand after text-output format (exact order)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
+      assert.deepEqual(buildAcpxArgs({}), ["--format", "quiet", "pi", "exec"]);
+    });
+  });
+
   it("rejects explicit --format/--output overrides fail-closed (text output required)", () => {
     for (const override of ["--format json", "--format=json", "--output json", "--format quiet"]) {
       withEnv({ CA_IMPROVE_ACPX_ARGS: override }, () => {
