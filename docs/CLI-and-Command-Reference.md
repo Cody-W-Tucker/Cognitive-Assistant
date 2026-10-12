@@ -124,7 +124,7 @@ supported. The model returns `{"merges": [[ids], ...]}` via ACPX text-output
 is extracted strictly by `improve/src/acpx-text.js` (tolerates only `[acpx]`
 framing lines, whitespace, and one optional ```json fence; fail-closed on
 absent/malformed/ambiguous candidates, top-level arrays/scalars, JSON-RPC
-envelopes, and model prose — no loose regex) before stage parsing validates
+envelopes, and model prose - no loose regex) before stage parsing validates
 strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
 across groups; malformed groups and unknown IDs are dropped, shrinking a
 group below two drops it). `CA_IMPROVE_ACPX_ARGS` supports additional ACPX
