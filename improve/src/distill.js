@@ -6,6 +6,22 @@
 const TOOL_INPUT_CHARS = 160;
 const TOOL_OUTPUT_CHARS = 200;
 const MESSAGE_CHARS = 6000;
+const ATTACHED_MARKER = "--- Attached Context ---";
+
+function attachedSummary(attachment) {
+  const chars = String(attachment ?? "").length;
+  return `attached context (${chars} chars elided)`;
+}
+
+function splitAttachedContext(text) {
+  const raw = String(text ?? "");
+  const idx = raw.indexOf(ATTACHED_MARKER);
+  if (idx === -1) return null;
+  return {
+    intent: raw.slice(0, idx).trim(),
+    attachment: raw.slice(idx + ATTACHED_MARKER.length).trim(),
+  };
+}
 
 function oneLine(text, limit) {
   const flat = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -64,6 +80,19 @@ export function distill(events, meta = {}) {
   for (const event of events || []) {
     if (!event || typeof event !== "object") continue;
     if (event.kind === "message") {
+      if (event.role === "assistant" && !String(event.text ?? "").trim()) continue;
+      const split = splitAttachedContext(event.text);
+      if (split) {
+        const intent = clampMessage(split.intent);
+        if (intent && !isBoilerplate(intent)) {
+          const role = event.role === "assistant" ? "agent" : "human";
+          lines.push(`## ${role}`);
+          lines.push(intent);
+          lines.push("");
+        }
+        lines.push(`- tool context: ${attachedSummary(split.attachment)}`);
+        continue;
+      }
       const text = clampMessage(event.text);
       if (isBoilerplate(text)) continue;
       const role = event.role === "assistant" ? "agent" : "human";
@@ -82,7 +111,15 @@ export function distill(events, meta = {}) {
 /** Best-effort normalization of one raw transcript record into events. */
 export function recordToEvents(record) {
   if (!record || typeof record !== "object") return [];
-  if (record.kind === "message" || record.kind === "tool") return [record];
+  if (record.kind === "tool") return [record];
+  if (record.kind === "message") {
+    if (record.role === "tool") {
+      const toolText = record.text ?? record.content ?? record.message?.content ?? record.data?.text ?? "";
+      return [{ kind: "tool", name: record.name || record.tool || "tool", input: toolText }];
+    }
+    if (record.role === "assistant" && !String(record.text ?? record.content ?? "").trim()) return [];
+    return [record];
+  }
   // Generic harness JSON shapes: pick the first recognizable text field.
   const text =
     record.content ??
@@ -91,15 +128,45 @@ export function recordToEvents(record) {
     record.data?.text ??
     null;
   const role = record.role || record.message?.role || record.type;
+  if (role === "tool") {
+    if (typeof text === "string") {
+      return [{ kind: "tool", name: record.name || record.tool || "tool", input: text }];
+    }
+    if (record.input !== undefined || record.args !== undefined || record.result !== undefined) {
+      return [{
+        kind: "tool",
+        name: record.name || record.tool || "tool",
+        input: record.input ?? record.args ?? record.result,
+      }];
+    }
+    return [];
+  }
   if (typeof text === "string") {
+    if (role === "assistant" && !text.trim()) return [];
+    const split = splitAttachedContext(text);
+    if (split) {
+      const out = [];
+      if (split.intent) out.push({ kind: "message", role: role === "assistant" ? "assistant" : "user", text: split.intent });
+      out.push({ kind: "tool", name: "context", input: attachedSummary(split.attachment) });
+      return out;
+    }
     const normalizedRole = role === "assistant" ? "assistant" : "user";
     return [{ kind: "message", role: normalizedRole, text }];
   }
   if (Array.isArray(text)) {
     const parts = text.filter((p) => typeof p?.text === "string").map((p) => p.text);
     if (parts.length) {
+      const joined = parts.join("\n");
+      if (role === "assistant" && !joined.trim()) return [];
+      const split = splitAttachedContext(joined);
+      if (split) {
+        const out = [];
+        if (split.intent) out.push({ kind: "message", role: role === "assistant" ? "assistant" : "user", text: split.intent });
+        out.push({ kind: "tool", name: "context", input: attachedSummary(split.attachment) });
+        return out;
+      }
       const normalizedRole = role === "assistant" ? "assistant" : "user";
-      return [{ kind: "message", role: normalizedRole, text: parts.join("\n") }];
+      return [{ kind: "message", role: normalizedRole, text: joined }];
     }
   }
   if (record.tool || record.name) {
