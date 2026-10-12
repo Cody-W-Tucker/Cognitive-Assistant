@@ -321,6 +321,50 @@ describe("strict deterministic extractor (exactly one final object)", () => {
     assert.equal(extractAcpxFinalJson(`${head}[1, 2, 3]\n`), null);
     assert.equal(extractAcpxFinalJson(`${head}{"a": 1} trailing prose\n`), null);
   });
+
+  it("accepts exact live Pi shape with upgrade-notice tail before one final object", () => {
+    const out = [
+      "pi v1.1.0",
+      "---",
+      "",
+      "Context",
+      "  - /repo/SOUL.md",
+      "  - /repo/INTERACTION_POSTURE.md",
+      "",
+      "Skills",
+      "  - skill-a: does x",
+      "  - skill-b: does y",
+      "",
+      "---",
+      "New version available: v1.1.0 -> v1.2.0 (run `pi upgrade`)",
+      '{"plans":[]}',
+      "",
+    ].join("\n");
+    assert.deepEqual(extractAcpxFinalJson(out), { plans: [] });
+    assert.ok(stripPiQuietPreamble(out).trimStart().startsWith("{"));
+  });
+
+  it("rejects live Pi upgrade-notice tail with a second prose line fail-closed", () => {
+    const out = [
+      "pi v1.1.0",
+      "---",
+      "",
+      "Context",
+      "  - /repo/SOUL.md",
+      "  - /repo/INTERACTION_POSTURE.md",
+      "",
+      "Skills",
+      "  - skill-a: does x",
+      "  - skill-b: does y",
+      "",
+      "---",
+      "New version available: v1.1.0 -> v1.2.0 (run `pi upgrade`)",
+      "Please upgrade soon",
+      '{"plans":[]}',
+      "",
+    ].join("\n");
+    assert.equal(extractAcpxFinalJson(out), null);
+  });
 });
 
 describe("real ACPX calls use text-output + strict extraction (no direct client/fallback)", () => {

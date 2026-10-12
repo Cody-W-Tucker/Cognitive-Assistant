@@ -135,6 +135,11 @@ export function stripAcpxFraming(text) {
  * Preamble lines must not contain `{`, `}`, or fences, and the remainder
  * after the preamble must start with `{` or ``` — otherwise no stripping
  * occurs and existing fail-closed extraction rejects the output.
+ * An optional upgrade-notice tail is tolerated after the Skills list only:
+ * blank line(s), one separator line of 3+ hyphens (`---`), blank line(s),
+ * exactly one notice line starting `New version available:`, blank line(s),
+ * then the final JSON. Any other prose, unknown notice, extra line, or
+ * second notice falls through fail-closed (no stripping).
  * @param {string} text
  * @returns {string} remainder after the preamble, or the input unchanged
  */
@@ -176,6 +181,18 @@ export function stripPiQuietPreamble(text) {
   }
   if (count < 1) return src;
   while (i < lines.length && isBlank(lines[i])) i += 1;
+  // Optional upgrade-notice tail: blank(s) already skipped, then one
+  // hyphen-only separator (3+), blank(s), exactly one upgrade notice,
+  // blank(s), then JSON. Anything else stays on the strict path below.
+  if (/^-{3,}$/.test(clean(lines[i] ?? "").trim())) {
+    i += 1;
+    while (i < lines.length && isBlank(lines[i])) i += 1;
+    const notice = clean(lines[i] ?? "");
+    if (!notice.trimStart().startsWith("New version available:")) return src;
+    if (/[{}]/.test(notice) || notice.includes("```")) return src;
+    i += 1;
+    while (i < lines.length && isBlank(lines[i])) i += 1;
+  }
   const remainder = lines.slice(i).join("\n");
   const remainderStart = remainder.trimStart().replace(/^\uFEFF/, "");
   if (remainderStart.startsWith("{") || remainderStart.startsWith("```")) return remainder;
@@ -279,7 +296,9 @@ function unwrapSingleFence(trimmed) {
 /**
  * Strict deterministic extractor for exactly one final JSON object in ACPX
  * text output. Tolerates ONLY known ACPX framing (`[acpx] ...` lines),
- * one known Pi quiet preamble (version/separator/Context/Skills shape),
+ * one known Pi quiet preamble (version/separator/Context/Skills shape,
+ * plus an optional upgrade-notice tail: one 3+ hyphen separator and one
+ * `New version available:` line),
  * surrounding whitespace, and one optional ```json fenced block.
  * Fail-closed (returns null) on: absent/malformed JSON, unbalanced braces,
  * zero or ambiguous (>=2) top-level object candidates, top-level
