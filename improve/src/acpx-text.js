@@ -44,7 +44,7 @@ export const ACPX_FRAMING_PREFIX = "[acpx]";
  * @returns {string[]} argv suitable for spawn; downstream appends prompt/input.
  * @throws {Error} when CA_IMPROVE_ACPX_ARGS overrides --format/--output.
  */
-export function buildAcpxArgs({ agent = null } = {}) {
+export function buildAcpxArgs({ agent = null, model = null } = {}) {
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   const extraArgs = extra ? extra.split(/\s+/) : [];
   const formatOverride = extraArgs.find(
@@ -79,6 +79,21 @@ export function buildAcpxArgs({ agent = null } = {}) {
   }
   const args = [];
   if (flagArgs.length) args.push(...flagArgs);
+  // Role model is a global ACPX flag. Env args may already set --model;
+  // an explicit role model replaces that so stages do not share one model.
+  if (model) {
+    const withoutModel = [];
+    for (let n = 0; n < args.length; n += 1) {
+      if (args[n] === "--model") {
+        n += 1;
+        continue;
+      }
+      if (String(args[n]).startsWith("--model=")) continue;
+      withoutModel.push(args[n]);
+    }
+    args.length = 0;
+    args.push(...withoutModel, "--model", String(model));
+  }
   args.push(...ACPX_TEXT_FORMAT_ARGS);
   if (positionalArgs.length) args.push(...positionalArgs);
   if (agent) args.push(String(agent));

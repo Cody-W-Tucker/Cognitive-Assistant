@@ -10,6 +10,7 @@ import path from "node:path";
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { modelForRole } from "./models.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
 
@@ -151,8 +152,8 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
  * positional, ACPX text-output (`--format quiet`, never JSON-RPC),
  * extra args from CA_IMPROVE_ACPX_ARGS, prompt on stdin, model-final
  * JSON extracted strictly from text stdout. */
-export function acpxConsolidateInvoke({ prompt, agent = null, timeoutMs = 120_000 } = {}) {
-  const args = buildAcpxArgs({ agent });
+export function acpxConsolidateInvoke({ prompt, agent = null, model = null, timeoutMs = 120_000 } = {}) {
+  const args = buildAcpxArgs({ agent, model: model || modelForRole("consolidate") });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };

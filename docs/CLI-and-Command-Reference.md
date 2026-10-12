@@ -127,7 +127,7 @@ absent/malformed/ambiguous candidates, top-level arrays/scalars, JSON-RPC
 envelopes, and model prose - no loose regex) before stage parsing validates
 strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
 across groups; malformed groups and unknown IDs are dropped, shrinking a
-group below two drops it). `CA_IMPROVE_ACPX_ARGS` supports additional ACPX
+group below two drops it). Model roles follow the Backpass split, through Pi only: analysis and consolidation use `openai-codex/gpt-5.6-luna`; synthesis and annotation use `openai-codex/gpt-5.6-sol`. Distillation stays local. `CA_IMPROVE_ACPX_ARGS` supports additional ACPX
 arguments but rejects `--format`/`--output` overrides so model-final output
 remains text-mode `--format quiet`; this prevents JSON-RPC parsing mismatch. The merge itself is mechanical: union distinct
 session sources (never double-count a session), preserve per-source quote

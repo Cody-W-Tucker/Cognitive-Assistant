@@ -12,6 +12,7 @@ import { spawnSync } from "node:child_process";
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { modelForRole } from "./models.js";
 import { validateCandidate, isSuppressedByRejection, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
 import { createHash } from "node:crypto";
@@ -169,8 +170,8 @@ function annotationsFrom(outcome) {
  * caller `agent` stays the optional first positional; extra args come
  * from CA_IMPROVE_ACPX_ARGS. No direct model client, no fallback.
  */
-export function acpxAnnotatePrefaceInvoke({ prompt, agent = null, timeoutMs = 120_000 } = {}) {
-  const args = buildAcpxArgs({ agent });
+export function acpxAnnotatePrefaceInvoke({ prompt, agent = null, model = null, timeoutMs = 120_000 } = {}) {
+  const args = buildAcpxArgs({ agent, model: model || modelForRole("annotate") });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
@@ -188,8 +189,8 @@ export function acpxAnnotatePrefaceInvoke({ prompt, agent = null, timeoutMs = 12
  * final `{"annotations": [...]}` object extracted strictly. Same argv
  * contract as the preface invoke.
  */
-export function acpxAnnotateInvoke({ prompt, agent = null, timeoutMs = 180_000 } = {}) {
-  const args = buildAcpxArgs({ agent });
+export function acpxAnnotateInvoke({ prompt, agent = null, model = null, timeoutMs = 180_000 } = {}) {
+  const args = buildAcpxArgs({ agent, model: model || modelForRole("annotate") });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };

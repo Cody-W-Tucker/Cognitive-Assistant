@@ -12,6 +12,7 @@ import {
   stripAcpxFraming,
   stripPiQuietPreamble,
 } from "../src/acpx-text.js";
+import { ANALYSIS_MODEL, SYNTHESIS_MODEL, modelForRole } from "../src/models.js";
 
 function withEnv(patch, fn) {
   const prev = new Map();
@@ -80,6 +81,31 @@ describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
         assert.throws(() => buildAcpxArgs({}), /must not override.*--format quiet/);
       });
     }
+  });
+
+  it("assigns Backpass cheap and strong models by role", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
+      assert.equal(modelForRole("analysis"), ANALYSIS_MODEL);
+      assert.equal(modelForRole("consolidate"), ANALYSIS_MODEL);
+      assert.equal(modelForRole("synthesis"), SYNTHESIS_MODEL);
+      assert.equal(modelForRole("annotate"), SYNTHESIS_MODEL);
+      assert.deepEqual(buildAcpxArgs({ model: modelForRole("analysis") }), [
+        "--model",
+        ANALYSIS_MODEL,
+        "--format",
+        "quiet",
+        "pi",
+        "exec",
+      ]);
+      assert.deepEqual(buildAcpxArgs({ model: modelForRole("synthesis") }), [
+        "--model",
+        SYNTHESIS_MODEL,
+        "--format",
+        "quiet",
+        "pi",
+        "exec",
+      ]);
+    });
   });
 
   it("never requests JSON-RPC by default", () => {

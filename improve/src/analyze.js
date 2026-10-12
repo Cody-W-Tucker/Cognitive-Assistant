@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { renderPrompt } from "./prompts.js";
 import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { modelForRole } from "./models.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
 
@@ -219,10 +220,10 @@ export function persistPrompt(
  * bad transcript never stops a run. Explicit caller `agent` stays the
  * optional first positional; extra args come from CA_IMPROVE_ACPX_ARGS.
  */
-export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
+export function acpxInvoke({ trace, agent = null, model = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
   const rendered = prompt || buildAnalysisPrompt(trace, contexts, { promptsDir });
   const bin = resolveAcpxBin();
-  const args = buildAcpxArgs({ agent });
+  const args = buildAcpxArgs({ agent, model: model || modelForRole("analysis") });
   const result = spawnSync(bin, args, {
     input: rendered,
     encoding: "utf8",

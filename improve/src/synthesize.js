@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { modelForRole } from "./models.js";
 
 export const BODY_MAX_CHARS = 2000;
 
@@ -307,8 +308,8 @@ export function isSuppressedByRejection(candidate, rejections) {
  * acpx (analyze.js): the `acpx` binary, optional agent positional,
  * extra args from CA_IMPROVE_ACPX_ARGS, prompt passed on stdin.
  */
-export function acpxSynthesisInvoke({ prompt, agent = null, timeoutMs = 180_000 } = {}) {
-  const args = buildAcpxArgs({ agent });
+export function acpxSynthesisInvoke({ prompt, agent = null, model = null, timeoutMs = 180_000 } = {}) {
+  const args = buildAcpxArgs({ agent, model: model || modelForRole("synthesis") });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
