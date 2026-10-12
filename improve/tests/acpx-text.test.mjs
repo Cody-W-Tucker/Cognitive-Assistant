@@ -10,6 +10,7 @@ import {
   extractAcpxFinalJson,
   isJsonRpcEnvelope,
   stripAcpxFraming,
+  stripPiQuietPreamble,
 } from "../src/acpx-text.js";
 
 function withEnv(patch, fn) {
@@ -157,6 +158,117 @@ describe("strict deterministic extractor (exactly one final object)", () => {
   it("uses no loose regex brace heuristic (nested + escaped strings stay exact)", () => {
     const out = `{"text": "quote \\"with\\" braces {not json}", "n": 1}`;
     assert.deepEqual(extractAcpxFinalJson(out), { text: 'quote "with" braces {not json}', n: 1 });
+  });
+
+  it("accepts real-shaped Pi quiet preamble before exactly one final object", () => {
+    const out = [
+      "pi v0.5.1",
+      "----------",
+      "",
+      "Context",
+      "  - /repo/SOUL.md",
+      "  - /repo/INTERACTION_POSTURE.md",
+      "",
+      "Skills",
+      "  - skill-a: does x",
+      "  - skill-b: does y",
+      "",
+      '{"status": "ok", "positive": [], "negative": [], "gaps": []}',
+      "",
+    ].join("\n");
+    assert.deepEqual(extractAcpxFinalJson(out), {
+      status: "ok",
+      positive: [],
+      negative: [],
+      gaps: [],
+    });
+    assert.ok(stripPiQuietPreamble(out).trimStart().startsWith("{"));
+  });
+
+  it("accepts Pi preamble with [acpx] framing and a single fenced object", () => {
+    const out = [
+      "[acpx] tokens: input=3 output=9",
+      "pi v0.5.1",
+      "----------",
+      "",
+      "Context",
+      "  - ctx-one",
+      "",
+      "Skills",
+      "  - skill-one",
+      "",
+      "```json",
+      '{"ready": true}',
+      "```",
+      "",
+    ].join("\n");
+    assert.deepEqual(extractAcpxFinalJson(out), { ready: true });
+  });
+
+  it("rejects Pi preamble whose version line has trailing prose (strict version token)", () => {
+    const out = [
+      "pi v0.5.1 extra prose",
+      "----------",
+      "",
+      "Context",
+      "  - /repo/SOUL.md",
+      "  - /repo/INTERACTION_POSTURE.md",
+      "",
+      "Skills",
+      "  - skill-a: does x",
+      "  - skill-b: does y",
+      "",
+      '{"status": "ok", "positive": [], "negative": [], "gaps": []}',
+      "",
+    ].join("\n");
+    assert.equal(extractAcpxFinalJson(out), null);
+    assert.equal(stripPiQuietPreamble(out), out);
+  });
+
+  it("rejects non-Pi prose preambles fail-closed (no generic prose stripping)", () => {
+    assert.equal(extractAcpxFinalJson(`Hello from Pi\n\n{"ready": true}\n`), null);
+    assert.equal(
+      extractAcpxFinalJson(`pi v0.5.1\nSome intro prose\n\n{"ready": true}\n`),
+      null,
+    );
+    assert.equal(extractAcpxFinalJson(`Version pi v1\n\n{"ready": true}\n`), null);
+  });
+
+  it("rejects malformed/unknown-section Pi-like preambles fail-closed", () => {
+    const base = (head) => `${head}\n{"ready": true}\n`;
+    // Missing Skills section.
+    assert.equal(
+      extractAcpxFinalJson(base(`pi v0.5.1\n----------\n\nContext\n  - a`)),
+      null,
+    );
+    // Unknown extra section after Skills.
+    assert.equal(
+      extractAcpxFinalJson(
+        base(`pi v0.5.1\n----------\n\nContext\n  - a\n\nSkills\n  - b\n\nTools\n  - c`),
+      ),
+      null,
+    );
+    // Separator with trailing prose is not the known shape.
+    assert.equal(
+      extractAcpxFinalJson(base(`pi v0.5.1\n---------- done\n\nContext\n  - a\n\nSkills\n  - b`)),
+      null,
+    );
+    // Empty Context list is malformed.
+    assert.equal(
+      extractAcpxFinalJson(base(`pi v0.5.1\n----------\n\nContext\n\nSkills\n  - b`)),
+      null,
+    );
+  });
+
+  it("stays fail-closed after a valid Pi preamble (rpc / multiple / array)", () => {
+    const head = `pi v0.5.1\n----------\n\nContext\n  - a\n\nSkills\n  - b\n\n`;
+    assert.equal(
+      extractAcpxFinalJson(`${head}{"jsonrpc": "2.0", "id": 1, "result": {}}\n`),
+      null,
+    );
+    assert.equal(extractAcpxFinalJson(`${head}{"a": 1}\n{"b": 2}\n`), null);
+    assert.equal(extractAcpxFinalJson(`${head}[1, 2, 3]\n`), null);
+    assert.equal(extractAcpxFinalJson(`${head}{"a": 1} trailing prose\n`), null);
   });
 });
 

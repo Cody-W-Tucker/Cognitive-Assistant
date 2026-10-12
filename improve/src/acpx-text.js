@@ -107,6 +107,66 @@ export function stripAcpxFraming(text) {
 }
 
 /**
+ * Known Pi quiet-mode preamble stripped before extraction.
+ * Real Pi (`exit 0`, exactly one JSON evidence object) may prefix the final
+ * object with this deterministic shape only:
+ *   pi v<version>
+ *   <separator of `-`/`=`/`─`/`—`, >=3 chars>
+ *   blank line(s)
+ *   Context heading + `-`/`*` bullet list (>=1 item)
+ *   Skills heading + `-`/`*` bullet list (>=1 item)
+ * Headings are exactly `Context`/`Skills` (optional trailing colon).
+ * Preamble lines must not contain `{`, `}`, or fences, and the remainder
+ * after the preamble must start with `{` or ``` — otherwise no stripping
+ * occurs and existing fail-closed extraction rejects the output.
+ * @param {string} text
+ * @returns {string} remainder after the preamble, or the input unchanged
+ */
+export function stripPiQuietPreamble(text) {
+  const src = String(text || "");
+  const lines = src.split("\n");
+  const clean = (line) => String(line ?? "").replace(/\r$/, "");
+  const isBlank = (line) => clean(line).trim() === "";
+  const isBullet = (line) => {
+    const c = clean(line);
+    if (/[{}`]/.test(c) || c.includes("```")) return false;
+    return /^\s*[-*]\s+\S.*$/.test(c);
+  };
+  let i = 0;
+  while (i < lines.length && isBlank(lines[i])) i += 1;
+  const versionLine = clean(lines[i] ?? "");
+  if (!/^pi v[0-9A-Za-z._-]+$/.test(versionLine)) return src;
+  if (/[{}`]/.test(versionLine) || versionLine.includes("```")) return src;
+  i += 1;
+  const separator = clean(lines[i] ?? "").trim();
+  if (!/^[-—─=]{3,}$/.test(separator)) return src;
+  i += 1;
+  while (i < lines.length && isBlank(lines[i])) i += 1;
+  if (!/^Context:?$/.test(clean(lines[i] ?? "").trim())) return src;
+  i += 1;
+  let count = 0;
+  while (i < lines.length && isBullet(lines[i])) {
+    count += 1;
+    i += 1;
+  }
+  if (count < 1) return src;
+  while (i < lines.length && isBlank(lines[i])) i += 1;
+  if (!/^Skills:?$/.test(clean(lines[i] ?? "").trim())) return src;
+  i += 1;
+  count = 0;
+  while (i < lines.length && isBullet(lines[i])) {
+    count += 1;
+    i += 1;
+  }
+  if (count < 1) return src;
+  while (i < lines.length && isBlank(lines[i])) i += 1;
+  const remainder = lines.slice(i).join("\n");
+  const remainderStart = remainder.trimStart().replace(/^\uFEFF/, "");
+  if (remainderStart.startsWith("{") || remainderStart.startsWith("```")) return remainder;
+  return src;
+}
+
+/**
  * True when the parsed object is a JSON-RPC envelope, which is never a
  * valid model-final payload. Any object carrying a `jsonrpc` member is
  * rejected fail-closed.
@@ -203,6 +263,7 @@ function unwrapSingleFence(trimmed) {
 /**
  * Strict deterministic extractor for exactly one final JSON object in ACPX
  * text output. Tolerates ONLY known ACPX framing (`[acpx] ...` lines),
+ * one known Pi quiet preamble (version/separator/Context/Skills shape),
  * surrounding whitespace, and one optional ```json fenced block.
  * Fail-closed (returns null) on: absent/malformed JSON, unbalanced braces,
  * zero or ambiguous (>=2) top-level object candidates, top-level
@@ -218,6 +279,8 @@ export function extractAcpxFinalJson(stdout) {
   let text = stdout;
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   text = stripAcpxFraming(text).trim();
+  if (!text) return null;
+  text = stripPiQuietPreamble(text).trim();
   if (!text) return null;
 
   const unwrapped = unwrapSingleFence(text);
