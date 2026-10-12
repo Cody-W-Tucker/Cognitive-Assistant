@@ -90,6 +90,21 @@
               exec python -m core.langfuse_review "$@"
             '';
           };
+          # Headless improvement pass only: discovers global transcripts,
+          # distills/folds/synthesizes a proposal into XDG state. Never
+          # writes to the repo, never deploys to Hermes. Applying a proposal
+          # stays a manual `improve-apply` review step.
+          ca-improve = pkgs.writeShellApplication {
+            name = "ca-improve";
+            runtimeInputs = [
+              pkgs.python312
+              pkgs.nodejs
+            ];
+            text = ''
+              export PYTHONPATH=${self}
+              exec python -m core improve-run --headless "$@"
+            '';
+          };
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
         }
       );
@@ -144,6 +159,49 @@
           };
         };
 
+      nixosModules.ca-improve =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.services.ca-improve;
+        in
+        {
+          options.services.ca-improve = {
+            enable = lib.mkEnableOption "CA headless improvement pass";
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.ca-improve;
+            };
+            timerConfig = lib.mkOption {
+              type = lib.types.attrs;
+              default = {
+                OnCalendar = "weekly";
+                Persistent = true;
+              };
+            };
+          };
+          config = lib.mkIf cfg.enable {
+            # User-scoped units: the pass runs headless as proposal-only and
+            # never deploys. Enable lingering for the target user so the
+            # timer fires without an active session.
+            systemd.user.services.ca-improve = {
+              description = "CA headless improvement pass (proposal only, no deploy)";
+              serviceConfig = {
+                ExecStart = "${cfg.package}/bin/ca-improve";
+                Type = "oneshot";
+              };
+            };
+            systemd.user.timers.ca-improve = {
+              wantedBy = [ "timers.target" ];
+              inherit (cfg) timerConfig;
+            };
+          };
+        };
+
       lib = {
         artifacts = {
           alignment = {
@@ -178,6 +236,7 @@
                 vulkanSupport = false;
                 cudaSupport = false;
               })
+              pkgs.nodejs
               ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
             ];
           };

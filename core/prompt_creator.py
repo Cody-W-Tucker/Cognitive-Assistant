@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import List
 
 from core.config import Config
+from core import experience
 from lib.config import validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
 
@@ -98,6 +99,12 @@ def load_dataset_context(config: Config) -> str:
         print(f"Info: Applied redaction to {redaction_count} entries")
 
     combined_context = "\n\n---\n\n".join(formatted_sections)
+    # Experience hook: accepted improvement records join the build context.
+    # SOUL stays the read-only baseline elsewhere; this only appends staged
+    # experience, and is a no-op while the experience store is empty.
+    experience_block = experience.compile_experience_block()
+    if experience_block:
+        combined_context += "\n\n---\n\n# Accepted experience\n\n" + experience_block
     print(
         f"Info: Loaded {len(formatted_sections)} sections "
         f"({len(combined_context)} characters)"

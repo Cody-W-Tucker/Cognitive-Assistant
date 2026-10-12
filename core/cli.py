@@ -12,6 +12,8 @@ Subcommands:
   build-alignment-spec  Generate alignment verification spec from unified skills
   update             Run build-prompts, build-skills, build-translation-layer, build-alignment-spec, and build-tool-specs
   health-check       Validate prompts, paths, provider access, and QMD availability
+   improve-run        Improvement pass: manual TTY route by default, --headless for JSON proposal into XDG state (never writes repo/Hermes)
+  improve-apply      Review gate: apply a proposal (sole writer of experience records)
 
 Common flags:
   --profile <name>   Required for most commands. Optional for 'update' (all profiles).
@@ -144,6 +146,59 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Report candidates without creating queue items.",
     )
 
+    improve_run_parser = subparsers.add_parser(
+        "improve-run",
+        help="Run the CA improvement pass (manual TTY route by default, --headless for JSON).",
+    )
+    improve_run_parser.add_argument(
+        "--headless",
+        action="store_true",
+        required=False,
+        help="Headless run: emit exactly one JSON proposal object on stdout (never touches tracked files or live Hermes).",
+    )
+    improve_run_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Private state dir (default: $XDG_DATA_HOME/cognitive-assistant/improve).",
+    )
+    improve_run_parser.add_argument(
+        "--since",
+        default="30d",
+        help="Only sessions newer than this (30d, 12h, 2w, all).",
+    )
+    improve_run_parser.add_argument(
+        "--analyzer",
+        default="acpx",
+        help="Analyzer backend: acpx (default, model calls via acpx only) or mock (no model calls).",
+    )
+    improve_run_parser.add_argument(
+        "--min-gap-evidence",
+        type=int,
+        default=2,
+        help="Sessions of shared gap evidence needed before a candidate is proposed.",
+    )
+
+    improve_apply_parser = subparsers.add_parser(
+        "improve-apply",
+        help="Review gate: apply the headless proposal (sole writer of experience records).",
+    )
+    improve_apply_parser.add_argument(
+        "--decisions",
+        action="append",
+        default=None,
+        help='Decisions vector, e.g. --decisions "e1=accepted e2=rejected:too-narrow". Repeatable.',
+    )
+    improve_apply_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Private state dir holding the proposal (default: XDG).",
+    )
+    improve_apply_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be written; write nothing.",
+    )
+
     return parser
 
 
@@ -188,6 +243,97 @@ def main(argv: Sequence[str] | None = None) -> int:
         from core import langfuse_review
 
         return langfuse_review.run(dry_run=args.dry_run)
+
+    if args.command == "improve-run":
+        import json
+        import os
+
+        from core import improve as improve_runtime
+
+        home = Path(os.environ.get("CA_IMPROVE_HOME", Path.home().expanduser()))
+        if args.headless:
+            proposal = improve_runtime.run_headless(
+                home=home,
+                cwd=Path.cwd(),
+                state_dir=args.state_dir,
+                since=args.since,
+                analyzer=args.analyzer,
+                min_gap_evidence=args.min_gap_evidence,
+            )
+            print(json.dumps(proposal))
+            print(
+                f"proposal {proposal.get('id', '?')}: "
+                f"{len(proposal.get('edits', []))} candidate edit(s), "
+                f"{proposal.get('stats', {}).get('transcripts', 0)} transcript(s) discovered",
+                file=sys.stderr,
+            )
+            print(
+                "state: "
+                + str(args.state_dir or improve_runtime.default_state_dir()),
+                file=sys.stderr,
+            )
+            print("next: review with `improve-apply --decisions \"e1=accepted ...\"`", file=sys.stderr)
+            return 0
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            print(
+                "improve-run: manual route requires a TTY; "
+                "automation should use `improve-run --headless`",
+                file=sys.stderr,
+            )
+            return 2
+        print("collect samples")
+        print("calculate loss")
+        print("aggregate gradients")
+        print("gradient descent")
+        proposal = improve_runtime.run_headless(
+            home=home,
+            cwd=Path.cwd(),
+            state_dir=args.state_dir,
+            since=args.since,
+            analyzer=args.analyzer,
+            min_gap_evidence=args.min_gap_evidence,
+        )
+        print(
+            f"proposal {proposal.get('id', '?')}: "
+            f"{len(proposal.get('edits', []))} candidate edit(s), "
+            f"{proposal.get('stats', {}).get('transcripts', 0)} transcript(s) discovered"
+        )
+        print("state: " + str(args.state_dir or improve_runtime.default_state_dir()))
+        print("next: review with `improve-apply --decisions \"e1=accepted ...\"`")
+        return 0
+
+    if args.command == "improve-apply":
+        from core import improve as improve_runtime
+
+        state = args.state_dir or improve_runtime.default_state_dir()
+        decisions: dict[str, str] | None = None
+        if args.decisions:
+            edit_ids = [
+                edit["id"]
+                for edit in improve_runtime.read_proposal(state).get("edits", [])
+            ]
+            parsed, reasons = improve_runtime.parse_decisions(args.decisions, edit_ids)
+            decisions = {
+                edit_id: f"{verdict}:{reasons[edit_id]}"
+                if edit_id in reasons
+                else verdict
+                for edit_id, verdict in parsed.items()
+            }
+        result = improve_runtime.apply(
+            state_dir=args.state_dir,
+            decisions=decisions,
+            dry_run=args.dry_run,
+        )
+        prefix = "[dry-run] " if args.dry_run else ""
+        print(
+            f"{prefix}{len(result['accepted'])} accepted - "
+            f"{len(result['rejected'])} rejected"
+        )
+        for written in result["written"]:
+            print(f"  wrote {written}")
+        if not result["written"]:
+            print("  nothing written")
+        return 0
 
     # update command handles profile resolution internally (supports "all profiles" mode)
     if args.command == "update":
