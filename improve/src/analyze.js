@@ -331,10 +331,13 @@ export function analyzeTraces(
       };
     }
     const evidence = outcome.evidence;
+    const collectionsOk =
+      Array.isArray(evidence.positive) && Array.isArray(evidence.negative) && Array.isArray(evidence.gaps);
+    const statusOk = evidence.status === "ok" || (evidence.status === undefined && collectionsOk);
     return {
       transcriptId: trace.transcriptId,
       harness: trace.harness,
-      status: evidence.status === "ok" ? "ok" : "failed",
+      status: statusOk ? "ok" : "failed",
       positive: Array.isArray(evidence.positive) ? evidence.positive : [],
       negative: Array.isArray(evidence.negative) ? evidence.negative : [],
       gaps: Array.isArray(evidence.gaps) ? evidence.gaps : [],

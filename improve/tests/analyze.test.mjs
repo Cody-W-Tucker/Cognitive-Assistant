@@ -196,3 +196,58 @@ describe("analyzer prompt integration", () => {
     assert.ok(fs.readFileSync(file, "utf8").includes("PROMPT"));
   });
 });
+
+describe("evidence status normalization (ACPX omitted-status default)", () => {
+  const gap = {
+    proposedInstruction: "exp-context-bootstrap",
+    mistake: "sessions re-derive project context from scratch",
+    quote: "sessions re-derive project context from scratch",
+    recurrenceRisk: "every new session pays the same bootstrap cost",
+  };
+
+  it("accepts omitted status with well-formed collections and passes gaps through", () => {
+    const records = analyzeTraces([trace()], {
+      invoke: () => ({
+        status: "ok",
+        evidence: { positive: [], negative: [], gaps: [gap] },
+      }),
+    });
+    assert.equal(records[0].status, "ok");
+    assert.deepEqual(records[0].gaps, [gap]);
+    assert.deepEqual(records[0].positive, []);
+    assert.deepEqual(records[0].negative, []);
+  });
+
+  it("keeps explicit non-ok evidence.status failed/excluded", () => {
+    for (const status of ["failed", "error", "partial", ""]) {
+      const records = analyzeTraces([trace()], {
+        invoke: () => ({
+          status: "ok",
+          evidence: { status, positive: [], negative: [], gaps: [gap] },
+        }),
+      });
+      assert.equal(records[0].status, "failed", `explicit status ${JSON.stringify(status)} must stay failed`);
+      assert.deepEqual(records[0].gaps, [gap]);
+    }
+  });
+
+  it("fails closed on malformed/missing/non-array evidence lists", () => {
+    const badEvidences = [
+      { positive: [], negative: [] },
+      { positive: "x", negative: [], gaps: [] },
+      { positive: [], negative: null, gaps: [] },
+      { positive: [], negative: [], gaps: {} },
+      { positive: [], negative: [] , gaps: null },
+    ];
+    for (const evidence of badEvidences) {
+      const records = analyzeTraces([trace()], {
+        invoke: () => ({ status: "ok", evidence }),
+      });
+      assert.equal(
+        records[0].status,
+        "failed",
+        `omitted status with malformed evidence ${JSON.stringify(evidence)} must fail closed`,
+      );
+    }
+  });
+});
