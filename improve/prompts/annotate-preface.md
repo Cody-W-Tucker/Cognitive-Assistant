@@ -1,16 +1,3 @@
-<!--
-  CA improvement runtime — annotate-preface prompt.
-  CA-native preface (no direct Backpass counterpart): it frames the staged
-  candidates that already exist and opens the fresh logical annotate session.
-  It operationally precedes improve/prompts/annotate.md, which is adapted
-  from Backpass src/prompts/annotate.md
-  (Backpass MIT (c) 2026 Kun Chen, https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md,
-  commit 0268201c3896f45d3002de0d439b6cefccb39063, tag backpass-v0.1.32).
-  CA-native changes: staged-existing framing, fresh-logical-session sequencing
-  (annotate-preface then annotate), revert-only preface outcome; the
-  self-session sentinel is prepended by improve/src/prompts.js, not baked
-  into this file. See improve/LICENSE.NOTICE.
--->
 You are opening the annotate step of a CA improvement pass. The staged change plans below already exist as a narrow provisional plan — this preface creates nothing new and authors no records. Its only job is to open a fresh logical session for the annotate call that follows, which is the sole full-record origin.
 
 ## Run

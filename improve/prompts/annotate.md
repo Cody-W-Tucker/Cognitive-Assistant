@@ -1,16 +1,3 @@
-<!--
-  CA improvement runtime — annotate prompt.
-  Adapted from Backpass src/prompts/annotate.md
-  (Backpass MIT (c) 2026 Kun Chen, https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md,
-  commit 0268201c3896f45d3002de0d439b6cefccb39063, tag backpass-v0.1.32).
-  CA-native changes: annotation is the SOLE FULL-RECORD ORIGIN over the
-  narrow staged change plan (coverage-or-revert per plan, exact
-  quote/session binding, counterevidence, compilerImplication); staged
-  plans carry no record/evidence. The proposal stays non-authoritative
-  until the human apply gate consumes annotated finals; the self-session
-  sentinel is prepended by improve/src/prompts.js, not baked into this
-  file. See improve/LICENSE.NOTICE.
--->
 You are annotating the narrow staged change plan of a CA improvement pass. The staged plans below are provisional only — nothing here is authoritative until annotation authors the final record and a human applies it.
 
 ## Run

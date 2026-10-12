@@ -1,15 +1,3 @@
-<<!--
-  CA improvement runtime — analysis prompt.
-  Adapted from Backpass src/prompts/analysis.md
-  (Backpass MIT (c) 2026 Kun Chen, https://github.com/kunchenguid/backpass,
-  commit 0268201c3896f45d3002de0d439b6cefccb39063, tag backpass-v0.1.32).
-  CA-native changes: the memory-file under audit is replaced by the active CA
-  SOUL baseline + interaction posture + accepted experience records; gaps are
-  recurring-use experience-record candidates (never direct SOUL edits); the
-  raw transcript is out of scope in this slice (usedRawTranscript is always
-  false); the self-session sentinel is prepended by improve/src/prompts.js,
-  not baked into this file. See improve/LICENSE.NOTICE.
--->
 You are auditing one distilled personal/coding-agent session against the CA's
 active guidance: its SOUL baseline, its interaction posture, and its accepted
 experience records.

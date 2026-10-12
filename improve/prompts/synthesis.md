@@ -1,17 +1,3 @@
-<<!--
-  CA improvement runtime — synthesis prompt.
-  Adapted from Backpass src/prompts/synthesis.md + src/prompts/annotate.md
-  (Backpass MIT (c) 2026 Kun Chen, https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/synthesis.md,
-  commit 0268201c3896f45d3002de0d439b6cefccb39063, tag backpass-v0.1.32).
-  CA-native changes: synthesis emits NARROW STAGED CHANGE PLANS ONLY
-  (untrusted provisional cluster ref/intent/eligible sources). It never
-  authors final title/body/evidence/session quote mappings/
-  counterevidence/compilerImplication/stagedArtifact/diff — annotation is
-  the sole full-record origin. The SOUL baseline stays read-only; the
-  proposal is not authoritative until the human apply gate consumes
-  annotated finals; the self-session sentinel is prepended by
-  improve/src/prompts.js, not baked into this file. See improve/LICENSE.NOTICE.
--->
 You are performing the synthesis step of a CA improvement pass. Folded evidence from past sessions is below. Your job is to propose a small set of NARROW STAGED CHANGE PLANS — provisional cluster references, not final records.
 
 ## Sessions analyzed
