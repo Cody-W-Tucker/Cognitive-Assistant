@@ -17,6 +17,7 @@ import { persistPrompt } from "../src/analyze.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONSOLIDATE_MD = path.join(HERE, "..", "prompts", "consolidate.md");
+const NOTICE = path.join(HERE, "..", "LICENSE.NOTICE");
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ca-consolidate-"));
@@ -44,15 +45,19 @@ function cluster(overrides = {}) {
 }
 
 describe("consolidate.md policy (Backpass src/prompts/consolidate.md @ 0268201)", () => {
-  it("exists with exact upstream provenance", () => {
-    const text = fs.readFileSync(CONSOLIDATE_MD, "utf8");
-    assert.ok(text.includes("Backpass"), "must name Backpass");
-    assert.ok(text.includes("0268201"), "must pin commit 0268201");
-    assert.ok(text.includes("src/prompts/consolidate.md"), "must name upstream module");
+  it("maps exact upstream provenance in LICENSE.NOTICE (prompt carries no license comments)", () => {
+    const notice = fs.readFileSync(NOTICE, "utf8");
+    assert.ok(notice.includes("Backpass"), "NOTICE must name Backpass");
+    assert.ok(notice.includes("0268201"), "NOTICE must pin commit 0268201");
+    assert.ok(notice.includes("src/prompts/consolidate.md"), "NOTICE must name upstream module");
+    assert.ok(notice.includes("improve/prompts/consolidate.md"), "NOTICE must map the CA prompt file");
     assert.ok(
-      text.includes("https://github.com/kunchenguid/backpass"),
-      "must carry source URL",
+      notice.includes("https://github.com/kunchenguid/backpass"),
+      "NOTICE must carry source URL",
     );
+    const text = fs.readFileSync(CONSOLIDATE_MD, "utf8");
+    assert.ok(!text.includes("Backpass"), "prompt body carries no license comments");
+    assert.ok(!text.includes("0268201"), "prompt body carries no pinned commit");
   });
 
   it("declares exactly {{GAP_ENTRIES}} and nothing else", () => {

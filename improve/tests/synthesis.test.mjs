@@ -88,12 +88,17 @@ function candidate(overrides = {}) {
 }
 
 describe("synthesis.md narrow-plan contract (Backpass src/prompts/synthesis.md @ 0268201)", () => {
-  it("exists with exact upstream provenance", () => {
+  it("maps exact upstream provenance in LICENSE.NOTICE (prompt carries no license comments)", () => {
+    const notice = fs.readFileSync(NOTICE, "utf8");
+    assert.ok(notice.includes("Backpass"));
+    assert.ok(notice.includes("0268201"));
+    assert.ok(notice.includes("improve/prompts/synthesis.md"));
+    assert.ok(notice.includes("src/prompts/synthesis.md"));
+    assert.ok(notice.includes("src/prompts/annotate.md"));
+    assert.ok(notice.includes("https://github.com/kunchenguid/backpass"));
     const text = fs.readFileSync(SYNTH_MD, "utf8");
-    assert.ok(text.includes("Backpass"));
-    assert.ok(text.includes("0268201"));
-    assert.ok(text.includes("src/prompts/synthesis.md"));
-    assert.ok(text.includes("https://github.com/kunchenguid/backpass"));
+    assert.ok(!text.includes("Backpass"), "prompt body carries no license comments");
+    assert.ok(!text.includes("0268201"), "prompt body carries no pinned commit");
   });
 
   it("declares exactly the supported placeholders and nothing else", () => {

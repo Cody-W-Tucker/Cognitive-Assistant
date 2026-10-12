@@ -10,7 +10,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt, ACPX_BIN } from "./analyze.js";
+import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 
 export const BODY_MAX_CHARS = 2000;
 
@@ -310,7 +310,7 @@ export function acpxSynthesisInvoke({ prompt, agent = null, timeoutMs = 180_000 
   if (agent) args.push(agent);
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   if (extra) args.push(...extra.split(/\s+/));
-  const result = spawnSync(ACPX_BIN, args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
+  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
   }

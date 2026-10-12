@@ -9,7 +9,7 @@ import path from "node:path";
 
 import { discoverTranscripts } from "./discovery.js";
 import { distill, recordToEvents } from "./distill.js";
-import { analyzeTraces, mockInvoke } from "./analyze.js";
+import { analyzeTraces, mockInvoke, assertAcpxAvailable } from "./analyze.js";
 import { foldEvidence } from "./fold.js";
 import { consolidateLedger } from "./consolidate.js";
 import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
@@ -168,6 +168,12 @@ export async function runPipeline({
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
   const traces = await collectTraces(discovery.transcripts);
+  if (analyzer !== "mock" && !analyzeInvoke) {
+    // Real production run path only: fail fast before trace analysis when
+    // the acpx binary selected via CA_IMPROVE_ACPX_BIN/BACKPASS_ACPX_BIN is
+    // unavailable. Mock runs and injected invokes bypass real acpx entirely.
+    assertAcpxAvailable();
+  }
   const invoke = analyzeInvoke || (analyzer === "mock" ? mockInvoke : undefined);
   const records = analyzeTraces(traces, {
     ...(invoke ? { invoke } : {}),

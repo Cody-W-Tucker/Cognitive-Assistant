@@ -13,6 +13,7 @@ import {
 } from "../src/prompts.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const NOTICE = path.join(HERE, "..", "LICENSE.NOTICE");
 const RUNTIME_SRC = path.join(HERE, "..", "src");
 
 describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
@@ -92,7 +93,10 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
     assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "STAGED_CANDIDATES"]);
     assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
-    assert.ok(/Backpass/.test(text) && /0268201/.test(text) && /src\/prompts\/annotate\.md/.test(text));
+    assert.ok(!text.includes("Backpass"), "prompt body carries no license comments (see LICENSE.NOTICE)");
+    const notice = fs.readFileSync(NOTICE, "utf8");
+    assert.ok(/Backpass/.test(notice) && /0268201/.test(notice) && /src\/prompts\/annotate\.md/.test(notice));
+    assert.ok(notice.includes("improve/prompts/annotate.md"));
     assert.ok(/annotations/.test(text) && /coverage/i.test(text) && /revert/i.test(text));
     assert.ok(/verbatim/i.test(text) && /quote/i.test(text) && /source/i.test(text));
     assert.ok(/counterevidence/i.test(text) && /none observed/i.test(text));

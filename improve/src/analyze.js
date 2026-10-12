@@ -17,6 +17,57 @@ import { renderPrompt } from "./prompts.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
 
+/** Resolve the acpx binary fresh from the environment (selection order). */
+export function resolveAcpxBin() {
+  return process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
+}
+
+/**
+ * Focused availability preflight for the real production run path.
+ * Respects CA_IMPROVE_ACPX_BIN / BACKPASS_ACPX_BIN selection; never reads
+ * machine config, never replaces acpx. Returns { ok, bin, path } or
+ * { ok: false, bin, error } with remediation. No model traffic, no traces.
+ */
+export function checkAcpxAvailable({ bin } = {}) {
+  const target = bin || resolveAcpxBin();
+  const isPath = String(target).includes("/");
+  const candidates = [];
+  if (isPath) {
+    candidates.push(path.resolve(String(target)));
+  } else {
+    const pathEnv = String(process.env.PATH || "");
+    for (const dir of pathEnv.split(path.delimiter)) {
+      if (!dir) continue;
+      candidates.push(path.join(dir, String(target)));
+    }
+    if (!candidates.length) candidates.push(String(target));
+  }
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return { ok: true, bin: target, path: candidate };
+    } catch {
+      // try next PATH entry
+    }
+  }
+  return {
+    ok: false,
+    bin: target,
+    error:
+      `acpx binary not available (looked for ${JSON.stringify(target)}` +
+      ` via CA_IMPROVE_ACPX_BIN/BACKPASS_ACPX_BIN/PATH): install acpx on PATH` +
+      ` or set CA_IMPROVE_ACPX_BIN=/path/to/acpx (BACKPASS_ACPX_BIN also honored).` +
+      ` No traces were analyzed and no evidence was written.`,
+  };
+}
+
+/** Throwing variant for the production run path (before trace analysis). */
+export function assertAcpxAvailable(options = {}) {
+  const result = checkAcpxAvailable(options);
+  if (!result.ok) throw new Error(result.error);
+  return result;
+}
+
 /** Repo root resolved relative to the runtime, never CWD. */
 export function defaultRepoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -167,11 +218,12 @@ export function persistPrompt(
  */
 export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
   const rendered = prompt || buildAnalysisPrompt(trace, contexts, { promptsDir });
+  const bin = resolveAcpxBin();
   const args = [];
   if (agent) args.push(agent);
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   if (extra) args.push(...extra.split(/\s+/));
-  const result = spawnSync(ACPX_BIN, args, {
+  const result = spawnSync(bin, args, {
     input: rendered,
     encoding: "utf8",
     timeout: timeoutMs,

@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt, ACPX_BIN } from "./analyze.js";
+import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
 
@@ -154,7 +154,7 @@ export function acpxConsolidateInvoke({ prompt, agent = null, timeoutMs = 120_00
   if (agent) args.push(agent);
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   if (extra) args.push(...extra.split(/\s+/));
-  const result = spawnSync(ACPX_BIN, args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
+  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
   }

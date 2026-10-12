@@ -16,6 +16,7 @@ import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ANALYSIS_MD = path.join(HERE, "..", "prompts", "analysis.md");
+const NOTICE = path.join(HERE, "..", "LICENSE.NOTICE");
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ca-analyze-"));
@@ -31,11 +32,15 @@ function trace(overrides = {}) {
 }
 
 describe("analysis.md contract (CA-native, Backpass 0268201 operational source)", () => {
-  it("carries exact provenance for Backpass src/prompts/analysis.md @ 0268201", () => {
+  it("maps exact provenance in LICENSE.NOTICE (prompt carries no license comments)", () => {
+    const notice = fs.readFileSync(NOTICE, "utf8");
+    assert.ok(notice.includes("Backpass"), "NOTICE must name Backpass");
+    assert.ok(notice.includes("0268201"), "NOTICE must pin commit 0268201");
+    assert.ok(notice.includes("src/prompts/analysis.md"), "NOTICE must name the upstream module");
+    assert.ok(notice.includes("improve/prompts/analysis.md"), "NOTICE must map the CA prompt file");
     const text = fs.readFileSync(ANALYSIS_MD, "utf8");
-    assert.ok(text.includes("Backpass"), "must name Backpass");
-    assert.ok(text.includes("0268201"), "must pin commit 0268201");
-    assert.ok(text.includes("src/prompts/analysis.md"), "must name the upstream module");
+    assert.ok(!text.includes("Backpass"), "prompt body carries no license comments");
+    assert.ok(!text.includes("0268201"), "prompt body carries no pinned commit");
   });
 
   it("declares exactly the six supported placeholders and nothing else", () => {
