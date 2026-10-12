@@ -38,6 +38,12 @@ adapted from. Actual adapted source mappings in this slice:
   - improve/src/fold.js <- Backpass src/fold.js
   - improve/src/sentinel.js <- Backpass src/sentinel.js
   - improve/src/synthesize.js <- Backpass src/synthesize.js + src/proposal.js
+  - improve/src/consolidate.js <- Backpass src/consolidate.js + src/gap-ledger.js (mergeGapEntries)
+  - improve/prompts/consolidate.md <- Backpass src/prompts/consolidate.md (operational source)
+    Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/consolidate.md
+  - improve/prompts/synthesis.md <- Backpass src/prompts/synthesis.md + src/prompts/annotate.md (operational sources)
+    Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/synthesis.md
+    Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md
 
 CA-native (not adapted from Backpass, excluded from the above):
 

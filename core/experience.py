@@ -41,6 +41,12 @@ def render_authored_source(record: Dict, edit: Dict, proposal_id: str) -> str:
     """Render the durable authored source for an accepted record."""
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     sources = ", ".join(record.get("sources", []))
+    counterevidence = record.get("counterevidence") or edit.get("counterevidence") or "none observed"
+    implication = (
+        record.get("compilerImplication")
+        or edit.get("compilerImplication")
+        or "compiler appends this record to the experience block."
+    )
     lines = [
         "---",
         f"id: {record['id']}",
@@ -59,6 +65,14 @@ def render_authored_source(record: Dict, edit: Dict, proposal_id: str) -> str:
     ]
     for item in record.get("evidence", []):
         lines.append(f"- ({item.get('source', 'unknown')}) {item.get('text', '')}")
+    lines.append("")
+    lines.append("## Counterevidence")
+    lines.append("")
+    lines.append(str(counterevidence))
+    lines.append("")
+    lines.append("## Compiler implication")
+    lines.append("")
+    lines.append(str(implication))
     lines.append("")
     lines.append(f"_Accepted from {edit.get('id', '?')} ({edit.get('kind', '?')}); rationale: {edit.get('rationale', '')}_")
     lines.append("")

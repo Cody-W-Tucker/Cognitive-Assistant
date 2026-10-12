@@ -4,6 +4,6 @@
   "type": "module",
   "description": "CA-native recursive improvement runtime (first vertical slice).",
   "scripts": {
-    "test": "node --test tests/prompts.test.mjs tests/analyze.test.mjs"
+    "test": "node --test tests/*.test.mjs"
   }
 }

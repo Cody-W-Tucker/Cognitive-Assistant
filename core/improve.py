@@ -210,6 +210,14 @@ def review_in_terminal(proposal: Dict) -> Dict[str, str]:
             print(f"    cluster: {record.get('clusterId', '')}")
         for item in record.get("evidence", []) or []:
             print(f"    - ({item.get('source', '?')}) {item.get('text', '')}")
+        counterevidence = record.get("counterevidence") or edit.get("counterevidence") or "none observed"
+        print(f"    counterevidence: {counterevidence}")
+        implication = (
+            record.get("compilerImplication")
+            or edit.get("compilerImplication")
+            or "compiler appends this record to the experience block."
+        )
+        print(f"    compilerImplication: {implication}")
         print("--- staged generated artifact (full) ---")
         print(edit.get("stagedArtifact", ""))
         print("--- staged diff per candidate (full) ---")
@@ -335,11 +343,16 @@ def apply(
                     raise
                 written.extend([str(authored_path), str(staged_path)])
             elif resolved[edit["id"]] == "rejected":
+                record = edit.get("record", {}) or {}
                 rejection = {
                     "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     "proposal": proposal.get("id", "?"),
                     "edit": edit["id"],
                     "reason": reasons.get(edit["id"], "other"),
+                    "title": record.get("title") or edit.get("title", ""),
+                    "clusterId": record.get("clusterId", ""),
+                    "recordId": record.get("id", ""),
+                    "sources": list(record.get("sources", []) or []),
                 }
                 rejections_path = resolved_state / "rejections.jsonl"
                 rejections_path.parent.mkdir(parents=True, exist_ok=True)

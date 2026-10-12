@@ -114,20 +114,22 @@ function safeName(text) {
 
 /**
  * Persist one rendered model prompt under private state (never the repo):
- * `<stateDir>/prompts/<runId>__<transcriptId>.md` plus a `.json` sidecar
- * naming the run/session relation. Both are 0600 where supported. The raw
- * transcript is never written separately — the distilled trace travels only
- * inside the rendered prompt.
+ * `<stateDir>/prompts/<runId>__<transcriptId|stage>.md` plus a `.json`
+ * sidecar naming the run/session (or run/stage) relation. Both are 0600
+ * where supported. The raw transcript is never written separately — the
+ * distilled trace travels only inside the rendered prompt. Stage prompts
+ * (consolidate/synthesis) pass `stage` for run/stage identifying metadata.
  *
  * @returns the prompt file path
  */
 export function persistPrompt(
   stateDir,
-  { runId = "run-unknown", transcriptId = "unknown", harness = "unknown", prompt = "" } = {},
+  { runId = "run-unknown", transcriptId = "unknown", harness = "unknown", prompt = "", stage = null } = {},
 ) {
   const dir = path.join(path.resolve(stateDir), "prompts");
   fs.mkdirSync(dir, { recursive: true });
-  const base = `${safeName(runId)}__${safeName(transcriptId)}`;
+  const leaf = stage ? String(stage) : String(transcriptId);
+  const base = `${safeName(runId)}__${safeName(leaf)}`;
   const promptFile = path.join(dir, `${base}.md`);
   const metaFile = path.join(dir, `${base}.json`);
   fs.writeFileSync(promptFile, prompt, "utf8");
@@ -139,6 +141,7 @@ export function persistPrompt(
         runId: String(runId),
         transcriptId: String(transcriptId),
         harness: String(harness),
+        ...(stage ? { stage: String(stage) } : {}),
         promptFile: `${base}.md`,
         createdAt: new Date().toISOString(),
       },

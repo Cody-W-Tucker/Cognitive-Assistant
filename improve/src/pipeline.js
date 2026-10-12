@@ -1,7 +1,8 @@
 // Full headless pipeline: discover -> collect -> distill -> analyze
-// (acpx-only, injectable) -> fold -> synthesize (candidate experience
-// records) -> proposal. Writes private state only; never touches the CA
-// repo, tracked files, or live Hermes.
+// (acpx-only, injectable) -> fold (deterministic) -> consolidate (one
+// judged acpx call, fail-soft to lexical) -> synthesize (mock deterministic
+// or production acpx, fail-closed) -> proposal. Writes private state only;
+// never touches the CA repo, tracked files, or live Hermes.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +11,8 @@ import { discoverTranscripts } from "./discovery.js";
 import { distill, recordToEvents } from "./distill.js";
 import { analyzeTraces, mockInvoke } from "./analyze.js";
 import { foldEvidence } from "./fold.js";
-import { synthesizeCandidates } from "./synthesize.js";
+import { consolidateLedger } from "./consolidate.js";
+import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
 import { initStateDir, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
@@ -97,6 +99,32 @@ async function collectTraces(transcripts) {
   return traces;
 }
 
+function readRejections(stateDir) {
+  const out = [];
+  try {
+    const text = fs.readFileSync(path.join(path.resolve(stateDir), "rejections.jsonl"), "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        out.push(JSON.parse(trimmed));
+      } catch {
+        // skip malformed rejection lines; the raw file stays for audit
+      }
+    }
+  } catch {
+    // no rejections yet
+  }
+  return out;
+}
+
+function harnessSummaryOf(transcripts) {
+  const counts = new Map();
+  for (const t of transcripts || []) counts.set(t.harness, (counts.get(t.harness) || 0) + 1);
+  const parts = [...counts.entries()].map(([h, n]) => `${h} ${n}`);
+  return parts.join(", ") || "none";
+}
+
 function readSoulBaseline(soulPath) {
   if (!soulPath) return "";
   try {
@@ -108,6 +136,11 @@ function readSoulBaseline(soulPath) {
 
 /**
  * Run the headless pass. All writes land under `stateDir`.
+ *
+ * Injectable model invokes (no real acpx in tests): `analyzeInvoke`
+ * overrides the per-trace analyzer, `consolidateInvoke` the one judged
+ * consolidation call, `synthesizeInvoke` the production synthesis call.
+ * Each defaults to the analyzer selection (`mock` double vs real acpx).
  *
  * @returns the proposal object (also written to stateDir/proposal.json)
  */
@@ -123,12 +156,15 @@ export async function runPipeline({
   promptsDir = null,
   runId = null,
   minGapEvidence = 2,
+  analyzeInvoke = null,
+  consolidateInvoke = null,
+  synthesizeInvoke = null,
 } = {}) {
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
   const traces = await collectTraces(discovery.transcripts);
-  const invoke = analyzer === "mock" ? mockInvoke : undefined;
+  const invoke = analyzeInvoke || (analyzer === "mock" ? mockInvoke : undefined);
   const records = analyzeTraces(traces, {
     ...(invoke ? { invoke } : {}),
     stateDir,
@@ -141,11 +177,48 @@ export async function runPipeline({
   for (const record of records) {
     writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
   }
-  const ledger = foldEvidence(records, { minGapEvidence });
+  const folded = foldEvidence(records, { minGapEvidence });
+  // Consolidation is acpx-only when >=2 eligible gaps exist; the mock
+  // analyzer keeps deterministic lexical identity with a visible note.
+  const consolidation = consolidateLedger(folded, {
+    ...(consolidateInvoke ? { invoke: consolidateInvoke } : analyzer === "mock" ? { analyzer: "mock" } : {}),
+    stateDir,
+    runId: resolvedRun,
+    promptsDir,
+    minGapEvidence,
+  });
+  const ledger = consolidation.ledger;
   writeJson(path.join(stateDir, "ledger.json"), ledger);
   const evidenceIndex = new Map(records.map((r) => [r.transcriptId, r.positive || []]));
   const soulBaseline = readSoulBaseline(soulPath);
-  const edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline });
+  const rejections = readRejections(stateDir);
+  const harnessSummary = harnessSummaryOf(discovery.transcripts);
+  const runNote = consolidation.note || "";
+  let edits;
+  let synthesisNote = "";
+  let synthesisFailed = false;
+  if (analyzer === "mock") {
+    // Deterministic reviewable path: no model traffic, no real acpx calls.
+    edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline });
+  } else {
+    // Production acpx-only synthesis: strict validation, fail-closed.
+    const out = synthesizeWithAcpx(ledger, {
+      evidenceIndex,
+      soulBaseline,
+      rejections,
+      ...(synthesizeInvoke ? { invoke: synthesizeInvoke } : {}),
+      stateDir,
+      runId: resolvedRun,
+      promptsDir,
+      transcriptCount: discovery.transcripts.length,
+      harnessSummary,
+      runNote,
+    });
+    edits = out.edits;
+    synthesisFailed = Boolean(out.failed);
+    synthesisNote = out.note || "";
+  }
+  const notes = [runNote, synthesisNote].filter(Boolean);
   const proposal = {
     version: 1,
     id: `prop-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`,
@@ -155,6 +228,18 @@ export async function runPipeline({
     scope: "global",
     minGapEvidence,
     edits,
+    notes,
+    consolidation: {
+      skipped: Boolean(consolidation.skipped),
+      failed: Boolean(consolidation.failed),
+      merged: consolidation.merged || 0,
+      note: consolidation.note || "",
+    },
+    synthesis: {
+      analyzer,
+      failed: synthesisFailed,
+      note: synthesisNote,
+    },
     stats: {
       transcripts: discovery.transcripts.length,
       analyzed: records.filter((r) => r.status === "ok").length,

@@ -29,14 +29,12 @@ https://github.com/kunchenguid/backpass commit
 
 Pipeline: `discover` (global transcript stores) -> `collect` -> `distill`
 (deterministic) -> `analyze` (acpx only, injectable/mockable) -> `fold`
-(deterministic, `minGapEvidence` floor) -> `synthesize` (candidate
-experience record + staged artifact + informational diff) -> proposal.
+(deterministic, `minGapEvidence` floor) -> `consolidate` (one judged acpx
+call, mechanical merge, fail-soft to lexical) -> `synthesize` (mock
+deterministic or production acpx, fail-closed) -> proposal (candidate
+experience record + staged artifact + informational diff).
 
-Analysis prompt (checked in, CA-native): `improve/prompts/analysis.md` is the
-only prompt file in this slice -- there is deliberately no
-consolidate/synthesis/annotate prompt yet. Adapted from the Backpass
-operational source (`src/prompts/analysis.md` at commit 0268201; see
-`improve/LICENSE.NOTICE`), it audits one distilled personal/coding-agent
+Analysis prompt (checked in, CA-native): `improve/prompts/analysis.md` audits one distilled personal/coding-agent
 trace against the active CA SOUL baseline
 (`workspaces/alignment/artifacts/SOUL.md`), the interaction posture
 (`workspaces/alignment/artifacts/INTERACTION_POSTURE.md`), and accepted
@@ -98,9 +96,53 @@ The Nix flake exposes `ca-improve` (headless package) and
 `nixosModules.ca-improve` (systemd **user** service + timer running the
 headless pass weekly; applying stays manual).
 
-Intentional follow-up extension point: consolidate/synthesis prompts stay out
-of this slice until the analysis model invocation is complete and safe --
-validated strict-JSON evidence, per-session prompt persistence, and the
-`minGapEvidence` fold floor holding on real traces. Only then do
-consolidate/synthesis prompts get checked in under `improve/prompts/` with
-the same loader contract and provenance headers.
+## Consolidation contract (`improve/prompts/consolidate.md`)
+
+Adapted from the Backpass operational source
+(`src/prompts/consolidate.md` at commit 0268201; see
+`improve/LICENSE.NOTICE`): one bounded acpx-only call sees the full open gap
+set and merges entries that describe the same underlying gap. Runs only when
+`>=2` eligible/open gaps exist; otherwise the run keeps deterministic lexical
+identity with a visible note and makes no model call. The mock analyzer never
+calls acpx here. The rendered prompt is persisted privately as
+`prompts/<runId>__consolidate.md` plus a `.json` sidecar carrying run/stage
+identifying metadata (`runId`, `stage: consolidate`), both `0600` where
+supported. The model returns `{"merges": [[ids], ...]}`; parsing validates
+strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
+across groups; malformed groups and unknown IDs are dropped, shrinking a
+group below two drops it). The merge itself is mechanical: union distinct
+session sources (never double-count a session), preserve per-source quote
+provenance, keep the shortest instruction as canonical, and re-check the
+`minGapEvidence` floor. acpx failure or invalid output degrades to the
+deterministic lexical current result with a visible proposal/run note
+(`proposal.notes` + `proposal.consolidation.note`); it never aborts the run.
+
+## Synthesis contract (`improve/prompts/synthesis.md`)
+
+Adapted from the Backpass operational sources (`src/prompts/synthesis.md` +
+`src/prompts/annotate.md` at commit 0268201; see `improve/LICENSE.NOTICE`)
+but CA-native: instead of editing a staging copy, the model proposes strict
+JSON candidate durable experience records. Each candidate carries `title`
+(one imperative sentence), `body` (bounded, at most 2000 chars), `evidence`
+(`>=2` distinct sessions with verbatim quotes copied exactly from the folded
+evidence), `counterevidence` (strongest contrary observation or the literal
+`none observed`), `compilerImplication` (how the experience compiler consumes
+the record), plus the downstream-rendered staged artifact and informational
+diff. The prompt states explicitly: change only the proposal -- never live
+files, tracked files, SOUL, posture, skills, or Hermes -- and the proposal is
+not authoritative pre-apply (the apply gate is the sole writer). Production
+runs are acpx-only with strict candidate validation against the folded
+evidence (source IDs must be folded session IDs; quotes must match exactly;
+title/body/counterevidence/compilerImplication required; overlong bodies
+rejected). The mock analyzer path is unchanged: deterministic
+`synthesizeCandidates` with no real calls, still reviewable, now carrying
+`counterevidence: none observed` and a compiler implication. Production
+failure (acpx error or zero valid candidates) fails closed: no candidate
+edits plus a visible proposal note (`proposal.notes` +
+`proposal.synthesis.note`). Prior rejections (`state/rejections.jsonl`) are
+rendered into `{{REJECTIONS}}` and suppress a rejected identity (matching
+`clusterId`/`title`) unless the new candidate carries higher evidence (more
+distinct sessions) or genuinely new evidence (an unseen session id). The
+rendered synthesis prompt is persisted privately as
+`prompts/<runId>__synthesis.md` plus a `.json` sidecar (`stage: synthesis`),
+both `0600` where supported.

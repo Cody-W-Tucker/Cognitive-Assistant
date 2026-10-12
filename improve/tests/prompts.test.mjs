@@ -28,8 +28,15 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     }
   });
 
+  it("loads consolidate/synthesis prompts via the same strict loader", () => {
+    for (const name of ["consolidate", "synthesis"]) {
+      const text = loadPrompt(name);
+      assert.ok(text.length > 0, `${name} must load`);
+    }
+  });
+
   it("rejects missing prompt files with a clear error", () => {
-    assert.throws(() => loadPrompt("consolidate"), /not found|no such file/i);
+    assert.throws(() => loadPrompt("annotate"), /not found|no such file/i);
   });
 
   it("rejects path traversal in prompt names", () => {
@@ -73,10 +80,10 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     assert.equal(SELF_SESSION_SENTINEL, "<!-- ca-improve:self-session -->");
   });
 
-  it("analysis.md is the only checked-in prompt (no consolidate/synthesis/annotate)", () => {
+  it("analysis/consolidate/synthesis are the checked-in prompts (no annotate)", () => {
     const promptDir = path.join(HERE, "..", "prompts");
     const names = fs.readdirSync(promptDir).filter((f) => f.endsWith(".md")).sort();
-    assert.deepEqual(names, ["analysis.md"]);
+    assert.deepEqual(names, ["analysis.md", "consolidate.md", "synthesis.md"]);
     void RUNTIME_SRC;
   });
 });
