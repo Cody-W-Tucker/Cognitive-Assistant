@@ -246,8 +246,22 @@ function discoverOpencode({ dbPath, stateDir, cutoff }) {
           for (const row of rows) row.firstText = firstText.get(row.id) || "";
         }
       } else if (tables.has("session")) {
-        for (const row of db.prepare("SELECT id, directory FROM session").all()) {
-          rows.push({ id: row.id, cwd: asAbsolute(row.directory), mtimeMs: null, table: "session" });
+        const cols = new Set(tableColumns(db, "session"));
+        const hasUpdated = cols.has("time_updated");
+        const hasCreated = cols.has("time_created");
+        const select = ["id", "directory"];
+        if (hasUpdated) select.push("time_updated");
+        if (hasCreated) select.push("time_created");
+        for (const row of db.prepare(`SELECT ${select.join(", ")} FROM session`).all()) {
+          const mtimeMs =
+            hasUpdated && hasCreated
+              ? toMs(row.time_updated ?? row.time_created)
+              : hasUpdated
+                ? toMs(row.time_updated)
+                : hasCreated
+                  ? toMs(row.time_created)
+                  : null;
+          rows.push({ id: row.id, cwd: asAbsolute(row.directory), mtimeMs, table: "session" });
         }
       }
       return rows;
