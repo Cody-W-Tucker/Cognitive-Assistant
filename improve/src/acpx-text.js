@@ -115,7 +115,8 @@ export function stripAcpxFraming(text) {
  *   blank line(s)
  *   Context heading + `-`/`*` bullet list (>=1 item)
  *   Skills heading + `-`/`*` bullet list (>=1 item)
- * Headings are exactly `Context`/`Skills` (optional trailing colon).
+ * Headings are exactly `Context`/`Skills` or level-2 `## Context`/`## Skills`
+ * (optional trailing colon).
  * Preamble lines must not contain `{`, `}`, or fences, and the remainder
  * after the preamble must start with `{` or ``` — otherwise no stripping
  * occurs and existing fail-closed extraction rejects the output.
@@ -142,7 +143,7 @@ export function stripPiQuietPreamble(text) {
   if (!/^[-—─=]{3,}$/.test(separator)) return src;
   i += 1;
   while (i < lines.length && isBlank(lines[i])) i += 1;
-  if (!/^Context:?$/.test(clean(lines[i] ?? "").trim())) return src;
+  if (!/^(?:##\s+)?Context:?$/.test(clean(lines[i] ?? "").trim())) return src;
   i += 1;
   let count = 0;
   while (i < lines.length && isBullet(lines[i])) {
@@ -151,7 +152,7 @@ export function stripPiQuietPreamble(text) {
   }
   if (count < 1) return src;
   while (i < lines.length && isBlank(lines[i])) i += 1;
-  if (!/^Skills:?$/.test(clean(lines[i] ?? "").trim())) return src;
+  if (!/^(?:##\s+)?Skills:?$/.test(clean(lines[i] ?? "").trim())) return src;
   i += 1;
   count = 0;
   while (i < lines.length && isBullet(lines[i])) {

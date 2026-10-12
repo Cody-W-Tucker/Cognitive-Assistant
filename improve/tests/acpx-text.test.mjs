@@ -185,6 +185,31 @@ describe("strict deterministic extractor (exactly one final object)", () => {
     assert.ok(stripPiQuietPreamble(out).trimStart().startsWith("{"));
   });
 
+  it("accepts live Pi header with level-2 Markdown headings before exactly one final object", () => {
+    const out = [
+      "pi v0.5.1",
+      "----------",
+      "",
+      "## Context",
+      "  - /repo/SOUL.md",
+      "  - /repo/INTERACTION_POSTURE.md",
+      "",
+      "## Skills",
+      "  - skill-a: does x",
+      "  - skill-b: does y",
+      "",
+      '{"status": "ok", "positive": [], "negative": [], "gaps": []}',
+      "",
+    ].join("\n");
+    assert.deepEqual(extractAcpxFinalJson(out), {
+      status: "ok",
+      positive: [],
+      negative: [],
+      gaps: [],
+    });
+    assert.ok(stripPiQuietPreamble(out).trimStart().startsWith("{"));
+  });
+
   it("accepts Pi preamble with [acpx] framing and a single fenced object", () => {
     const out = [
       "[acpx] tokens: input=3 output=9",
