@@ -64,13 +64,21 @@ never land in git state or the repo -- only the distilled trace travels
 inside the rendered prompt in private state. Both `improve-run` routes use the
 
 Supported adapters (global stores, CWD-independent): Hermes
-(`~/.hermes/state.db`, read-only), Pi (`~/.pi/agent/sessions`), Claude
+(`~/.hermes/state.db`, read-only), Claude
 Code (`~/.claude/projects`), Codex (`~/.codex/sessions`), OpenCode
 (`~/.local/share/opencode/opencode.db`, read-only). Explicitly excluded
-in this slice: Grok and Cursor (CLI and IDE) -- their stores are never
-read; requesting them is an error. The runtime's own sessions (sentinel
+in this slice: Pi, Grok and Cursor (CLI and IDE) -- their stores are never
+read; requesting them is an error. Pi sessions are machine/automation work
+and must not be analyzed. The runtime's own sessions (sentinel
 `<!-- ca-improve:self-session -->`, or sessions rooted under its state
 dir) are self-excluded before analysis.
+
+Production model invocations use ACPX with Pi. Syntax only, literal shape:
+
+`acpx --env KEY=value --format quiet pi ...`
+
+where global flags (`--env KEY=value`, `--format quiet`) precede `pi`
+and `...` is Pi's subcommand/prompt appended downstream.
 
 Private state (never CA repo state): `$XDG_DATA_HOME/cognitive-assistant/improve/`
 (`cursor.json` run state, `evidence/`, `ledger.json` folded ledger,

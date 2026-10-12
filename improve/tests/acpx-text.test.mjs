@@ -37,20 +37,33 @@ describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
     });
   });
 
-  it("keeps explicit caller agent as first positional", () => {
+  it("keeps explicit caller agent as trailing callable positional (after globals/format)", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: undefined }, () => {
       const args = buildAcpxArgs({ agent: "codex" });
-      assert.equal(args[0], "codex");
+      assert.deepEqual(args, [...ACPX_TEXT_FORMAT_ARGS, "codex"]);
+      assert.equal(args[args.length - 1], "codex");
       assert.ok(args.includes("--format") && args.includes("quiet"));
     });
   });
 
-  it("preserves CA_IMPROVE_ACPX_ARGS extra args", () => {
+  it("preserves CA_IMPROVE_ACPX_ARGS global extra args before format/agent", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: "--timeout 30 --model x" }, () => {
       const args = buildAcpxArgs({ agent: "codex" });
-      assert.ok(args.includes("--timeout"));
-      assert.ok(args.includes("x"));
-      assert.equal(args[0], "codex");
+      assert.deepEqual(args, ["--timeout", "30", "--model", "x", "--format", "quiet", "codex"]);
+      assert.ok(args.indexOf("--timeout") < args.indexOf("--format"));
+      assert.equal(args[args.length - 1], "codex");
+    });
+  });
+
+  it("supports Pi via ACPX with globals before agent (valid CLI shape, spawn-ready)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "--env KEY=value" }, () => {
+      const args = buildAcpxArgs({ agent: "pi" });
+      // Valid: `acpx --env KEY=value --format quiet pi ...` (... = prompt/input appended downstream).
+      assert.deepEqual(args, ["--env", "KEY=value", "--format", "quiet", "pi"]);
+      // Guard the invalid old ordering: `acpx pi --format quiet --env KEY=value ...`.
+      assert.notDeepEqual(args, ["pi", "--format", "quiet", "--env", "KEY=value"]);
+      // Builder return is suitable for spawn where downstream appends prompt/input.
+      assert.deepEqual([...args, "PROMPT"], ["--env", "KEY=value", "--format", "quiet", "pi", "PROMPT"]);
     });
   });
 

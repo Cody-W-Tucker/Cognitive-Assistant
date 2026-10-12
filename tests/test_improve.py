@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests for the CA-native recursive improvement runtime (first vertical slice).
 
-Slice 1 covers: global transcript discovery (Hermes, Pi, Claude Code, Codex,
-OpenCode only; Grok/Cursor explicitly excluded; own sessions excluded),
+Slice 1 covers: global transcript discovery (Hermes, Claude Code, Codex,
+OpenCode only; Pi/Grok/Cursor explicitly excluded — Pi sessions are
+machine/automation work and must not be analyzed; own sessions excluded),
 headless proposal generation into XDG state without touching tracked files,
 the apply sole-gate, and the experience compiler hook. No model calls.
 """
@@ -33,7 +34,10 @@ def _write_jsonl(path: Path, lines: list[dict]) -> None:
 def _make_fixture_home(root: Path) -> Path:
     """Build a fake HOME with one session per supported store plus traps."""
     home = root / "fakehome"
-    # Pi: ~/.pi/agent/sessions/<escaped-cwd>/<ts>_<uuid>.jsonl
+    # Pi trap (excluded): ~/.pi/agent/sessions/<escaped-cwd>/<ts>_<uuid>.jsonl
+    # Pi sessions are machine/automation work and must not be analyzed, so
+    # these rows must never surface from discovery even though the parser
+    # internals are retained.
     _write_jsonl(
         home / ".pi" / "agent" / "sessions" / "-tmp-proj" / "2026-10-11T00-00-00_pi-1.jsonl",
         [
@@ -104,7 +108,7 @@ def _make_fixture_home(root: Path) -> Path:
     )
     conn.commit()
     conn.close()
-    # Traps: excluded harnesses must never be read.
+    # Traps: excluded harnesses must never be read (Pi/Grok/Cursor).
     _write_jsonl(
         home / ".grok" / "sessions" / "grok-1.jsonl",
         [{"role": "user", "content": "grok session"}],
@@ -113,7 +117,8 @@ def _make_fixture_home(root: Path) -> Path:
         home / ".cursor" / "sessions" / "cursor-1.jsonl",
         [{"role": "user", "content": "cursor session"}],
     )
-    # Trap: the runtime's own session (sentinel) must be self-excluded.
+    # Trap: Pi must stay excluded even with a well-formed store present
+    # (covered above); the runtime's own session (sentinel) must be self-excluded.
     _write_jsonl(
         home / ".pi" / "agent" / "sessions" / "-tmp-proj" / "2026-10-11T00-00-01_self-1.jsonl",
         [
@@ -137,16 +142,28 @@ class ImproveDiscoveryTests(unittest.TestCase):
             by_harness: dict[str, list[dict]] = {}
             for transcript in result["transcripts"]:
                 by_harness.setdefault(transcript["harness"], []).append(transcript)
-            for harness in ("pi", "claude", "codex", "opencode", "hermes"):
+            # Default scope is Hermes/Claude/Codex/OpenCode only; Pi is excluded.
+            for harness in ("claude", "codex", "opencode", "hermes"):
                 self.assertIn(harness, by_harness, f"missing harness {harness}")
+            self.assertNotIn("pi", by_harness, "Pi sessions must not be discovered")
             ids = {t["id"] for t in result["transcripts"]}
-            self.assertIn("pi-1", ids)
+            self.assertNotIn("pi-1", ids)
+            self.assertIn("pi", result["excluded"])
             # Every discovered path lives under the fixture HOME, never the CWD.
             for transcript in result["transcripts"]:
                 location = transcript.get("path") or transcript.get("db", "")
                 self.assertTrue(
                     str(location).startswith(str(home)),
                     f"{transcript['id']} not under fixture HOME: {location}",
+                )
+
+    def test_explicit_pi_harness_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = _make_fixture_home(root)
+            with self.assertRaisesRegex(RuntimeError, "machine/automation"):
+                improve.discover_transcripts(
+                    home=home, cwd=root, state_dir=root / "state", harnesses=["pi"]
                 )
 
     def test_sqlite_since_and_cursor_are_meaningful_global_scope(self) -> None:
@@ -213,10 +230,13 @@ class ImproveDiscoveryTests(unittest.TestCase):
             self.assertNotIn("grok-1", ids)
             self.assertNotIn("cursor-1", ids)
             self.assertNotIn("self-1", ids)
+            self.assertNotIn("pi-1", ids)
             self.assertNotIn("grok", harnesses)
             self.assertNotIn("cursor", harnesses)
+            self.assertNotIn("pi", harnesses)
             self.assertIn("grok", result["excluded"])
             self.assertIn("cursor", result["excluded"])
+            self.assertIn("pi", result["excluded"])
 
     def test_hermes_since_filters_old_vs_new_timestamps(self) -> None:
         import time

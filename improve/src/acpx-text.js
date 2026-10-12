@@ -4,7 +4,7 @@
 // from src/acpx.js @ 0268201) — never JSON-RPC (`--format json`, used only
 // by `config show`/`status`). This module owns the strict deterministic
 // extractor for exactly one final JSON object in ACPX text output, plus the
-// shared argv builder preserving explicit caller agent control and the
+// shared argv builder with global options before the agent/subcommand and the
 // CA_IMPROVE_ACPX_ARGS environment override. No direct model client, no
 // OpenCode fallback, no network calls.
 
@@ -23,21 +23,26 @@ export const ACPX_FRAMING_PREFIX = "[acpx]";
 
 /**
  * Build argv for one ACPX model call.
- * - Explicit caller `agent` stays the optional first positional.
- * - ACPX text-output (`--format quiet`) is always requested. An explicit
- *   `--format`/`--output` override via CA_IMPROVE_ACPX_ARGS is rejected
- *   fail-closed (throws) because production parsing requires ACPX text
- *   output; JSON-RPC (`--format json`) is never parseable here.
+ * - Global/environment extra args from CA_IMPROVE_ACPX_ARGS come first
+ *   (e.g. `--env KEY=value`), because ACPX globals must precede the
+ *   agent/subcommand.
+ * - ACPX text-output (`--format quiet`) follows globals and always precedes
+ *   the agent. An explicit `--format`/`--output` override via
+ *   CA_IMPROVE_ACPX_ARGS is rejected fail-closed (throws) because production
+ *   parsing requires ACPX text output; JSON-RPC (`--format json`) is never
+ *   parseable here.
+ * - Explicit caller `agent` (including `pi`) stays the callable positional
+ *   AFTER globals/format, so spawn appends prompt/input after it, e.g.
+ *   `acpx --env KEY=value --format quiet pi ...` (never
+ *   `acpx pi --format quiet --env KEY=value ...`).
  * - Extra non-format args come verbatim from CA_IMPROVE_ACPX_ARGS
  *   (whitespace-split).
  *
  * @param {{ agent?: string | null }} [options]
- * @returns {string[]}
+ * @returns {string[]} argv suitable for spawn; downstream appends prompt/input.
  * @throws {Error} when CA_IMPROVE_ACPX_ARGS overrides --format/--output.
  */
 export function buildAcpxArgs({ agent = null } = {}) {
-  const args = [];
-  if (agent) args.push(String(agent));
   const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
   const extraArgs = extra ? extra.split(/\s+/) : [];
   const formatOverride = extraArgs.find(
@@ -52,8 +57,10 @@ export function buildAcpxArgs({ agent = null } = {}) {
       `CA_IMPROVE_ACPX_ARGS must not override ${formatOverride} (production parsing requires ACPX text output --format quiet)`,
     );
   }
-  args.push(...ACPX_TEXT_FORMAT_ARGS);
+  const args = [];
   if (extraArgs.length) args.push(...extraArgs);
+  args.push(...ACPX_TEXT_FORMAT_ARGS);
+  if (agent) args.push(String(agent));
   return args;
 }
 

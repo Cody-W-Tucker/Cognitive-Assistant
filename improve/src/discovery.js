@@ -1,9 +1,11 @@
 // SPDX: MIT (Backpass MIT (c) 2026 Kun Chen) — see improve/LICENSE.NOTICE.
 // Discovery mechanism adapted from Backpass src/discovery/index.js and
 // src/discovery/adapters/{hermes,pi,claude,codex,opencode}.js (commit
-// 0268201), narrowed: global stores only (never CWD-dependent), five
-// supported harnesses, Grok/Cursor explicitly excluded, header-only reads,
-// fail-soft per store.
+// 0268201), narrowed: global stores only (never CWD-dependent), four
+// supported harnesses (hermes/claude/codex/opencode), Pi/Grok/Cursor
+// explicitly excluded, header-only reads, fail-soft per store. Pi parsing
+// internals (piRoots/discoverFiles pi branch) are retained but never
+// selected: Pi sessions are machine/automation work and must not be analyzed.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -11,11 +13,12 @@ import os from "node:os";
 
 import { HEAD_BYTES, headHasSelfSentinel } from "./sentinel.js";
 
-/** Harnesses this slice discovers. */
-export const SUPPORTED_HARNESSES = ["hermes", "pi", "claude", "codex", "opencode"];
+/** Harnesses this slice discovers (Pi is excluded; Pi stays valid only as an ACPX agent option). */
+export const SUPPORTED_HARNESSES = ["hermes", "claude", "codex", "opencode"];
 
 /** Explicitly out of scope for this slice, with reasons. */
 export const EXCLUDED_HARNESSES = {
+  pi: "Pi sessions are machine/automation work and must not be analyzed.",
   grok: "Grok transcript store is not mapped in this slice (no stable global format pinned).",
   cursor: "Cursor CLI store is not mapped in this slice.",
   "cursor-ide": "Cursor IDE store is deferred (needs a best-effort preview pass first).",
@@ -415,7 +418,9 @@ function discoverSqlite(options) {
  * Every harness is fail-soft: a missing/unreadable store yields a named
  * `perHarness[h].error`, never a failed discovery. Sessions carrying the
  * runtime sentinel (or rooted under `stateDir`) are counted as `self` and
- * dropped. Grok/Cursor are never read; they appear in `excluded`.
+ * dropped. Pi/Grok/Cursor are never read; they appear in `excluded`.
+ * Pi remains a valid ACPX agent option for production model invocations;
+ * it is excluded only from discovery scope.
  */
 export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null } = {}) {
   const isolated = home !== undefined && home !== null;
