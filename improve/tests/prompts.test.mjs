@@ -28,15 +28,15 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     }
   });
 
-  it("loads consolidate/synthesis prompts via the same strict loader", () => {
-    for (const name of ["consolidate", "synthesis"]) {
+  it("loads consolidate/synthesis/annotate prompts via the same strict loader", () => {
+    for (const name of ["consolidate", "synthesis", "annotate", "annotate-preface"]) {
       const text = loadPrompt(name);
       assert.ok(text.length > 0, `${name} must load`);
     }
   });
 
   it("rejects missing prompt files with a clear error", () => {
-    assert.throws(() => loadPrompt("annotate"), /not found|no such file/i);
+    assert.throws(() => loadPrompt("nonexistent-prompt-xyz"), /not found|no such file/i);
   });
 
   it("rejects path traversal in prompt names", () => {
@@ -80,10 +80,45 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     assert.equal(SELF_SESSION_SENTINEL, "<!-- ca-improve:self-session -->");
   });
 
-  it("analysis/consolidate/synthesis are the checked-in prompts (no annotate)", () => {
+  it("analysis/consolidate/synthesis/annotate/annotate-preface are the checked-in prompts", () => {
     const promptDir = path.join(HERE, "..", "prompts");
     const names = fs.readdirSync(promptDir).filter((f) => f.endsWith(".md")).sort();
-    assert.deepEqual(names, ["analysis.md", "consolidate.md", "synthesis.md"]);
+    assert.deepEqual(names, ["analysis.md", "annotate-preface.md", "annotate.md", "consolidate.md", "synthesis.md"]);
     void RUNTIME_SRC;
+  });
+
+  it("annotate.md declares exactly its placeholders and required contract text", () => {
+    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "annotate.md"), "utf8");
+    const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
+    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "STAGED_CANDIDATES"]);
+    assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
+    assert.ok(/Backpass/.test(text) && /0268201/.test(text) && /src\/prompts\/annotate\.md/.test(text));
+    assert.ok(/annotations/.test(text) && /coverage/i.test(text) && /revert/i.test(text));
+    assert.ok(/verbatim/i.test(text) && /quote/i.test(text) && /source/i.test(text));
+    assert.ok(/counterevidence/i.test(text) && /none observed/i.test(text));
+    assert.ok(/compilerImplication/i.test(text));
+    assert.ok(/never/i.test(text) && /SOUL/.test(text) && /Hermes/.test(text));
+  });
+
+  it("annotate-preface.md declares exactly its placeholders and required contract text", () => {
+    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "annotate-preface.md"), "utf8");
+    const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
+    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "STAGED_SUMMARY"]);
+    assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
+    assert.ok(/staged/i.test(text) && /fresh logical/i.test(text) && /revert/i.test(text));
+  });
+
+  it("renderPrompt renders annotate prompts with sentinel FIRST and strict placeholders", () => {
+    const preface = renderPrompt("annotate-preface", { COUNT: "1", STAGED_SUMMARY: "s", RUN_ID: "run-T" });
+    assert.ok(preface.startsWith(`${SELF_SESSION_SENTINEL}\n`));
+    assert.ok(preface.includes("run-T"));
+    const annotate = renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c", RUN_ID: "run-T" });
+    assert.ok(annotate.startsWith(`${SELF_SESSION_SENTINEL}\n`));
+    assert.ok(annotate.includes("run-T"));
+    assert.throws(() => renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c" }), /RUN_ID/);
+    assert.throws(
+      () => renderPrompt("annotate-preface", { COUNT: "1", STAGED_SUMMARY: "s", RUN_ID: "r", EXTRA: "x" }),
+      /EXTRA/,
+    );
   });
 });

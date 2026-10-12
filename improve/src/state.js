@@ -15,6 +15,7 @@ export function initStateDir(stateDir) {
   fs.mkdirSync(stateDir, { recursive: true });
   fs.mkdirSync(path.join(stateDir, "evidence"), { recursive: true });
   fs.mkdirSync(path.join(stateDir, "prompts"), { recursive: true });
+  fs.mkdirSync(path.join(stateDir, "staging"), { recursive: true });
 }
 
 export function writeJson(file, value) {

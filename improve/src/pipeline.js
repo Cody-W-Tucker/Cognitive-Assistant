@@ -13,6 +13,9 @@ import { analyzeTraces, mockInvoke } from "./analyze.js";
 import { foldEvidence } from "./fold.js";
 import { consolidateLedger } from "./consolidate.js";
 import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
+import { stageCandidates, buildFinalProposal } from "./stage.js";
+import { measureStaging } from "./measure.js";
+import { annotateStaging, applyRejectionSuppression } from "./annotate.js";
 import { initStateDir, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
@@ -159,6 +162,7 @@ export async function runPipeline({
   analyzeInvoke = null,
   consolidateInvoke = null,
   synthesizeInvoke = null,
+  annotateInvoke = null,
 } = {}) {
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
@@ -219,6 +223,42 @@ export async function runPipeline({
     synthesisNote = out.note || "";
   }
   const notes = [runNote, synthesisNote].filter(Boolean);
+  // Staged change plan: synth output is never final. Stage deterministically,
+  // measure with stable IDs/deltas, annotate via fresh preface->annotate
+  // invocations, suppress rejections on final, then build the terminal
+  // proposal from annotated candidates only. Fail closed with no edits.
+  const staged = stageCandidates(edits, { stateDir, runId: resolvedRun });
+  measureStaging(staged, { stateDir, runId: resolvedRun });
+  const defaultAnnotate = (args) => ({
+    status: "ok",
+    annotations: (args?.staged || staged).map((c) => ({ id: c.id, verdict: "keep" })),
+  });
+  const annInvoke = annotateInvoke || defaultAnnotate;
+  const annOut = await annotateStaging(staged, {
+    stateDir,
+    invoke: (args) => annInvoke({ ...args, staged: args?.staged || staged }),
+    runId: resolvedRun,
+    ledger,
+    evidenceIndex,
+    ...(promptsDir ? { promptsDir } : {}),
+  });
+  let finalEdits = [];
+  let annotateNote = "";
+  let annotateFailed = false;
+  if (annOut.failed) {
+    annotateFailed = true;
+    annotateNote = `annotate failed (${annOut.error || "invalid"}); fail-closed with no candidate edits for this run`;
+  } else {
+    const kept = applyRejectionSuppression(annOut.annotated || [], rejections, { evidenceIndex });
+    try {
+      finalEdits = buildFinalProposal(kept, { stateDir });
+    } catch (err) {
+      annotateFailed = true;
+      annotateNote = `final proposal blocked (${err?.message || err}); unannotated staging cannot reach apply`;
+      finalEdits = [];
+    }
+  }
+  if (annotateNote) notes.push(annotateNote);
   const proposal = {
     version: 1,
     id: `prop-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`,
@@ -227,7 +267,7 @@ export async function runPipeline({
     appliedAt: null,
     scope: "global",
     minGapEvidence,
-    edits,
+    edits: finalEdits,
     notes,
     consolidation: {
       skipped: Boolean(consolidation.skipped),
@@ -239,6 +279,12 @@ export async function runPipeline({
       analyzer,
       failed: synthesisFailed,
       note: synthesisNote,
+    },
+    staging: {
+      staged: staged.length,
+      annotated: annOut.annotated ? annOut.annotated.length : 0,
+      failed: annotateFailed,
+      note: annotateNote,
     },
     stats: {
       transcripts: discovery.transcripts.length,

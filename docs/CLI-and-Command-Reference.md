@@ -31,8 +31,12 @@ Pipeline: `discover` (global transcript stores) -> `collect` -> `distill`
 (deterministic) -> `analyze` (acpx only, injectable/mockable) -> `fold`
 (deterministic, `minGapEvidence` floor) -> `consolidate` (one judged acpx
 call, mechanical merge, fail-soft to lexical) -> `synthesize` (mock
-deterministic or production acpx, fail-closed) -> proposal (candidate
-experience record + staged artifact + informational diff).
+deterministic or production acpx, fail-closed) -> `stage` (deterministic
+private staging; synth output is a staged change plan, never final) ->
+`measure` (deterministic stable measured IDs/deltas, coverage-or-revert per
+measurement) -> `annotate-preface` then `annotate` (fresh logical invocations,
+strict final validation, fail-closed) -> proposal (final annotated candidates
+only via the terminal review/apply gate).
 
 Analysis prompt (checked in, CA-native): `improve/prompts/analysis.md` audits one distilled personal/coding-agent
 trace against the active CA SOUL baseline
@@ -146,3 +150,40 @@ distinct sessions) or genuinely new evidence (an unseen session id). The
 rendered synthesis prompt is persisted privately as
 `prompts/<runId>__synthesis.md` plus a `.json` sidecar (`stage: synthesis`),
 both `0600` where supported.
+
+## Annotate-preface contract (`improve/prompts/annotate-preface.md`)
+
+CA-native preface with no direct Backpass counterpart (see
+`improve/LICENSE.NOTICE`): it frames the staged candidates that already exist
+and opens the fresh logical annotate session. Placeholders `{{COUNT}}`,
+`{{STAGED_SUMMARY}}`, `{{RUN_ID}}` render the staged-existing set through the
+existing strict loader/renderer (`improve/src/prompts.js`), sentinel FIRST and
+never baked into the file. The preface outcome is revert-only readiness
+metadata (`{"ready": true}`): it never annotates and never edits live files,
+tracked files, SOUL, posture, skills, or Hermes. An empty staged set stays
+sequenced as annotate-preface then annotate. Rendered as
+`prompts/<runId>__annotate-preface.md` plus a `.json` sidecar
+(`stage: annotate-preface`), both `0600` where supported.
+
+## Annotate contract (`improve/prompts/annotate.md`)
+
+Adapted from the Backpass operational source (`src/prompts/annotate.md` at
+commit 0268201; see `improve/LICENSE.NOTICE`) but CA-native: strict JSON
+annotations over the staged change plan. Each staged candidate gets exactly one
+annotation -- coverage (`keep`/`drop`) or explicit `revert` when measurement
+does not support it. Every `keep` rests on exact source quote/session binding
+(a verbatim `text` quote copied exactly from the staged evidence rows with its
+`source` session id; paraphrases and swapped sessions fail), plus required
+`counterevidence` (strongest contrary observation or literal `none observed`)
+and `compilerImplication` on the staged record. Prohibited operations are
+explicit: never live files, tracked files, SOUL, posture, skills, or Hermes;
+the proposal stays non-authoritative until the human apply gate. Failure or
+invalid annotations fail closed (staging marked via `staging/annotate.failed`,
+candidates cleared, no final proposal edits); the terminal review/apply gate
+consumes only final annotated candidates. Placeholders `{{COUNT}}`,
+`{{STAGED_CANDIDATES}}`, `{{RUN_ID}}` render through the existing strict
+loader/renderer, sentinel FIRST. Rendered as
+`prompts/<runId>__annotate.md` plus a `.json` sidecar (`stage: annotate`),
+both `0600` where supported. All five prompt roles (`analysis`,
+`consolidate`, `synthesis`, `annotate-preface`, `annotate`) load via
+`improve/src/prompts.js` with strict `{{PLACEHOLDER}}` substitution.

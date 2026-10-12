@@ -44,11 +44,18 @@ adapted from. Actual adapted source mappings in this slice:
   - improve/prompts/synthesis.md <- Backpass src/prompts/synthesis.md + src/prompts/annotate.md (operational sources)
     Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/synthesis.md
     Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md
+  - improve/prompts/annotate.md <- Backpass src/prompts/annotate.md (operational source)
+    Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md
+  - improve/prompts/annotate-preface.md <- CA-native preface (no direct Backpass counterpart; staged-existing
+    framing that opens the fresh logical annotate session preceding the Backpass-annotate-derived annotate prompt)
 
 CA-native (not adapted from Backpass, excluded from the above):
 
   - improve/src/pipeline.js (CA headless propose-only orchestration)
   - improve/src/state.js (CA XDG private state: cursor/run state, evidence, ledger, proposal)
+  - improve/src/stage.js (CA deterministic private staging; staged change plan, terminal final proposal)
+  - improve/src/measure.js (CA deterministic measurement; stable measured IDs/deltas)
+  - improve/src/annotate.js (CA annotate-preface -> annotate sequencing with strict final validation, fail-closed)
   - improve/bin/ca-improve.js (CA narrow JSON CLI boundary)
 
 The CA runtime intentionally diverges: it trains only
