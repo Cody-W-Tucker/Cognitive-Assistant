@@ -5,13 +5,12 @@
 // synthesis never patches SOUL, memory files, or skills. The apply gate
 // owns all writes.
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
-import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 
 export const BODY_MAX_CHARS = 2000;
@@ -302,23 +301,36 @@ export function isSuppressedByRejection(candidate, rejections) {
 }
 
 /**
- * Default acpx invoke for synthesis: rendered prompt on stdin, ACPX
+ * Default acpx invoke for synthesis: persisted prompt via `--file`, ACPX
  * text-output (`--format quiet`, never JSON-RPC) on stdout, single final
  * JSON object extracted strictly. Same executable protocol as analyze
- * acpx (analyze.js): the `acpx` binary, optional agent positional,
- * extra args from CA_IMPROVE_ACPX_ARGS, prompt passed on stdin.
+ * acpx (analyze.js): the `acpx` binary, Pi executor, extra args from
+ * CA_IMPROVE_ACPX_ARGS, role model sol with ACPX --timeout 300s
+ * (mandatory, before the agent).
  */
-export function acpxSynthesisInvoke({ prompt, agent = null, model = null, timeoutMs = 180_000 } = {}) {
-  const args = buildAcpxArgs({ agent, model: model || modelForRole("synthesis") });
-  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
-  if (result.error || result.status !== 0) {
-    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+export function acpxSynthesisInvoke(options = {}) {
+  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
+    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const parsed = extractAcpxFinalJson(result.stdout);
-  if (!parsed) {
-    return { status: "failed", error: "acpx returned unparseable output" };
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
+  void prompt;
+  void resolveAcpxBin;
+  const file = promptFile ? String(promptFile) : "";
+  if (!file) {
+    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
   }
-  return { status: "ok", result: parsed };
+  const out = runAcpxPromptFile({
+    role: "synthesis",
+    promptFile: file,
+    model: model || modelForRole("synthesis"),
+    timeoutSec: timeoutSec ?? 300,
+    ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(spawnFn ? { spawnFn } : {}),
+  });
+  if (out.status !== "ok") {
+    return { status: "failed", error: out.error };
+  }
+  return { status: "ok", result: out.result };
 }
 
 /** Render the production synthesis prompt (sentinel FIRST via the loader). */
@@ -405,7 +417,7 @@ export function synthesizeWithAcpx(
   }
   let outcome;
   try {
-    outcome = invoke({ prompt, ledger, evidenceIndex, rejections });
+    outcome = invoke({ prompt, promptFile, ledger, evidenceIndex, rejections });
   } catch (err) {
     outcome = { status: "failed", error: err?.message || String(err) };
   }

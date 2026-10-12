@@ -4,12 +4,11 @@
 // judges same-gap paraphrases, the merge itself stays mechanical. Failure is
 // fail-soft to deterministic lexical identity with a visible run note.
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
-import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
@@ -148,21 +147,34 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
 }
 
 /** Default acpx invoke for consolidation. Same executable protocol as
- * analyze acpx (analyze.js): the `acpx` binary, optional agent
- * positional, ACPX text-output (`--format quiet`, never JSON-RPC),
- * extra args from CA_IMPROVE_ACPX_ARGS, prompt on stdin, model-final
+ * analyze acpx (analyze.js): the `acpx` binary, Pi executor, ACPX
+ * text-output (`--format quiet`, never JSON-RPC), extra args from
+ * CA_IMPROVE_ACPX_ARGS, persisted prompt via `--file`, role model luna
+ * with ACPX --timeout 180s (mandatory, before the agent), model-final
  * JSON extracted strictly from text stdout. */
-export function acpxConsolidateInvoke({ prompt, agent = null, model = null, timeoutMs = 120_000 } = {}) {
-  const args = buildAcpxArgs({ agent, model: model || modelForRole("consolidate") });
-  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
-  if (result.error || result.status !== 0) {
-    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+export function acpxConsolidateInvoke(options = {}) {
+  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
+    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const parsed = extractAcpxFinalJson(result.stdout);
-  if (!parsed) {
-    return { status: "failed", error: "acpx returned unparseable output" };
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
+  void prompt;
+  void resolveAcpxBin;
+  const file = promptFile ? String(promptFile) : "";
+  if (!file) {
+    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
   }
-  return { status: "ok", result: parsed };
+  const out = runAcpxPromptFile({
+    role: "consolidate",
+    promptFile: file,
+    model: model || modelForRole("consolidate"),
+    timeoutSec: timeoutSec ?? 180,
+    ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(spawnFn ? { spawnFn } : {}),
+  });
+  if (out.status !== "ok") {
+    return { status: "failed", error: out.error };
+  }
+  return { status: "ok", result: out.result };
 }
 
 /**
@@ -205,7 +217,7 @@ export function consolidateLedger(
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
   let outcome;
   try {
-    outcome = invoke({ prompt, clusters: eligible, promptsDir });
+    outcome = invoke({ prompt, promptFile, clusters: eligible, promptsDir });
   } catch (err) {
     outcome = { status: "failed", error: err?.message || String(err) };
   }

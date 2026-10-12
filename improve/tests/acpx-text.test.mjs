@@ -9,6 +9,7 @@ import {
   buildAcpxArgs,
   extractAcpxFinalJson,
   isJsonRpcEnvelope,
+  runAcpxPromptFile,
   stripAcpxFraming,
   stripPiQuietPreamble,
 } from "../src/acpx-text.js";
@@ -34,38 +35,58 @@ function withEnv(patch, fn) {
 describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
   it("requests text-output by default", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: undefined }, () => {
-      assert.deepEqual(buildAcpxArgs({}), [...ACPX_TEXT_FORMAT_ARGS]);
+      assert.deepEqual(buildAcpxArgs({}), [...ACPX_TEXT_FORMAT_ARGS, "pi"]);
       assert.ok(ACPX_TEXT_FORMAT_ARGS.includes("quiet"));
     });
   });
 
-  it("keeps explicit caller agent as trailing callable positional (after globals/format)", () => {
+  it("uses the fixed Pi executor as trailing callable positional (after globals/format)", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: undefined }, () => {
-      const args = buildAcpxArgs({ agent: "codex" });
-      assert.deepEqual(args, [...ACPX_TEXT_FORMAT_ARGS, "codex"]);
-      assert.equal(args[args.length - 1], "codex");
+      const args = buildAcpxArgs({});
+      assert.deepEqual(args, [...ACPX_TEXT_FORMAT_ARGS, "pi"]);
+      assert.equal(args[args.length - 1], "pi");
       assert.ok(args.includes("--format") && args.includes("quiet"));
     });
   });
 
-  it("preserves CA_IMPROVE_ACPX_ARGS global extra args before format/agent", () => {
-    withEnv({ CA_IMPROVE_ACPX_ARGS: "--timeout 30 --model x" }, () => {
-      const args = buildAcpxArgs({ agent: "codex" });
-      assert.deepEqual(args, ["--timeout", "30", "--model", "x", "--format", "quiet", "codex"]);
-      assert.ok(args.indexOf("--timeout") < args.indexOf("--format"));
-      assert.equal(args[args.length - 1], "codex");
+  it("rejects any caller-supplied agent (Pi is the fixed executor)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: undefined }, () => {
+      assert.throws(() => buildAcpxArgs({ agent: "pi" }), /fixed to pi/);
+      assert.throws(() => buildAcpxArgs({ agent: "codex" }), /fixed to pi/);
+      assert.throws(
+        () => runAcpxPromptFile({ role: "analysis", promptFile: "/tmp/x.md", agent: "pi" }),
+        /fixed to pi/,
+      );
     });
   });
 
-  it("supports Pi via ACPX with globals before agent (valid CLI shape, spawn-ready)", () => {
+  it("rejects env executors other than pi exec", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "codex" }, () => {
+      assert.throws(() => buildAcpxArgs({}), /fixed to pi/);
+    });
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec codex" }, () => {
+      assert.throws(() => buildAcpxArgs({}), /fixed to pi/);
+    });
+  });
+
+  it("preserves CA_IMPROVE_ACPX_ARGS global extra args before format (fixed pi executor)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "--timeout 30 --model x" }, () => {
+      const args = buildAcpxArgs({});
+      assert.deepEqual(args, ["--timeout", "30", "--model", "x", "--format", "quiet", "pi"]);
+      assert.ok(args.indexOf("--timeout") < args.indexOf("--format"));
+      assert.equal(args[args.length - 1], "pi");
+    });
+  });
+
+  it("supports Pi via ACPX with globals before executor (valid CLI shape, spawn-ready)", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: "--env KEY=value" }, () => {
-      const args = buildAcpxArgs({ agent: "pi" });
-      // Valid: `acpx --env KEY=value --format quiet pi ...` (... = prompt/input appended downstream).
+      const args = buildAcpxArgs({});
+      // Valid: `acpx --env KEY=value --format quiet pi ...` (... = --file appended downstream).
       assert.deepEqual(args, ["--env", "KEY=value", "--format", "quiet", "pi"]);
       // Guard the invalid old ordering: `acpx pi --format quiet --env KEY=value ...`.
       assert.notDeepEqual(args, ["pi", "--format", "quiet", "--env", "KEY=value"]);
-      // Builder return is suitable for spawn where downstream appends prompt/input.
-      assert.deepEqual([...args, "PROMPT"], ["--env", "KEY=value", "--format", "quiet", "pi", "PROMPT"]);
+      // Builder return is suitable for spawn where downstream appends --file.
+      assert.deepEqual([...args, "--file", "PROMPT"], ["--env", "KEY=value", "--format", "quiet", "pi", "--file", "PROMPT"]);
     });
   });
 
@@ -90,18 +111,18 @@ describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
       assert.equal(modelForRole("synthesis"), SYNTHESIS_MODEL);
       assert.equal(modelForRole("annotate"), SYNTHESIS_MODEL);
       assert.deepEqual(buildAcpxArgs({ model: modelForRole("analysis") }), [
-        "--model",
-        ANALYSIS_MODEL,
         "--format",
         "quiet",
+        "--model",
+        ANALYSIS_MODEL,
         "pi",
         "exec",
       ]);
       assert.deepEqual(buildAcpxArgs({ model: modelForRole("synthesis") }), [
-        "--model",
-        SYNTHESIS_MODEL,
         "--format",
         "quiet",
+        "--model",
+        SYNTHESIS_MODEL,
         "pi",
         "exec",
       ]);
@@ -110,9 +131,67 @@ describe("ACPX text-output argv (not JSON-RPC, agent + env preserved)", () => {
 
   it("never requests JSON-RPC by default", () => {
     withEnv({ CA_IMPROVE_ACPX_ARGS: undefined }, () => {
-      const args = buildAcpxArgs({ agent: "pi" });
+      const args = buildAcpxArgs({});
       assert.ok(!args.includes("json") || args.includes("quiet"));
       assert.ok(args.includes("quiet"));
+    });
+  });
+
+  it("builds file-mode argv: --format quiet --timeout N --model M pi exec --file P (timeout before executor)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
+      const args = buildAcpxArgs({
+        model: ANALYSIS_MODEL,
+        timeoutSec: 180,
+        promptFile: "/tmp/prompt.md",
+      });
+      assert.deepEqual(args, [
+        "--format",
+        "quiet",
+        "--timeout",
+        "180",
+        "--model",
+        ANALYSIS_MODEL,
+        "pi",
+        "exec",
+        "--file",
+        "/tmp/prompt.md",
+      ]);
+      assert.ok(args.indexOf("--timeout") < args.indexOf("pi"));
+      assert.ok(args.indexOf("--format") < args.indexOf("--timeout"));
+      assert.equal(args[args.indexOf("--file") + 1], "/tmp/prompt.md");
+    });
+  });
+
+  it("keeps configured CA_IMPROVE_ACPX_ARGS globals before format in file mode (Pi executor remains)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "--env KEY=value pi exec" }, () => {
+      const args = buildAcpxArgs({
+        model: SYNTHESIS_MODEL,
+        timeoutSec: 300,
+        promptFile: "/tmp/synth.md",
+      });
+      assert.deepEqual(args.slice(0, 2), ["--env", "KEY=value"]);
+      assert.ok(args.includes("--format") && args.includes("quiet"));
+      assert.ok(args.includes("pi") && args.includes("exec"));
+      assert.equal(args[args.indexOf("--file") + 1], "/tmp/synth.md");
+      assert.ok(args.indexOf("--timeout") < args.indexOf("pi"));
+      assert.equal(args[args.indexOf("--timeout") + 1], "300");
+      assert.equal(args[args.indexOf("--model") + 1], SYNTHESIS_MODEL);
+    });
+  });
+
+  it("explicit role timeout/model/file win over env globals (ACPX timeout mandatory)", () => {
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "--timeout 30 --model env-model pi exec" }, () => {
+      const args = buildAcpxArgs({
+        model: ANALYSIS_MODEL,
+        timeoutSec: 180,
+        promptFile: "/tmp/p.md",
+      });
+      // Env --timeout/--model are replaced, not duplicated.
+      assert.equal(args.filter((t) => t === "--timeout").length, 1);
+      assert.equal(args.filter((t) => t === "--model").length, 1);
+      assert.equal(args.filter((t) => t === "--file").length, 1);
+      assert.equal(args[args.indexOf("--timeout") + 1], "180");
+      assert.equal(args[args.indexOf("--model") + 1], ANALYSIS_MODEL);
     });
   });
 });
@@ -402,64 +481,135 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
     return fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean);
   }
 
-  it("analysis real call passes text-output argv and extracts ACPX-framed evidence", async () => {
+  function assertFileArgv(argv, { promptFile, timeoutSec, model }) {
+    const fileIdx = argv.indexOf("--file");
+    assert.notEqual(fileIdx, -1, `argv must include --file (got ${argv.join(" ")})`);
+    assert.equal(argv[fileIdx + 1], promptFile);
+    const timeoutIdx = argv.indexOf("--timeout");
+    assert.notEqual(timeoutIdx, -1, `argv must include --timeout (got ${argv.join(" ")})`);
+    assert.equal(argv[timeoutIdx + 1], String(timeoutSec));
+    assert.ok(timeoutIdx < argv.indexOf("pi"), "--timeout must precede the pi agent");
+    assert.ok(argv.indexOf("--format") < timeoutIdx, "--format quiet must precede --timeout");
+    const modelIdx = argv.indexOf("--model");
+    assert.notEqual(modelIdx, -1, `argv must include --model (got ${argv.join(" ")})`);
+    assert.equal(argv[modelIdx + 1], model);
+    assert.ok(argv.includes("pi") && argv.includes("exec"), `argv must run pi exec (got ${argv.join(" ")})`);
+    assert.ok(argv.includes("--format") && argv.includes("quiet"));
+  }
+
+  function assertNoStdinInputInSources() {
+    const { fileURLToPath } = process.env.CA_TEST_NOOP ? {} : {};
+    void fileURLToPath;
+    // Static proof: the five stage call sites must not pass stdin `input:` to
+    // spawnSync; prompts travel via persisted --file only. The single shared
+    // helper owns the one spawnSync call.
+    return import("node:url").then(async ({ fileURLToPath: toPath }) => {
+      const here = path.dirname(toPath(import.meta.url));
+      const stageFiles = ["../src/analyze.js", "../src/consolidate.js", "../src/synthesize.js", "../src/annotate.js"];
+      for (const rel of stageFiles) {
+        const text = fs.readFileSync(path.join(here, rel), "utf8");
+        assert.ok(/runAcpxPromptFile/.test(text), `${rel} must use the shared runAcpxPromptFile helper`);
+        assert.ok(!/\binput\s*:/.test(text), `${rel} must not pass stdin input to spawnSync (use --file)`);
+      }
+      const helperText = fs.readFileSync(path.join(here, "../src/acpx-text.js"), "utf8");
+      assert.ok(/runAcpxPromptFile/.test(helperText), "acpx-text.js must own runAcpxPromptFile");
+      assert.ok(!/\binput\s*:/.test(helperText), "shared helper must not use stdin input (use --file)");
+      const pipeText = fs.readFileSync(path.join(here, "../src/pipeline.js"), "utf8");
+      assert.ok(/promptFile/.test(pipeText), "pipeline must forward persisted promptFile");
+    });
+  }
+
+  it("analysis real call uses persisted --file + --timeout 180/luna before pi (no stdin)", async () => {
     const { acpxInvoke } = await import("../src/analyze.js");
     const argFile = path.join(tmp, "args.txt");
+    const promptFile = path.join(tmp, "analysis-prompt.md");
+    fs.writeFileSync(promptFile, "PROMPT", "utf8");
     const stdout = `[acpx] tokens: input=3 output=9\n{"status": "ok", "positive": [], "negative": [], "gaps": []}\n`;
     process.env.CA_IMPROVE_ACPX_BIN = fakeBin({ stdout, recordArgs: argFile });
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
     const out = acpxInvoke({
       trace: { transcriptId: "t1", harness: "pi", distilled: "hi" },
       prompt: "PROMPT",
+      promptFile,
     });
     assert.equal(out.status, "ok");
     assert.deepEqual(out.evidence, { status: "ok", positive: [], negative: [], gaps: [] });
     const argv = recordedArgs(argFile);
-    assert.ok(argv.includes("--format") && argv.includes("quiet"), `argv was ${argv.join(" ")}`);
+    assertFileArgv(argv, { promptFile, timeoutSec: 180, model: ANALYSIS_MODEL });
+    await assertNoStdinInputInSources();
   });
 
-  it("synthesis real call rejects JSON-RPC stdout fail-closed", async () => {
-    const { acpxSynthesisInvoke } = await import("../src/synthesize.js");
-    const argFile = path.join(tmp, "args2.txt");
-    process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
-      stdout: `{"jsonrpc": "2.0", "id": 1, "result": {"plans": []}}\n`,
-      recordArgs: argFile,
-    });
-    const out = acpxSynthesisInvoke({ prompt: "P" });
-    assert.equal(out.status, "failed");
-    assert.ok(/unparseable/.test(out.error));
-  });
-
-  it("consolidation real call rejects ambiguous stdout fail-closed", async () => {
+  it("consolidation real call uses persisted --file + --timeout 180/luna before pi (no stdin)", async () => {
     const { acpxConsolidateInvoke } = await import("../src/consolidate.js");
     const argFile = path.join(tmp, "args3.txt");
+    const promptFile = path.join(tmp, "consolidate-prompt.md");
+    fs.writeFileSync(promptFile, "P", "utf8");
     process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
       stdout: `{"merges": []}\n{"merges": []}\n`,
       recordArgs: argFile,
     });
-    const out = acpxConsolidateInvoke({ prompt: "P" });
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+    const out = acpxConsolidateInvoke({ prompt: "P", promptFile });
     assert.equal(out.status, "failed");
+    const argv = recordedArgs(argFile);
+    assertFileArgv(argv, { promptFile, timeoutSec: 180, model: ANALYSIS_MODEL });
+    await assertNoStdinInputInSources();
   });
 
-  it("annotate real calls extract preface + final through the strict path", async () => {
+  it("synthesis real call uses persisted --file + --timeout 300/sol before pi, rejects JSON-RPC", async () => {
+    const { acpxSynthesisInvoke } = await import("../src/synthesize.js");
+    const argFile = path.join(tmp, "args2.txt");
+    const promptFile = path.join(tmp, "synthesis-prompt.md");
+    fs.writeFileSync(promptFile, "P", "utf8");
+    process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
+      stdout: `{"jsonrpc": "2.0", "id": 1, "result": {"plans": []}}\n`,
+      recordArgs: argFile,
+    });
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+    const out = acpxSynthesisInvoke({ prompt: "P", promptFile });
+    assert.equal(out.status, "failed");
+    assert.ok(/unparseable/.test(out.error));
+    const argv = recordedArgs(argFile);
+    assertFileArgv(argv, { promptFile, timeoutSec: 300, model: SYNTHESIS_MODEL });
+    await assertNoStdinInputInSources();
+  });
+
+  it("annotate real calls use persisted --file + --timeout 300/sol before pi (preface + final)", async () => {
     const { acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke, annotateStaging } = await import(
       "../src/annotate.js"
     );
+    const prePromptFile = path.join(tmp, "preface-prompt.md");
+    fs.writeFileSync(prePromptFile, "PREFACE", "utf8");
     const preFile = path.join(tmp, "pre.txt");
     process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
       stdout: `[acpx] tokens: input=1 output=1\n{"ready": true}\n`,
       recordArgs: preFile,
     });
-    const pre = acpxAnnotatePrefaceInvoke({ prompt: "PREFACE" });
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+    const pre = acpxAnnotatePrefaceInvoke({ prompt: "PREFACE", promptFile: prePromptFile });
     assert.equal(pre.status, "ok");
     assert.deepEqual(pre.result, { ready: true });
+    assertFileArgv(recordedArgs(preFile), {
+      promptFile: prePromptFile,
+      timeoutSec: 300,
+      model: SYNTHESIS_MODEL,
+    });
 
+    const annPromptFile = path.join(tmp, "annotate-prompt.md");
+    fs.writeFileSync(annPromptFile, "ANNOTATE", "utf8");
     const annFile = path.join(tmp, "ann.txt");
     process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
       stdout: `{"annotations": [{"id": "e1", "verdict": "drop", "reason": "x"}]}\n`,
       recordArgs: annFile,
     });
-    const ann = acpxAnnotateInvoke({ prompt: "ANNOTATE" });
+    const ann = acpxAnnotateInvoke({ prompt: "ANNOTATE", promptFile: annPromptFile });
     assert.equal(ann.status, "ok");
+    assertFileArgv(recordedArgs(annFile), {
+      promptFile: annPromptFile,
+      timeoutSec: 300,
+      model: SYNTHESIS_MODEL,
+    });
+    await assertNoStdinInputInSources();
 
     // Stage schema validation stays authoritative downstream: drop yields no finals.
     const { buildFinalProposal } = await import("../src/stage.js");
@@ -472,6 +622,55 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
     });
     assert.equal(out.failed, false);
     assert.deepEqual(buildFinalProposal(out.annotated, {}), []);
+  });
+
+  it("all five stage invokes reject caller-supplied agent (Pi fixed)", async () => {
+    const promptFile = path.join(tmp, "fixed-pi-prompt.md");
+    fs.writeFileSync(promptFile, "X", "utf8");
+    const { acpxInvoke } = await import("../src/analyze.js");
+    const { acpxConsolidateInvoke } = await import("../src/consolidate.js");
+    const { acpxSynthesisInvoke } = await import("../src/synthesize.js");
+    const { acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } = await import("../src/annotate.js");
+    assert.throws(() => acpxInvoke({ promptFile, agent: "pi" }), /fixed to pi/);
+    assert.throws(() => acpxInvoke({ promptFile, agent: "codex" }), /fixed to pi/);
+    assert.throws(() => acpxConsolidateInvoke({ promptFile, agent: "pi" }), /fixed to pi/);
+    assert.throws(() => acpxSynthesisInvoke({ promptFile, agent: "codex" }), /fixed to pi/);
+    assert.throws(() => acpxAnnotatePrefaceInvoke({ promptFile, agent: "pi" }), /fixed to pi/);
+    assert.throws(() => acpxAnnotateInvoke({ promptFile, agent: "pi" }), /fixed to pi/);
+  });
+
+  it("shared helper never uses stdin input and keeps node spawn timeout above ACPX --timeout", async () => {
+    const promptFile = path.join(tmp, "helper-prompt.md");
+    fs.writeFileSync(promptFile, "HELPER", "utf8");
+    let seenArgs;
+    let seenOpts;
+    const spawnFn = (bin, args, opts) => {
+      seenArgs = args;
+      seenOpts = opts;
+      assert.ok(!("input" in (opts || {})), "spawn options must not carry stdin input");
+      return { status: 0, stdout: `{"ok":true}\n` };
+    };
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
+      const out = runAcpxPromptFile({
+        role: "analysis",
+        promptFile,
+        spawnFn,
+      });
+      assert.equal(out.status, "ok");
+    });
+    assertFileArgv(seenArgs, { promptFile, timeoutSec: 180, model: ANALYSIS_MODEL });
+    assert.ok(seenOpts && typeof seenOpts.timeout === "number", "node spawn timeout must be set");
+    assert.ok(seenOpts.timeout > 180 * 1000, "node spawn timeout must exceed ACPX --timeout");
+    assert.ok(!("input" in seenOpts), "spawn options must not use stdin input");
+
+    const synthFile = path.join(tmp, "helper-synth.md");
+    fs.writeFileSync(synthFile, "S", "utf8");
+    withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
+      const out = runAcpxPromptFile({ role: "synthesis", promptFile: synthFile, spawnFn });
+      assert.equal(out.status, "ok");
+    });
+    assertFileArgv(seenArgs, { promptFile: synthFile, timeoutSec: 300, model: SYNTHESIS_MODEL });
+    assert.ok(seenOpts.timeout > 300 * 1000, "synthesis spawn timeout must exceed ACPX --timeout");
   });
 
   it("stage schema validation remains authoritative over extracted finals", async () => {

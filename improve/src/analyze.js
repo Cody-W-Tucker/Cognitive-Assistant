@@ -8,13 +8,12 @@
 // src/prompts/analysis.md), rendered by improve/src/prompts.js with the
 // self-session sentinel FIRST; no inline prompt text lives here.
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { renderPrompt } from "./prompts.js";
-import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
@@ -213,30 +212,38 @@ export function persistPrompt(
 }
 
 /**
- * Default invoke: one acpx call per distilled trace. The rendered analysis
- * prompt is passed on stdin; ACPX text-output (`--format quiet`, never
- * JSON-RPC) is requested on stdout and the single final JSON object is
- * extracted strictly. Any failure is fail-soft (status "failed") so one
- * bad transcript never stops a run. Explicit caller `agent` stays the
- * optional first positional; extra args come from CA_IMPROVE_ACPX_ARGS.
+ * Default invoke: one acpx call per distilled trace. The persisted analysis
+ * prompt file (private state) travels via `--file`; ACPX text-output
+ * (`--format quiet`, never JSON-RPC) is requested on stdout and the single
+ * final JSON object is extracted strictly. Any failure is fail-soft (status
+ * "failed") so one bad transcript never stops a run. Pi stays the executor;
+ * role model luna with ACPX --timeout 180s (mandatory, before the agent).
  */
-export function acpxInvoke({ trace, agent = null, model = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
-  const rendered = prompt || buildAnalysisPrompt(trace, contexts, { promptsDir });
-  const bin = resolveAcpxBin();
-  const args = buildAcpxArgs({ agent, model: model || modelForRole("analysis") });
-  const result = spawnSync(bin, args, {
-    input: rendered,
-    encoding: "utf8",
-    timeout: timeoutMs,
+export function acpxInvoke(options = {}) {
+  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
+    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
+  }
+  const { trace, model = null, timeoutSec = null, timeoutMs = null, prompt = null, promptFile = null, contexts, promptsDir, spawnFn = null } = options;
+  void prompt;
+  void contexts;
+  void promptsDir;
+  void trace;
+  const file = promptFile ? String(promptFile) : "";
+  if (!file) {
+    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+  }
+  const out = runAcpxPromptFile({
+    role: "analysis",
+    promptFile: file,
+    model: model || modelForRole("analysis"),
+    timeoutSec: timeoutSec ?? 180,
+    ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(spawnFn ? { spawnFn } : {}),
   });
-  if (result.error || result.status !== 0) {
-    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+  if (out.status !== "ok") {
+    return { status: "failed", error: out.error };
   }
-  const evidence = extractAcpxFinalJson(result.stdout);
-  if (!evidence) {
-    return { status: "failed", error: "acpx returned unparseable output" };
-  }
-  return { status: "ok", evidence };
+  return { status: "ok", evidence: out.result };
 }
 
 /**
@@ -301,9 +308,10 @@ export function analyzeTraces(
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   return traces.map((trace) => {
     const prompt = buildAnalysisPrompt(trace, merged, { promptsDir });
+    let promptFile = null;
     if (resolvedState) {
       try {
-        persistPrompt(resolvedState, {
+        promptFile = persistPrompt(resolvedState, {
           runId: resolvedRun,
           transcriptId: trace.transcriptId,
           harness: trace.harness,
@@ -316,7 +324,7 @@ export function analyzeTraces(
     }
     let outcome;
     try {
-      outcome = invoke({ trace, prompt, contexts: merged, promptsDir });
+      outcome = invoke({ trace, prompt, promptFile, contexts: merged, promptsDir });
     } catch (err) {
       outcome = { status: "failed", error: err?.message || String(err) };
     }

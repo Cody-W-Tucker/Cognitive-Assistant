@@ -266,10 +266,10 @@ export async function runPipeline({
     }
     // Production: real ACPX text-output calls (fail-closed, invents nothing).
     if (args?.stage === "annotate-preface") {
-      return acpxAnnotatePrefaceInvoke({ prompt: args.prompt });
+      return acpxAnnotatePrefaceInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     if (args?.stage === "annotate") {
-      return acpxAnnotateInvoke({ prompt: args.prompt });
+      return acpxAnnotateInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     return { status: "failed", error: "annotate invoke unavailable; production invents nothing" };
   };

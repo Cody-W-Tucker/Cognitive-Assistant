@@ -55,11 +55,11 @@ describe("discovery Pi exclusion (default scope + explicit rejection)", () => {
     }
   });
 
-  it("Pi stays usable as an ACPX agent option (not affected by discovery exclusion)", () => {
+  it("Pi stays usable as the fixed ACPX executor (not affected by discovery exclusion)", () => {
     const prev = process.env.CA_IMPROVE_ACPX_ARGS;
     process.env.CA_IMPROVE_ACPX_ARGS = "--env KEY=value";
     try {
-      assert.deepEqual(buildAcpxArgs({ agent: "pi" }), ["--env", "KEY=value", "--format", "quiet", "pi"]);
+      assert.deepEqual(buildAcpxArgs({}), ["--env", "KEY=value", "--format", "quiet", "pi"]);
     } finally {
       if (prev === undefined) delete process.env.CA_IMPROVE_ACPX_ARGS;
       else process.env.CA_IMPROVE_ACPX_ARGS = prev;

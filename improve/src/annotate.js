@@ -7,11 +7,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
-import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
+import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 import { validateCandidate, isSuppressedByRejection, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
@@ -164,42 +163,66 @@ function annotationsFrom(outcome) {
 }
 
 /**
- * Default ACPX invoke for annotate-preface: rendered preface prompt on
- * stdin, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout,
- * single final `{"ready": true}` object extracted strictly. Explicit
- * caller `agent` stays the optional first positional; extra args come
- * from CA_IMPROVE_ACPX_ARGS. No direct model client, no fallback.
+ * Default ACPX invoke for annotate-preface: persisted preface prompt via
+ * `--file`, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout,
+ * single final `{"ready": true}` object extracted strictly. Pi executor;
+ * role model sol with ACPX --timeout 300s (mandatory, before the agent).
+ * No direct model client, no fallback.
  */
-export function acpxAnnotatePrefaceInvoke({ prompt, agent = null, model = null, timeoutMs = 120_000 } = {}) {
-  const args = buildAcpxArgs({ agent, model: model || modelForRole("annotate") });
-  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
-  if (result.error || result.status !== 0) {
-    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+export function acpxAnnotatePrefaceInvoke(options = {}) {
+  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
+    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const parsed = extractAcpxFinalJson(result.stdout);
-  if (!parsed) {
-    return { status: "failed", error: "acpx returned unparseable output" };
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
+  void prompt;
+  void resolveAcpxBin;
+  const file = promptFile ? String(promptFile) : "";
+  if (!file) {
+    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
   }
-  return { status: "ok", result: parsed };
+  const out = runAcpxPromptFile({
+    role: "annotate",
+    promptFile: file,
+    model: model || modelForRole("annotate"),
+    timeoutSec: timeoutSec ?? 300,
+    ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(spawnFn ? { spawnFn } : {}),
+  });
+  if (out.status !== "ok") {
+    return { status: "failed", error: out.error };
+  }
+  return { status: "ok", result: out.result };
 }
 
 /**
- * Default ACPX invoke for annotate: rendered annotate prompt on stdin,
+ * Default ACPX invoke for annotate: persisted annotate prompt via `--file`,
  * ACPX text-output (`--format quiet`, never JSON-RPC) on stdout, single
  * final `{"annotations": [...]}` object extracted strictly. Same argv
- * contract as the preface invoke.
+ * contract as the preface invoke (sol/300s, Pi executor).
  */
-export function acpxAnnotateInvoke({ prompt, agent = null, model = null, timeoutMs = 180_000 } = {}) {
-  const args = buildAcpxArgs({ agent, model: model || modelForRole("annotate") });
-  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
-  if (result.error || result.status !== 0) {
-    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+export function acpxAnnotateInvoke(options = {}) {
+  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
+    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const parsed = extractAcpxFinalJson(result.stdout);
-  if (!parsed) {
-    return { status: "failed", error: "acpx returned unparseable output" };
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
+  void prompt;
+  void resolveAcpxBin;
+  const file = promptFile ? String(promptFile) : "";
+  if (!file) {
+    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
   }
-  return { status: "ok", result: parsed };
+  const out = runAcpxPromptFile({
+    role: "annotate",
+    promptFile: file,
+    model: model || modelForRole("annotate"),
+    timeoutSec: timeoutSec ?? 300,
+    ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(spawnFn ? { spawnFn } : {}),
+  });
+  if (out.status !== "ok") {
+    return { status: "failed", error: out.error };
+  }
+  return { status: "ok", result: out.result };
 }
 
 /**
@@ -227,6 +250,8 @@ export async function annotateStaging(
 
   let prefacePrompt;
   let annotatePrompt;
+  let prefaceFile = null;
+  let annotateFile = null;
   try {
     prefacePrompt = renderAnnotatePreface(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}) });
     annotatePrompt = renderAnnotatePrompt(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}) });
@@ -236,14 +261,14 @@ export async function annotateStaging(
   if (stateDir) {
     try {
       const resolved = path.resolve(stateDir);
-      persistPrompt(resolved, {
+      prefaceFile = persistPrompt(resolved, {
         runId: String(resolvedRun),
         transcriptId: "annotate-preface",
         harness: "stage",
         prompt: prefacePrompt,
         stage: "annotate-preface",
       });
-      persistPrompt(resolved, {
+      annotateFile = persistPrompt(resolved, {
         runId: String(resolvedRun),
         transcriptId: "annotate",
         harness: "stage",
@@ -258,9 +283,9 @@ export async function annotateStaging(
   if (list.length === 0) {
     if (typeof invoke === "function") {
       try {
-        const pre = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, staged: list, runId: String(resolvedRun) });
+        const pre = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, promptFile: prefaceFile, staged: list, runId: String(resolvedRun) });
         if (pre && pre.status === "ok") {
-          await invoke({ stage: "annotate", prompt: annotatePrompt, staged: list, preface: pre, runId: String(resolvedRun) });
+          await invoke({ stage: "annotate", prompt: annotatePrompt, promptFile: annotateFile, staged: list, preface: pre, runId: String(resolvedRun) });
         }
       } catch {
         // empty staging never fails the run on invoke errors
@@ -274,7 +299,7 @@ export async function annotateStaging(
 
   let prefaceOutcome;
   try {
-    prefaceOutcome = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, staged: list, runId: String(resolvedRun) });
+    prefaceOutcome = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, promptFile: prefaceFile, staged: list, runId: String(resolvedRun) });
   } catch (err) {
     return fail(err?.message || String(err));
   }
@@ -290,7 +315,7 @@ export async function annotateStaging(
 
   let outcome;
   try {
-    outcome = await invoke({ stage: "annotate", prompt: annotatePrompt, staged: list, preface: prefaceOutcome, runId: String(resolvedRun) });
+    outcome = await invoke({ stage: "annotate", prompt: annotatePrompt, promptFile: annotateFile, staged: list, preface: prefaceOutcome, runId: String(resolvedRun) });
   } catch (err) {
     return fail(err?.message || String(err));
   }
