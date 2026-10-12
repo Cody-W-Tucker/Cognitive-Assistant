@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
+import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
 
 export const BODY_MAX_CHARS = 2000;
 
@@ -300,25 +301,23 @@ export function isSuppressedByRejection(candidate, rejections) {
 }
 
 /**
- * Default acpx invoke for synthesis: rendered prompt on stdin, JSON on
- * stdout. Same executable protocol as analyze acpx (analyze.js): the
- * `acpx` binary, optional agent positional, extra args from
- * CA_IMPROVE_ACPX_ARGS, prompt passed on stdin.
+ * Default acpx invoke for synthesis: rendered prompt on stdin, ACPX
+ * text-output (`--format quiet`, never JSON-RPC) on stdout, single final
+ * JSON object extracted strictly. Same executable protocol as analyze
+ * acpx (analyze.js): the `acpx` binary, optional agent positional,
+ * extra args from CA_IMPROVE_ACPX_ARGS, prompt passed on stdin.
  */
 export function acpxSynthesisInvoke({ prompt, agent = null, timeoutMs = 180_000 } = {}) {
-  const args = [];
-  if (agent) args.push(agent);
-  const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
-  if (extra) args.push(...extra.split(/\s+/));
+  const args = buildAcpxArgs({ agent });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
   }
-  try {
-    return { status: "ok", result: JSON.parse(result.stdout) };
-  } catch {
+  const parsed = extractAcpxFinalJson(result.stdout);
+  if (!parsed) {
     return { status: "failed", error: "acpx returned unparseable output" };
   }
+  return { status: "ok", result: parsed };
 }
 
 /** Render the production synthesis prompt (sentinel FIRST via the loader). */

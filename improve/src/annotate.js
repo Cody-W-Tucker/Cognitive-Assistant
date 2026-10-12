@@ -7,9 +7,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt } from "./analyze.js";
+import { persistPrompt, resolveAcpxBin } from "./analyze.js";
+import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
 import { validateCandidate, isSuppressedByRejection, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
 import { createHash } from "node:crypto";
@@ -161,6 +163,45 @@ function annotationsFrom(outcome) {
 }
 
 /**
+ * Default ACPX invoke for annotate-preface: rendered preface prompt on
+ * stdin, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout,
+ * single final `{"ready": true}` object extracted strictly. Explicit
+ * caller `agent` stays the optional first positional; extra args come
+ * from CA_IMPROVE_ACPX_ARGS. No direct model client, no fallback.
+ */
+export function acpxAnnotatePrefaceInvoke({ prompt, agent = null, timeoutMs = 120_000 } = {}) {
+  const args = buildAcpxArgs({ agent });
+  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
+  if (result.error || result.status !== 0) {
+    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+  }
+  const parsed = extractAcpxFinalJson(result.stdout);
+  if (!parsed) {
+    return { status: "failed", error: "acpx returned unparseable output" };
+  }
+  return { status: "ok", result: parsed };
+}
+
+/**
+ * Default ACPX invoke for annotate: rendered annotate prompt on stdin,
+ * ACPX text-output (`--format quiet`, never JSON-RPC) on stdout, single
+ * final `{"annotations": [...]}` object extracted strictly. Same argv
+ * contract as the preface invoke.
+ */
+export function acpxAnnotateInvoke({ prompt, agent = null, timeoutMs = 180_000 } = {}) {
+  const args = buildAcpxArgs({ agent });
+  const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
+  if (result.error || result.status !== 0) {
+    return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
+  }
+  const parsed = extractAcpxFinalJson(result.stdout);
+  if (!parsed) {
+    return { status: "failed", error: "acpx returned unparseable output" };
+  }
+  return { status: "ok", result: parsed };
+}
+
+/**
  * Run annotate-preface then annotate as two fresh logical invocations.
  * Persists both rendered prompts privately (run/stage naming, 0600).
  * Annotation is the SOLE full-record origin: for verdict keep the
@@ -238,6 +279,12 @@ export async function annotateStaging(
   }
   if (!prefaceOutcome || prefaceOutcome.status !== "ok") {
     return fail(prefaceOutcome?.error || "annotate-preface failed");
+  }
+  if (prefaceOutcome.result !== undefined) {
+    const preface = prefaceOutcome.result;
+    if (!preface || typeof preface !== "object" || preface.ready !== true) {
+      return fail("annotate-preface returned invalid readiness (expected {\"ready\": true})");
+    }
   }
 
   let outcome;

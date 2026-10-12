@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { renderPrompt } from "./prompts.js";
+import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
 
@@ -212,17 +213,16 @@ export function persistPrompt(
 
 /**
  * Default invoke: one acpx call per distilled trace. The rendered analysis
- * prompt is passed on stdin; JSON evidence is expected on stdout. Any
- * failure is fail-soft (status "failed") so one bad transcript never stops
- * a run.
+ * prompt is passed on stdin; ACPX text-output (`--format quiet`, never
+ * JSON-RPC) is requested on stdout and the single final JSON object is
+ * extracted strictly. Any failure is fail-soft (status "failed") so one
+ * bad transcript never stops a run. Explicit caller `agent` stays the
+ * optional first positional; extra args come from CA_IMPROVE_ACPX_ARGS.
  */
 export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000, prompt = null, contexts, promptsDir }) {
   const rendered = prompt || buildAnalysisPrompt(trace, contexts, { promptsDir });
   const bin = resolveAcpxBin();
-  const args = [];
-  if (agent) args.push(agent);
-  const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
-  if (extra) args.push(...extra.split(/\s+/));
+  const args = buildAcpxArgs({ agent });
   const result = spawnSync(bin, args, {
     input: rendered,
     encoding: "utf8",
@@ -231,11 +231,11 @@ export function acpxInvoke({ trace, agent = null, timeoutMs = 120_000, prompt = 
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
   }
-  try {
-    return { status: "ok", evidence: JSON.parse(result.stdout) };
-  } catch {
+  const evidence = extractAcpxFinalJson(result.stdout);
+  if (!evidence) {
     return { status: "failed", error: "acpx returned unparseable output" };
   }
+  return { status: "ok", evidence };
 }
 
 /**

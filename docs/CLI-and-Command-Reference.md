@@ -111,10 +111,17 @@ identity with a visible note and makes no model call. The mock analyzer never
 calls acpx here. The rendered prompt is persisted privately as
 `prompts/<runId>__consolidate.md` plus a `.json` sidecar carrying run/stage
 identifying metadata (`runId`, `stage: consolidate`), both `0600` where
-supported. The model returns `{"merges": [[ids], ...]}`; parsing validates
+supported. The model returns `{"merges": [[ids], ...]}` via ACPX text-output
+(`--format quiet`, never JSON-RPC `--format json`); the single final object
+is extracted strictly by `improve/src/acpx-text.js` (tolerates only `[acpx]`
+framing lines, whitespace, and one optional ```json fence; fail-closed on
+absent/malformed/ambiguous candidates, top-level arrays/scalars, JSON-RPC
+envelopes, and model prose — no loose regex) before stage parsing validates
 strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
 across groups; malformed groups and unknown IDs are dropped, shrinking a
-group below two drops it). The merge itself is mechanical: union distinct
+group below two drops it). `CA_IMPROVE_ACPX_ARGS` supports additional ACPX
+arguments but rejects `--format`/`--output` overrides so model-final output
+remains text-mode `--format quiet`; this prevents JSON-RPC parsing mismatch. The merge itself is mechanical: union distinct
 session sources (never double-count a session), preserve per-source quote
 provenance, keep the shortest instruction as canonical, and re-check the
 `minGapEvidence` floor. acpx failure or invalid output degrades to the
@@ -133,7 +140,9 @@ Annotation is the sole full-record author; staged plans carry no
 record/evidence. The prompt states explicitly: change only the plan -- never live
 files, tracked files, SOUL, posture, skills, or Hermes -- and the plan is
 not authoritative pre-apply (the terminal review/apply gate consumes only
-annotated finals). Production runs are acpx-only with strict plan validation
+annotated finals). Production runs are acpx-only with ACPX text-output
+(`--format quiet`, never JSON-RPC) plus the strict single-object extractor
+(`improve/src/acpx-text.js`) and strict plan validation
 (eligible folded cluster; `>=2` distinct eligible sessions; any final field
 present is invalid and dropped). The mock path is deterministic
 `synthesizePlans` with no real calls, still reviewable. Production failure
@@ -158,7 +167,8 @@ and opens the fresh logical annotate session. Placeholders `{{COUNT}}`,
 `{{STAGED_SUMMARY}}`, `{{RUN_ID}}` render the staged-existing set through the
 existing strict loader/renderer (`improve/src/prompts.js`), sentinel FIRST and
 never baked into the file. The preface outcome is revert-only readiness
-metadata (`{"ready": true}`): it never annotates, never authors
+metadata (`{"ready": true}`) via a real ACPX text-output call
+(`acpxAnnotatePrefaceInvoke`, `--format quiet`, strict extraction): it never annotates, never authors
 records/evidence, and never edits live files,
 tracked files, SOUL, posture, skills, or Hermes. An empty staged set stays
 sequenced as annotate-preface then annotate. Rendered as
@@ -183,7 +193,8 @@ with its `source` session id; paraphrases and swapped sessions fail), plus requi
 and `compilerImplication` on the staged record. Prohibited operations are
 explicit: never live files, tracked files, SOUL, posture, skills, or Hermes;
 the proposal stays non-authoritative until the human apply gate consumes only
-annotated finals. Production is acpx-only with strict final validation and
+annotated finals. Production is acpx-only (real `acpxAnnotateInvoke` ACPX
+text-output, strict single-object extraction) with strict final validation and
 fail-closed (staging marked via `staging/annotate.failed`,
 candidates cleared, no final proposal edits); the mock path is deterministic
 final annotation with no real calls, still reviewable. The terminal

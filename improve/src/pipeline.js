@@ -15,7 +15,7 @@ import { consolidateLedger } from "./consolidate.js";
 import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
-import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation } from "./annotate.js";
+import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
 import { initStateDir, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
@@ -249,6 +249,13 @@ export async function runPipeline({
   const defaultAnnotate = (args) => {
     if (analyzer === "mock") {
       return { status: "ok", annotations: mockFinalFor(args?.staged || staged) };
+    }
+    // Production: real ACPX text-output calls (fail-closed, invents nothing).
+    if (args?.stage === "annotate-preface") {
+      return acpxAnnotatePrefaceInvoke({ prompt: args.prompt });
+    }
+    if (args?.stage === "annotate") {
+      return acpxAnnotateInvoke({ prompt: args.prompt });
     }
     return { status: "failed", error: "annotate invoke unavailable; production invents nothing" };
   };

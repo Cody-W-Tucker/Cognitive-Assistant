@@ -9,6 +9,7 @@ import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
+import { buildAcpxArgs, extractAcpxFinalJson } from "./acpx-text.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
 
@@ -147,22 +148,20 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
 
 /** Default acpx invoke for consolidation. Same executable protocol as
  * analyze acpx (analyze.js): the `acpx` binary, optional agent
- * positional, extra args from CA_IMPROVE_ACPX_ARGS, prompt on stdin,
- * JSON on stdout. */
+ * positional, ACPX text-output (`--format quiet`, never JSON-RPC),
+ * extra args from CA_IMPROVE_ACPX_ARGS, prompt on stdin, model-final
+ * JSON extracted strictly from text stdout. */
 export function acpxConsolidateInvoke({ prompt, agent = null, timeoutMs = 120_000 } = {}) {
-  const args = [];
-  if (agent) args.push(agent);
-  const extra = (process.env.CA_IMPROVE_ACPX_ARGS || "").trim();
-  if (extra) args.push(...extra.split(/\s+/));
+  const args = buildAcpxArgs({ agent });
   const result = spawnSync(resolveAcpxBin(), args, { input: prompt, encoding: "utf8", timeout: timeoutMs });
   if (result.error || result.status !== 0) {
     return { status: "failed", error: result.error?.message || `acpx exit ${result.status}` };
   }
-  try {
-    return { status: "ok", result: JSON.parse(result.stdout) };
-  } catch {
+  const parsed = extractAcpxFinalJson(result.stdout);
+  if (!parsed) {
     return { status: "failed", error: "acpx returned unparseable output" };
   }
+  return { status: "ok", result: parsed };
 }
 
 /**
