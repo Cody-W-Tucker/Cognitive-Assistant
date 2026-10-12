@@ -59,10 +59,24 @@ async function readSqliteMessages(dbPath, sessionId) {
         .all(sessionId)
         .map((r) => r.data);
     } else if (tables.has("messages")) {
-      rows = db
-        .prepare("SELECT role, text FROM messages WHERE session_id = ? ORDER BY rowid ASC")
-        .all(sessionId)
-        .map((r) => ({ role: r.role, text: Buffer.isBuffer(r.text) ? r.text.toString("utf8") : r.text }));
+      let mcols = new Set();
+      try {
+        mcols = new Set(
+          db.prepare("SELECT name FROM pragma_table_info('messages')").all().map((r) => r.name),
+        );
+      } catch {
+        mcols = new Set();
+      }
+      const hasSessionId = mcols.has("session_id");
+      const textCol = mcols.has("text") ? "text" : mcols.has("content") ? "content" : null;
+      const roleCol = mcols.has("role") ? "role" : null;
+      if (hasSessionId && textCol) {
+        const roleSelect = roleCol ? "role" : "NULL AS role";
+        rows = db
+          .prepare(`SELECT ${roleSelect}, ${textCol} FROM messages WHERE session_id = ? ORDER BY rowid ASC`)
+          .all(sessionId)
+          .map((r) => ({ role: r.role, text: Buffer.isBuffer(r[textCol]) ? r[textCol].toString("utf8") : r[textCol] }));
+      }
     }
     for (const row of rows) {
       if (typeof row === "string") {

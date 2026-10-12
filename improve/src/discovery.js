@@ -289,10 +289,10 @@ function discoverHermes({ dbPath, stateDir, cutoff }) {
       // OpenCode-style time_* aliases). Schemas without any of these keep
       // mtimeMs null so --since cannot guess and the persistent cursor owns
       // freshness instead.
-      const updatedCol = ["updated_at", "time_updated", "updated", "modified_at"].find((c) =>
+      const updatedCol = ["last_activity_at", "updated_at", "time_updated", "updated", "modified_at"].find((c) =>
         cols.has(c),
       ) || null;
-      const createdCol = ["created_at", "time_created", "created", "timestamp", "mtime"].find((c) =>
+      const createdCol = ["started_at", "created_at", "time_created", "created", "timestamp", "mtime"].find((c) =>
         cols.has(c),
       ) || null;
       const rows = [];
@@ -307,12 +307,14 @@ function discoverHermes({ dbPath, stateDir, cutoff }) {
       }
       if (tables.has("messages")) {
         const mcols = new Set(tableColumns(db, "messages"));
-        if (mcols.has("session_id") && mcols.has("text")) {
+        const textCol = mcols.has("text") ? "text" : mcols.has("content") ? "content" : null;
+        if (mcols.has("session_id") && textCol) {
           const firstText = new Map();
-          for (const msg of db.prepare("SELECT session_id, text FROM messages ORDER BY rowid ASC").all()) {
+          for (const msg of db.prepare(`SELECT session_id, ${textCol} FROM messages ORDER BY rowid ASC`).all()) {
             const key = String(msg.session_id);
             if (!firstText.has(key)) {
-              const text = Buffer.isBuffer(msg.text) ? msg.text.toString("utf8") : String(msg.text || "");
+              const raw = msg[textCol];
+              const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw || "");
               firstText.set(key, text);
             }
           }
