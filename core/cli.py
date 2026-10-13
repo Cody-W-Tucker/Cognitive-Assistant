@@ -192,6 +192,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=2,
         help="Sessions of shared gap evidence needed before a candidate is proposed.",
     )
+    improve_run_parser.add_argument(
+        "--soul-path",
+        type=Path,
+        help="Read-only SOUL baseline for synthesis context (default: workspaces/alignment/artifacts/SOUL.md).",
+    )
 
     improve_apply_parser = subparsers.add_parser(
         "improve-apply",
@@ -232,7 +237,7 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_synth_parser.add_argument(
         "--soul-path",
         type=Path,
-        help="Read-only SOUL baseline for synthesis context.",
+        help="Read-only SOUL baseline for synthesis context (default: workspaces/alignment/artifacts/SOUL.md).",
     )
 
     return parser
@@ -294,6 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 state_dir=args.state_dir,
                 since=args.since,
                 analyzer=args.analyzer,
+                soul_path=args.soul_path,
                 min_gap_evidence=args.min_gap_evidence,
             )
             print(json.dumps(proposal))
@@ -323,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             state_dir=args.state_dir,
             since=args.since,
             analyzer=args.analyzer,
+            soul_path=args.soul_path,
             min_gap_evidence=args.min_gap_evidence,
         )
         print(

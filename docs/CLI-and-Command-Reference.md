@@ -105,11 +105,26 @@ patches SOUL -- SOUL stays the read-only baseline, while
 `prompt_creator.load_dataset_context`) compiles accepted staged
 experience into downstream builds.
 
+## Active SOUL contextualization (`improve-run` / `improve-synthesize`)
+
+Both improvement passes require the active SOUL baseline
+(`workspaces/alignment/artifacts/SOUL.md`, resolved from the repo root
+independent of CWD). `--soul-path` explicitly overrides the default;
+otherwise the canonical default is used. The snapshot is read-only:
+a nonexistent, unreadable, or empty SOUL fails closed before
+synthesis/annotation/proposal with an actionable error. The bounded
+snapshot text (first 4000 chars) plus its stable sha256 flow into the
+synthesis (`improve/prompts/synthesis.md`) and annotation
+(`improve/prompts/annotate.md`) prompts, which require baseline
+non-conflict and explicit tension/counterevidence. The proposal carries
+`soul: {path, sha256, chars}` provenance; SOUL is never written.
+Candidate records stay additive experience only -- no textual SOUL patch
+claims.
+
 ## Resume-only synthesis (`improve-synthesize`)
 
 `python -m core improve-synthesize --state-dir <dir> [--min-gap-evidence N] [--soul-path SOUL.md]`
-reuses persisted successful evidence (`state/evidence/*.json`) and the
-folded ledger (`state/ledger.json` + `state/open-gaps.json`) without any
+reuses persisted successful evidence (`state/evidence/*.json`) and thefolded ledger (`state/ledger.json` + `state/open-gaps.json`) without any
 discovery, export, or ACPX analysis: no transcript discovery, no OpenCode
 export, no per-trace analyze. It consolidates only if required (the same
 `<2 gaps` skip / mock-free production path as `improve-run`), checks the

@@ -17,6 +17,7 @@ import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
 import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson } from "./state.js";
+import { readSoulSnapshot } from "./soul.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
 import { readOpencodeExportAsync } from "./opencode-export.js";
 
@@ -165,14 +166,6 @@ function harnessSummaryOf(transcripts) {
   return parts.join(", ") || "none";
 }
 
-function readSoulBaseline(soulPath) {
-  if (!soulPath) return "";
-  try {
-    return fs.readFileSync(soulPath, "utf8").slice(0, 4000);
-  } catch {
-    return "";
-  }
-}
 
 /**
  * Run the headless pass. All writes land under `stateDir`.
@@ -284,7 +277,9 @@ export async function runPipeline({
   });
   writeJson(path.join(stateDir, "ledger.json"), ledger);
   const evidenceIndex = new Map(recurrenceRecords.map((r) => [r.transcriptId, r.positive || []]));
-  const soulBaseline = readSoulBaseline(soulPath);
+  const soulSnapshot = readSoulSnapshot(soulPath);
+  const soulBaseline = soulSnapshot.text;
+  const soulSha256 = soulSnapshot.sha256;
   const rejections = readRejections(stateDir);
   const harnessSummary = harnessSummaryOf(discovery.transcripts);
   const runNote = consolidation.note || "";
@@ -313,12 +308,14 @@ export async function runPipeline({
     // applyMockSynthesisWorkspace); the pipeline never fabricates
     // plan-derived edits. Final records come only from the mock
     // annotate step below (same plan->stage/measure->preface->annotate path).
-    edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd, stateDir });
+    edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline, soulSnapshot: soulSnapshot.text, soulSha256, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd, stateDir });
   } else {
     // Production acpx-only synthesis: strict validation, fail-closed.
     const out = synthesizeWithAcpx(ledger, {
       evidenceIndex,
       soulBaseline,
+      soulSnapshot: soulSnapshot.text,
+      soulSha256,
       rejections,
       ...(synthesizeInvoke ? { invoke: synthesizeInvoke } : {}),
       stateDir,
@@ -442,7 +439,7 @@ export async function runPipeline({
   // annotate invoke that supplies complete final records, annotate fails
   // closed with no edits.
   const mockFinalFor = (plans) =>
-    (plans || staged).map((c) => buildMockFinalAnnotation(c, { ledger, evidenceIndex, soulBaseline, measuredChanges }));
+    (plans || staged).map((c) => buildMockFinalAnnotation(c, { ledger, evidenceIndex, soulBaseline, soulSnapshot: soulSnapshot.text, soulSha256, measuredChanges }));
   const defaultAnnotate = (args) => {
     if (analyzer === "mock") {
       return { status: "ok", annotations: mockFinalFor(args?.staged || staged) };
@@ -464,6 +461,8 @@ export async function runPipeline({
     ledger,
     evidenceIndex,
     soulBaseline,
+    soulSnapshot: soulSnapshot.text,
+    soulSha256,
     measuredChanges,
     workspace: workspaceCwd,
     ...(promptsDir ? { promptsDir } : {}),
@@ -518,6 +517,7 @@ export async function runPipeline({
     appliedAt: null,
     scope: "global",
     minGapEvidence,
+    soul: { path: soulSnapshot.path, sha256: soulSnapshot.sha256, chars: soulSnapshot.chars },
     edits: finalEdits,
     notes,
     consolidation: {

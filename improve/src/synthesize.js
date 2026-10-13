@@ -14,6 +14,7 @@ import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { parseWorkspaceFileProvenance } from "./workspace-frontmatter.js";
 import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
+import { readSoulSnapshot } from "./soul.js";
 // Private writable synthesis workspace under stateDir (synthesis-workspace).
 // Synthesis executes only there and may author/edit markdown records inside
 // it. Synthesis must refuse/forbid/deny any durable write to the source
@@ -494,8 +495,14 @@ export function acpxSynthesisInvoke(options = {}) {
 /** Render the production synthesis prompt (sentinel FIRST via the loader). */
 export function buildSynthesisPrompt(
   ledger,
-  { evidenceIndex = new Map(), rejections = [], transcriptCount = null, harnessSummary = "unknown", runNote = "", promptsDir } = {},
+  { evidenceIndex = new Map(), rejections = [], transcriptCount = null, harnessSummary = "unknown", runNote = "", soulSnapshot = "", soulSha256 = "", promptsDir } = {},
 ) {
+  if (!String(soulSnapshot || "").trim()) {
+    throw new Error("buildSynthesisPrompt requires bounded active SOUL snapshot text (fail-closed without the baseline)");
+  }
+  if (!String(soulSha256 || "").trim()) {
+    throw new Error("buildSynthesisPrompt requires the stable SOUL sha256 (fail-closed without the baseline)");
+  }
   const count = transcriptCount ?? evidenceIndex.size ?? 0;
   const base = renderPrompt(
     "synthesis",
@@ -505,6 +512,8 @@ export function buildSynthesisPrompt(
       TRANSCRIPT_COUNT: String(count),
       HARNESS_SUMMARY: String(harnessSummary),
       RUN_NOTE: String(runNote || ""),
+      SOUL_SNAPSHOT: String(soulSnapshot),
+      SOUL_SHA256: String(soulSha256),
     },
     { promptsDir },
   );
@@ -559,6 +568,8 @@ export function synthesizeWithAcpx(
   {
     evidenceIndex = new Map(),
     soulBaseline = "",
+    soulSnapshot = "",
+    soulSha256 = "",
     rejections = [],
     invoke = acpxSynthesisInvoke,
     stateDir = null,
@@ -572,6 +583,32 @@ export function synthesizeWithAcpx(
     cwd = null,
   } = {},
 ) {
+  let snapshotText = String(soulSnapshot || soulBaseline || "");
+  let snapshotHash = String(soulSha256 || "");
+  if (!snapshotText.trim() || !snapshotHash.trim()) {
+    // Canonical default resolves from the repo root (never CWD); an
+    // unavailable default fails closed here.
+    try {
+      const snap = readSoulSnapshot(null);
+      if (!snapshotText.trim()) snapshotText = snap.text;
+      if (!snapshotHash.trim()) snapshotHash = snap.sha256;
+    } catch (err) {
+      return {
+        edits: [],
+        failed: err?.message || String(err),
+        note: `${err?.message || err}; refusing synthesis without the active baseline`,
+        promptFile: null,
+      };
+    }
+  }
+  if (!snapshotText.trim() || !snapshotHash.trim()) {
+    return {
+      edits: [],
+      failed: "SOUL baseline unavailable",
+      note: "improve: SOUL baseline unavailable; refusing synthesis without the active baseline",
+      promptFile: null,
+    };
+  }
   const workspaceCwd = workspace || workspaceRoot || cwd || (stateDir ? `${stateDir}/${SYNTHESIS_WORKSPACE_DIRNAME}` : null);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   // Containment at the synthesis invocation boundary: ACPX executes an
@@ -594,6 +631,8 @@ export function synthesizeWithAcpx(
     transcriptCount,
     harnessSummary,
     runNote,
+    soulSnapshot: snapshotText,
+    soulSha256: snapshotHash,
     promptsDir,
   });
   let promptFile = null;

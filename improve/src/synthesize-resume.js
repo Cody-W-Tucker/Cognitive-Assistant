@@ -32,19 +32,12 @@ import {
   prepareExperienceWorkspace,
   measureExperienceWorkspace,
 } from "./experience-workspace.js";
+import { readSoulSnapshot } from "./soul.js";
 
 function fail(message) {
   throw new Error(String(message));
 }
 
-function readSoulBaseline(soulPath) {
-  if (!soulPath) return "";
-  try {
-    return fs.readFileSync(soulPath, "utf8").slice(0, 4000);
-  } catch {
-    return "";
-  }
-}
 
 function readRejections(stateDir) {
   const out = [];
@@ -140,7 +133,9 @@ export async function runSynthesizeResume({
   const evidenceIndex = new Map(
     evidenceRecords.map((r) => [r.transcriptId, r.positive || []]),
   );
-  const soulBaseline = readSoulBaseline(soulPath);
+  const soulSnapshot = readSoulSnapshot(soulPath);
+  const soulBaseline = soulSnapshot.text;
+  const soulSha256 = soulSnapshot.sha256;
   const rejections = readRejections(resolvedState);
   const resolvedRun =
     runId ||
@@ -232,6 +227,8 @@ export async function runSynthesizeResume({
   const out = synthesizeWithAcpx(ledger, {
     evidenceIndex,
     soulBaseline,
+    soulSnapshot: soulSnapshot.text,
+    soulSha256,
     rejections,
     ...(synthesizeInvoke ? { invoke: synthesizeInvoke } : {}),
     stateDir: resolvedState,
@@ -375,6 +372,8 @@ export async function runSynthesizeResume({
     ledger,
     evidenceIndex,
     soulBaseline,
+    soulSnapshot: soulSnapshot.text,
+    soulSha256,
     measuredChanges,
     workspace: workspaceCwd,
     ...(promptsDir ? { promptsDir } : {}),
@@ -433,6 +432,7 @@ export async function runSynthesizeResume({
     scope: "global",
     resume: true,
     minGapEvidence: floor,
+    soul: { path: soulSnapshot.path, sha256: soulSnapshot.sha256, chars: soulSnapshot.chars },
     edits: finalEdits,
     notes,
     consolidation: {

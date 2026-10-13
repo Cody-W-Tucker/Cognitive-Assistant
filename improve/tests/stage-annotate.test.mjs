@@ -503,6 +503,8 @@ describe("annotate prompt binds staged session-bound allowed evidence", () => {
       runId: "run-ALLOW1",
       ledger: distinctLedger(),
       evidenceIndex: distinctIndex(),
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     assert.ok(prompt.includes("alpha exact quote from session one"), "prompt must list s1 exact quote");
     assert.ok(prompt.includes("beta exact quote from session two"), "prompt must list s2 exact quote");
@@ -597,6 +599,8 @@ describe("annotate prompt binds staged session-bound allowed evidence", () => {
       runId: "run-LONG1",
       ledger: longLedger,
       evidenceIndex: longIndex,
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     const prefix = longQuote.slice(0, 500);
     // Either the complete quote renders, or the whole quote is skipped:
@@ -630,6 +634,8 @@ describe("annotate prompt binds staged session-bound allowed evidence", () => {
       runId: "run-HUGE1",
       ledger: hugeLedger,
       evidenceIndex: hugeIndex,
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     assert.ok(!hugePrompt.includes("HUGE-START-") || hugePrompt.includes(hugeQuote), "over-budget quote must be whole or omitted");
     assert.ok(!hugePrompt.includes(hugeQuote.slice(0, 500)) || hugePrompt.includes("-HUGE-END"), "over-budget quote must never leak a truncated prefix");

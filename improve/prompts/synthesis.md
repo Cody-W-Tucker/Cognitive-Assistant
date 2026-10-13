@@ -5,6 +5,15 @@ You are performing the synthesis step of a CA improvement pass. Folded evidence 
 {{TRANSCRIPT_COUNT}} sessions analyzed across {{HARNESS_SUMMARY}}.
 {{RUN_NOTE}}
 
+## Active SOUL baseline (read-only, sha256 {{SOUL_SHA256}})
+
+{{SOUL_SNAPSHOT}}
+
+Every workspace record must be baseline non-conflicting: it must not
+contradict the SOUL baseline above. Records extend experience only; they never
+patch, rewrite, or restate SOUL. Name any explicit tension with the baseline
+in the workspace prose so annotation can carry it as counterevidence.
+
 ## Folded evidence
 
 `sessions` counts distinct sessions behind each gap cluster. Edits reference eligible clusters; they never author final evidence.

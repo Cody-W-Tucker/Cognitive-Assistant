@@ -91,7 +91,7 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
   it("annotate.md declares exactly its placeholders and required contract text", () => {
     const text = fs.readFileSync(path.join(HERE, "..", "prompts", "annotate.md"), "utf8");
     const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
-    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "STAGED_CANDIDATES"]);
+    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "SOUL_SHA256", "SOUL_SNAPSHOT", "STAGED_CANDIDATES"]);
     assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
     assert.ok(!text.includes("Backpass"), "prompt body carries no license comments (see LICENSE.NOTICE)");
     const notice = fs.readFileSync(NOTICE, "utf8");
@@ -116,7 +116,7 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     const preface = renderPrompt("annotate-preface", { COUNT: "1", STAGED_SUMMARY: "s", RUN_ID: "run-T" });
     assert.ok(preface.startsWith(`${SELF_SESSION_SENTINEL}\n`));
     assert.ok(preface.includes("run-T"));
-    const annotate = renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c", RUN_ID: "run-T" });
+    const annotate = renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c", RUN_ID: "run-T", SOUL_SNAPSHOT: "soul snapshot", SOUL_SHA256: "abc123" });
     assert.ok(annotate.startsWith(`${SELF_SESSION_SENTINEL}\n`));
     assert.ok(annotate.includes("run-T"));
     assert.throws(() => renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c" }), /RUN_ID/);

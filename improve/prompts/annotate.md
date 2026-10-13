@@ -4,6 +4,16 @@ You are annotating the narrow staged change plan of a CA improvement pass. The s
 
 {{RUN_ID}} — {{COUNT}} staged change plan(s) to annotate.
 
+## Active SOUL baseline (read-only, sha256 {{SOUL_SHA256}})
+
+{{SOUL_SNAPSHOT}}
+
+Every `keep` verdict must be baseline non-conflicting: the final record must
+not contradict the SOUL baseline above. Records are additive experience only;
+they never patch, rewrite, or restate SOUL. Each `keep` must state its
+explicit tension with the baseline (or why none exists) via required
+`counterevidence` and `compilerImplication`.
+
 ## Staged change plans (provisional, no records)
 
 {{STAGED_CANDIDATES}}

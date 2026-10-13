@@ -109,6 +109,8 @@ describe("synthesis.md narrow-plan contract (Backpass src/prompts/synthesis.md @
       "HARNESS_SUMMARY",
       "REJECTIONS",
       "RUN_NOTE",
+      "SOUL_SHA256",
+      "SOUL_SNAPSHOT",
       "TRANSCRIPT_COUNT",
     ]);
   });
@@ -155,6 +157,8 @@ describe("synthesis render + persistence (exact)", () => {
       TRANSCRIPT_COUNT: "2",
       HARNESS_SUMMARY: "pi 2",
       RUN_NOTE: "note",
+      SOUL_SNAPSHOT: "soul snapshot",
+      SOUL_SHA256: "abc123",
     });
     assert.ok(out.startsWith(`${SELF_SESSION_SENTINEL}\n`));
     assert.ok(out.includes("ev"));
@@ -168,6 +172,8 @@ describe("synthesis render + persistence (exact)", () => {
           REJECTIONS: "r",
           TRANSCRIPT_COUNT: "1",
           HARNESS_SUMMARY: "h",
+          SOUL_SNAPSHOT: "soul snapshot",
+          SOUL_SHA256: "abc123",
         }),
       /RUN_NOTE/,
     );
@@ -178,6 +184,8 @@ describe("synthesis render + persistence (exact)", () => {
     const prompt = buildSynthesisPrompt(ledger(), {
       evidenceIndex: evidenceIndex(),
       runNote: "n",
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     const file = persistPrompt(stateDir, {
       runId: "run-SY1",

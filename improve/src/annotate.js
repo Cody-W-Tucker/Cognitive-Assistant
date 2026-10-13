@@ -15,6 +15,7 @@ import { modelForRole } from "./models.js";
 import { validateCandidate, isSuppressedByRejection, isValidRecordId, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
 import { createHash } from "node:crypto";
+import { readSoulSnapshot } from "./soul.js";
 
 function shortHash(text) {
   return createHash("sha256").update(text).digest("hex").slice(0, 12);
@@ -167,14 +168,22 @@ export function renderAnnotatePreface(candidates, { runId = "run-unknown", promp
  * existing strict loader/renderer (sentinel FIRST). Accepts a single staged
  * candidate or a list.
  */
-export function renderAnnotatePrompt(candidates, { runId = "run-unknown", promptsDir, ledger = null, evidenceIndex = null } = {}) {
+export function renderAnnotatePrompt(candidates, { runId = "run-unknown", promptsDir, ledger = null, evidenceIndex = null, soulSnapshot = "", soulSha256 = "" } = {}) {
   const list = asList(candidates);
+  if (!String(soulSnapshot || "").trim()) {
+    throw new Error("renderAnnotatePrompt requires bounded active SOUL snapshot text (fail-closed without the baseline)");
+  }
+  if (!String(soulSha256 || "").trim()) {
+    throw new Error("renderAnnotatePrompt requires the stable SOUL sha256 (fail-closed without the baseline)");
+  }
   return renderPrompt(
     "annotate",
     {
       COUNT: String(list.length),
       STAGED_CANDIDATES: stagedCandidatesBlock(list, { ledger, evidenceIndex }),
       RUN_ID: String(runId),
+      SOUL_SNAPSHOT: String(soulSnapshot),
+      SOUL_SHA256: String(soulSha256),
     },
     { ...(promptsDir ? { promptsDir } : {}) },
   );
@@ -317,7 +326,7 @@ export function acpxAnnotateInvoke(options = {}) {
  */
 export async function annotateStaging(
   staged,
-  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null, soulBaseline = "", measuredChanges = null, workspace = null } = {},
+  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null, soulBaseline = "", soulSnapshot = "", soulSha256 = "", measuredChanges = null, workspace = null } = {},
 ) {
   const workspaceChanges = Array.isArray(measuredChanges) ? measuredChanges : [];
   const provenanceWorkspace = workspace ? String(workspace).split("/").slice(-1)[0] || "synthesis-workspace" : "synthesis-workspace";
@@ -332,9 +341,20 @@ export async function annotateStaging(
   let annotatePrompt;
   let prefaceFile = null;
   let annotateFile = null;
+  let resolvedSoulSnapshot = String(soulSnapshot || soulBaseline || "");
+  let resolvedSoulSha256 = String(soulSha256 || "");
+  if (!resolvedSoulSnapshot.trim() || !resolvedSoulSha256.trim()) {
+    try {
+      const snap = readSoulSnapshot(null);
+      if (!resolvedSoulSnapshot.trim()) resolvedSoulSnapshot = snap.text;
+      if (!resolvedSoulSha256.trim()) resolvedSoulSha256 = snap.sha256;
+    } catch (err) {
+      return fail(`${err?.message || err}; refusing annotation without the active baseline`);
+    }
+  }
   try {
     prefacePrompt = renderAnnotatePreface(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}) });
-    annotatePrompt = renderAnnotatePrompt(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}), ledger, evidenceIndex });
+    annotatePrompt = renderAnnotatePrompt(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}), ledger, evidenceIndex, soulSnapshot: resolvedSoulSnapshot, soulSha256: resolvedSoulSha256 });
   } catch (err) {
     return fail(`annotate prompt render failed (${err?.message || err})`);
   }

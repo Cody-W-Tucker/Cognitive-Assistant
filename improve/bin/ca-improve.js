@@ -5,6 +5,7 @@ import { discoverTranscripts } from "../src/discovery.js";
 import { runPipeline } from "../src/pipeline.js";
 import { runSynthesizeResume } from "../src/synthesize-resume.js";
 import { defaultStateDir } from "../src/state.js";
+import { defaultSoulPath } from "../src/soul.js";
 import { startTuiProcess } from "../src/tui.js";
 
 function flagValue(args, name) {
@@ -51,7 +52,7 @@ async function main() {
     const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
     const since = flagValue(rest, "--since") || "30d";
     const analyzer = flagValue(rest, "--analyzer") || "acpx";
-    const soulPath = flagValue(rest, "--soul-path") || null;
+    const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
     const posturePath = flagValue(rest, "--posture-path") || null;
     const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
     const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
@@ -82,7 +83,7 @@ async function main() {
   if (command === "synthesize") {
     const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
     const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
-    const soulPath = flagValue(rest, "--soul-path") || null;
+    const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
     const runId = flagValue(rest, "--run-id") || null;
     return runSynthesizeResume({
       stateDir,
