@@ -177,10 +177,14 @@ export async function runPipeline({
   consolidateInvoke = null,
   synthesizeInvoke = null,
   annotateInvoke = null,
+  progress = null,
 } = {}) {
+  const emit = (event, data = {}) => progress?.(event, data);
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+  emit("discover:start", { harnesses: harnesses || ["hermes", "pi", "claude", "codex", "opencode"] });
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
+  emit("discover:done", { transcripts: discovery.transcripts.length, perHarness: discovery.perHarness });
   const traces = await collectTraces(discovery.transcripts);
   if (analyzer !== "mock" && !analyzeInvoke) {
     // Real production run path only: fail fast before trace analysis when
@@ -189,6 +193,8 @@ export async function runPipeline({
     assertAcpxAvailable();
   }
   const invoke = analyzeInvoke || (analyzer === "mock" ? mockInvoke : undefined);
+  const pending = traces.length;
+  emit("analyze:start", { total: discovery.transcripts.length, pending, cached: 0, analyzer });
   const records = analyzeTraces(traces, {
     ...(invoke ? { invoke } : {}),
     stateDir,
@@ -198,10 +204,24 @@ export async function runPipeline({
     experienceRoot,
     promptsDir,
   });
+  let completed = 0;
   for (const record of records) {
     writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
+    completed += 1;
+    emit("analyze:tick", {
+      done: completed,
+      ok: records.slice(0, completed).filter((item) => item.status === "ok").length,
+      failed: records.slice(0, completed).filter((item) => item.status !== "ok").length,
+    });
   }
+  emit("analyze:done", {
+    done: completed,
+    ok: records.filter((record) => record.status === "ok").length,
+    failed: records.filter((record) => record.status !== "ok").length,
+    cached: Math.max(discovery.transcripts.length - records.length, 0),
+  });
   const recurrenceRecords = readEvidenceRecords(stateDir);
+  emit("fold:start");
   const folded = foldEvidence(recurrenceRecords, { minGapEvidence });
   // Consolidation is acpx-only when >=2 eligible gaps exist; the mock
   // analyzer keeps deterministic lexical identity with a visible note.
@@ -213,6 +233,10 @@ export async function runPipeline({
     minGapEvidence,
   });
   const ledger = consolidation.ledger;
+  emit("fold:done", {
+    clusters: ledger.clusters.length,
+    eligible: ledger.clusters.filter((cluster) => cluster.eligible).length,
+  });
   writeJson(path.join(stateDir, "ledger.json"), ledger);
   const evidenceIndex = new Map(recurrenceRecords.map((r) => [r.transcriptId, r.positive || []]));
   const soulBaseline = readSoulBaseline(soulPath);
@@ -246,6 +270,7 @@ export async function runPipeline({
     synthesisNote = out.note || "";
   }
   const notes = [runNote, synthesisNote].filter(Boolean);
+  emit("synthesize:start");
   // Staged change plan: synth output is never final. Stage narrow plans
   // deterministically, measure with stable change ids/deltas + provisional
   // intent/eligible context, annotate via fresh preface->annotate
@@ -337,6 +362,12 @@ export async function runPipeline({
     },
   };
   writeJson(path.join(stateDir, "proposal.json"), proposal);
+  emit("synthesize:done", {
+    staged: staged.length,
+    annotated: annOut.annotated ? annOut.annotated.length : 0,
+    edits: finalEdits.length,
+    note: annotateNote || synthesisNote,
+  });
   const previousCheckpoint = readSessionCheckpoint(stateDir);
   const processed = { ...previousCheckpoint.processed };
   const successfulIds = new Set(records.filter((record) => record.status === "ok").map((record) => record.transcriptId));

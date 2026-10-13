@@ -281,11 +281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        print("collect samples")
-        print("calculate loss")
-        print("aggregate gradients")
-        print("gradient descent")
-        proposal = improve_runtime.run_headless(
+        proposal = improve_runtime.run_tui(
             home=home,
             cwd=Path.cwd(),
             state_dir=args.state_dir,

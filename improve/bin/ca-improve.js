@@ -4,6 +4,7 @@
 import { discoverTranscripts } from "../src/discovery.js";
 import { runPipeline } from "../src/pipeline.js";
 import { defaultStateDir } from "../src/state.js";
+import { startTui } from "../src/tui.js";
 
 function flagValue(args, name) {
   const index = args.indexOf(name);
@@ -35,8 +36,14 @@ async function main() {
     }
   }
   if (command === "run") {
-    if (!rest.includes("--headless")) {
-      process.stderr.write("ca-improve run: only --headless is supported in this slice\n");
+    const headless = rest.includes("--headless");
+    const tuiRequested = rest.includes("--tui");
+    if (!headless && !tuiRequested) {
+      process.stderr.write("ca-improve run: pass --headless (JSON only) or --tui (live stderr progress + JSON stdout)\n");
+      return 2;
+    }
+    if (headless && tuiRequested) {
+      process.stderr.write("ca-improve run: --headless and --tui are mutually exclusive\n");
       return 2;
     }
     const home = flagValue(rest, "--home") || undefined;
@@ -47,6 +54,7 @@ async function main() {
     const posturePath = flagValue(rest, "--posture-path") || null;
     const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
     const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
+    const tui = tuiRequested ? startTui({ since, analyzer }) : null;
     return runPipeline({
       home: home || undefined,
       stateDir,
@@ -56,12 +64,15 @@ async function main() {
       soulPath,
       posturePath,
       minGapEvidence,
+      progress: tui ? tui.event.bind(tui) : null,
     }).then(
       (proposal) => {
+        tui?.stop();
         console.log(JSON.stringify(proposal));
         return 0;
       },
       (err) => {
+        tui?.stop();
         process.stderr.write(`ca-improve run: ${err?.stack || err?.message || err}\n`);
         return 1;
       },

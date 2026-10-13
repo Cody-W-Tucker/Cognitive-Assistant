@@ -129,6 +129,33 @@ def run_headless(
     return json.loads(proc.stdout)
 
 
+def run_tui(
+    *,
+    home: Path,
+    cwd: Path,
+    state_dir: Optional[Path] = None,
+    since: str = "30d",
+    analyzer: str = "acpx",
+    soul_path: Optional[Path] = None,
+    min_gap_evidence: int = 2,
+) -> Dict:
+    """Run live stderr progress while preserving stdout's one JSON proposal."""
+    resolved_state = state_dir or default_state_dir()
+    cmd = [
+        node_bin(), str(RUNTIME_BIN), "run", "--tui", "--home", str(home),
+        "--state-dir", str(resolved_state), "--since", since, "--analyzer", analyzer,
+        "--min-gap-evidence", str(min_gap_evidence),
+    ]
+    if soul_path is not None:
+        cmd.extend(["--soul-path", str(soul_path)])
+    # Inherit stderr: the Node view must paint the actual terminal. stdout is
+    # captured solely for the proposal handoff to the Python review route.
+    proc = subprocess.run(cmd, cwd=str(cwd), stdout=subprocess.PIPE, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError("ca-improve TUI run failed")
+    return json.loads(proc.stdout)
+
+
 def read_proposal(state_dir: Path) -> Dict:
     """Read the headless proposal from private state, or raise."""
     proposal_path = state_dir / "proposal.json"

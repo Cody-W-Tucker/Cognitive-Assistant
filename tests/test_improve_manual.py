@@ -29,7 +29,7 @@ class TestImproveRunRoutes(unittest.TestCase):
 
         argv = ["improve-run"]
         with mock.patch(
-            "core.improve.run_headless", return_value=_fake_proposal()
+            "core.improve.run_tui", return_value=_fake_proposal()
         ) as run_mock, mock.patch(
             "core.improve.apply"
         ) as apply_mock, mock.patch(
@@ -45,13 +45,7 @@ class TestImproveRunRoutes(unittest.TestCase):
         # Uses the exact existing CA JS pipeline/state/proposal path.
         run_mock.assert_called_once()
         combined = stdout.getvalue() + stderr.getvalue()
-        for label in (
-            "collect samples",
-            "calculate loss",
-            "aggregate gradients",
-            "gradient descent",
-        ):
-            self.assertIn(label, combined)
+        self.assertIn("proposal p1", combined)
         self.assertIn("review", combined.lower())
         self.assertIn("improve-apply", combined)
         apply_mock.assert_not_called()
