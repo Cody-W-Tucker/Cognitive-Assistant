@@ -16,7 +16,7 @@ import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
-import { initStateDir, writeJson } from "./state.js";
+import { checkpointKey, initStateDir, readSessionCheckpoint, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
   const events = [];
@@ -336,10 +336,18 @@ export async function runPipeline({
     },
   };
   writeJson(path.join(stateDir, "proposal.json"), proposal);
+  const previousCheckpoint = readSessionCheckpoint(stateDir);
+  const processed = { ...previousCheckpoint.processed };
+  const successfulIds = new Set(records.filter((record) => record.status === "ok").map((record) => record.transcriptId));
+  for (const transcript of discovery.transcripts) {
+    if (successfulIds.has(transcript.id)) processed[checkpointKey(transcript)] = transcript.mtimeMs ?? null;
+  }
   writeJson(path.join(stateDir, "cursor.json"), {
+    version: 2,
     lastRun: proposal.createdAt,
     lastProposalId: proposal.id,
-    analyzedIds: records.map((r) => r.transcriptId).sort(),
+    analyzedIds: Object.keys(processed).sort(),
+    processed,
     perHarness: discovery.perHarness,
   });
   return proposal;

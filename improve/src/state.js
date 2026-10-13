@@ -30,3 +30,23 @@ export function readJson(file) {
     return null;
   }
 }
+
+/** A session id is only unique inside one harness store. */
+export function checkpointKey(transcript) {
+  return `${String(transcript.harness)}:${String(transcript.id)}`;
+}
+
+/**
+ * Read the durable successful-analysis checkpoint. Version 1 cursor files
+ * contained only raw ids; retain those as a conservative migration fallback.
+ */
+export function readSessionCheckpoint(stateDir) {
+  const cursor = readJson(path.join(stateDir, "cursor.json")) || {};
+  const processed = cursor.version === 2 && cursor.processed && typeof cursor.processed === "object"
+    ? cursor.processed
+    : {};
+  const legacyIds = cursor.version === 2
+    ? new Set()
+    : new Set(Array.isArray(cursor.analyzedIds) ? cursor.analyzedIds.map(String) : []);
+  return { processed, legacyIds };
+}

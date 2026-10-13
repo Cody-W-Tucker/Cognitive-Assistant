@@ -12,6 +12,7 @@ import path from "node:path";
 import os from "node:os";
 
 import { HEAD_BYTES, headHasSelfSentinel } from "./sentinel.js";
+import { checkpointKey, readSessionCheckpoint } from "./state.js";
 
 /** Harnesses this slice discovers (Pi is excluded; Pi stays valid only as an ACPX agent option). */
 export const SUPPORTED_HARNESSES = ["hermes", "claude", "codex", "opencode"];
@@ -153,7 +154,7 @@ function headerId(harness, header, file) {
 function discoverFiles({ harness, roots, stateDir, cutoff }) {
   const stats = { scanned: 0, matched: 0, self: 0, error: null };
   const transcripts = [];
-  const seen = readSeenIds(stateDir);
+  const seen = readSeenSessions(stateDir);
   let anyRoot = false;
   for (const root of roots) {
     if (!statOrNull(root)?.isDirectory()) continue;
@@ -171,15 +172,16 @@ function discoverFiles({ harness, roots, stateDir, cutoff }) {
         continue;
       }
       const transcriptId = headerId(harness, read.header, file);
-      if (seen.has(String(transcriptId))) continue;
-      transcripts.push({
+      const transcript = {
         harness,
         id: transcriptId,
         cwd,
         path: file,
         mtimeMs: Math.round(stat.mtimeMs),
         self: false,
-      });
+      };
+      if (alreadyProcessed(seen, transcript)) continue;
+      transcripts.push(transcript);
       stats.matched += 1;
     }
   }
@@ -333,23 +335,23 @@ function toMs(epochSeconds) {
   return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
 }
 
-function readSeenIds(stateDir) {
-  if (!stateDir) return new Set();
-  try {
-    const raw = fs.readFileSync(path.join(stateDir, "cursor.json"), "utf8");
-    const parsed = JSON.parse(raw);
-    const ids = parsed?.analyzedIds;
-    if (Array.isArray(ids)) return new Set(ids.map(String));
-  } catch {
-    // no cursor yet: everything is fresh
-  }
-  return new Set();
+function readSeenSessions(stateDir) {
+  if (!stateDir) return { processed: {}, legacyIds: new Set() };
+  return readSessionCheckpoint(stateDir);
+}
+
+function alreadyProcessed(seen, transcript) {
+  const prior = seen.processed[checkpointKey(transcript)];
+  // Timestamp-less session rows have no reliable mutation signal, so their
+  // durable identity is the cursor. Other records re-enter only on revision.
+  if (prior !== undefined) return prior === transcript.mtimeMs || prior === null;
+  return seen.legacyIds.has(String(transcript.id));
 }
 
 function discoverSqliteKind({ harness, dbPath, stateDir, cutoff = 0, seenIds = null, list }) {
   const stats = { scanned: 0, matched: 0, self: 0, error: null };
   const transcripts = [];
-  const seen = seenIds instanceof Set ? seenIds : readSeenIds(stateDir);
+  const seen = seenIds instanceof Set ? { processed: {}, legacyIds: seenIds } : readSeenSessions(stateDir);
   if (!statOrNull(dbPath)?.isFile()) {
     stats.error = "store missing";
     return { transcripts, stats };
@@ -367,7 +369,7 @@ function discoverSqliteKind({ harness, dbPath, stateDir, cutoff = 0, seenIds = n
     const rows = list(db);
     for (const row of rows) {
       stats.scanned += 1;
-      if (seen.has(String(row.id))) continue;
+
       // --since applies only where the committed schema carries a timestamp
       // (OpenCode time_created/time_updated; Hermes updated_at/created_at or
       // time_* aliases). Rows without temporal columns keep mtimeMs null and
@@ -377,14 +379,16 @@ function discoverSqliteKind({ harness, dbPath, stateDir, cutoff = 0, seenIds = n
         stats.self += 1;
         continue;
       }
-      transcripts.push({
+      const transcript = {
         harness,
         id: String(row.id),
         cwd: row.cwd || null,
         db: dbPath,
         mtimeMs: row.mtimeMs,
         self: false,
-      });
+      };
+      if (alreadyProcessed(seen, transcript)) continue;
+      transcripts.push(transcript);
       stats.matched += 1;
     }
   } catch (err) {

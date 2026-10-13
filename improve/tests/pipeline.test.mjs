@@ -59,6 +59,38 @@ function finalAnnotationForPlan(plan, ledger, evidenceIndex) {
 }
 
 describe("pipeline production wiring (injectable invokes, no real acpx)", () => {
+  it("keeps successful session checkpoints across runs and analyzes only a newly discovered session", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    let analysisCalls = 0;
+    const analyzeInvoke = () => {
+      analysisCalls += 1;
+      return { status: "ok", evidence: gapEvidence() };
+    };
+    const options = {
+      home,
+      stateDir,
+      analyzer: "mock",
+      analyzeInvoke,
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+    };
+
+    await runPipeline(options);
+    assert.equal(analysisCalls, 2, "first run analyzes both discovered sessions");
+
+    await runPipeline(options);
+    assert.equal(analysisCalls, 2, "second run does not reanalyze successful sessions");
+
+    const sessions = path.join(home, ".codex", "sessions");
+    fs.writeFileSync(
+      path.join(sessions, "2026-01-03T00-00-00Z.jsonl"),
+      `${JSON.stringify({ role: "user", text: "new session after checkpoint" })}\n`,
+      "utf8",
+    );
+    await runPipeline(options);
+    assert.equal(analysisCalls, 3, "the checkpoint retains prior sessions and admits only the new one");
+  });
+
   it("production success persists prompts + proposal notes with injected invokes (annotate owns finals)", async () => {
     const home = homeWithTranscripts(2);
     const stateDir = tmpDir();
