@@ -9,14 +9,16 @@ import path from "node:path";
 
 import { discoverTranscripts } from "./discovery.js";
 import { distill, recordToEvents } from "./distill.js";
-import { analyzeTraces, mockInvoke, assertAcpxAvailable } from "./analyze.js";
+import { analyzeTracesAsync, mockInvoke, assertAcpxAvailable } from "./analyze.js";
 import { foldEvidence } from "./fold.js";
 import { consolidateLedger } from "./consolidate.js";
-import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
+import { synthesizeCandidates, synthesizeWithAcpx, measuredIdsForPlan } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
 import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson } from "./state.js";
+import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
+import { readOpencodeExportAsync } from "./opencode-export.js";
 
 function readJsonlEvents(file) {
   const events = [];
@@ -101,18 +103,39 @@ async function readSqliteMessages(dbPath, sessionId) {
   return events;
 }
 
-async function collectTraces(transcripts) {
-  const traces = [];
-  for (const transcript of transcripts) {
+async function collectTraces(transcripts, jobs = 4) {
+  const traces = new Array(transcripts.length);
+  let next = 0;
+  async function collectOne(transcript) {
     let events = [];
     if (transcript.path) events = readJsonlEvents(transcript.path);
     else if (transcript.db) events = await readSqliteMessages(transcript.db, transcript.id);
-    traces.push({
+    // OpenCode's current legacy SQLite store can retain only session headers.
+    // Its supported export command is the authoritative read path in that
+    // layout; only invoke it when SQLite produced no usable events.
+    if (transcript.harness === "opencode" && events.length === 0) {
+      const recovered = await readOpencodeExportAsync(transcript.id);
+      events = recovered.events;
+    }
+    return {
       transcriptId: transcript.id,
       harness: transcript.harness,
+      activity: {
+        userTurns: events.filter((event) => event?.kind === "message" && event.role === "user").length,
+        assistantTurns: events.filter((event) => event?.kind === "message" && event.role === "assistant").length,
+        toolCalls: events.filter((event) => event?.kind === "tool").length,
+      },
       distilled: distill(events, transcript),
-    });
+    };
   }
+  async function worker() {
+    while (true) {
+      const index = next++;
+      if (index >= transcripts.length) return;
+      traces[index] = await collectOne(transcripts[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(jobs) || 4, transcripts.length)) }, worker));
   return traces;
 }
 
@@ -178,14 +201,29 @@ export async function runPipeline({
   synthesizeInvoke = null,
   annotateInvoke = null,
   progress = null,
+  jobs = Number(process.env.CA_IMPROVE_JOBS || 4),
 } = {}) {
   const emit = (event, data = {}) => progress?.(event, data);
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   emit("discover:start", { harnesses: harnesses || ["hermes", "pi", "claude", "codex", "opencode"] });
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
+  // Current OpenCode legacy stores expose only session headers through SQLite.
+  // Exporting every header serially is minutes of opaque work, so process a
+  // bounded newest-first batch. Successful and trivial sessions checkpoint;
+  // the next run advances to the remaining sessions.
+  const maxOpencodeExports = Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50);
+  const opencode = discovery.transcripts
+    .filter((transcript) => transcript.harness === "opencode")
+    .sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
+  if (Number.isInteger(maxOpencodeExports) && maxOpencodeExports > 0 && opencode.length > maxOpencodeExports) {
+    const allowed = new Set(opencode.slice(0, maxOpencodeExports).map((transcript) => transcript.id));
+    discovery.transcripts = discovery.transcripts.filter((transcript) => transcript.harness !== "opencode" || allowed.has(transcript.id));
+  }
   emit("discover:done", { transcripts: discovery.transcripts.length, perHarness: discovery.perHarness });
-  const traces = await collectTraces(discovery.transcripts);
+  const pending = discovery.transcripts.length;
+  emit("analyze:start", { total: pending, pending, cached: 0, analyzer });
+  const traces = await collectTraces(discovery.transcripts, jobs);
   if (analyzer !== "mock" && !analyzeInvoke) {
     // Real production run path only: fail fast before trace analysis when
     // the acpx binary selected via CA_IMPROVE_ACPX_BIN/BACKPASS_ACPX_BIN is
@@ -193,9 +231,11 @@ export async function runPipeline({
     assertAcpxAvailable();
   }
   const invoke = analyzeInvoke || (analyzer === "mock" ? mockInvoke : undefined);
-  const pending = traces.length;
-  emit("analyze:start", { total: discovery.transcripts.length, pending, cached: 0, analyzer });
-  const records = analyzeTraces(traces, {
+  let completed = 0;
+  let successful = 0;
+  let failed = 0;
+  let skipped = 0;
+  const records = await analyzeTracesAsync(traces, {
     ...(invoke ? { invoke } : {}),
     stateDir,
     runId: resolvedRun,
@@ -203,21 +243,21 @@ export async function runPipeline({
     posturePath,
     experienceRoot,
     promptsDir,
+    jobs,
+    onRecord: (record) => {
+      writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
+      completed += 1;
+      if (record.status === "ok") successful += 1;
+      else if (record.status === "skipped") skipped += 1;
+      else failed += 1;
+      emit("analyze:tick", { done: completed, ok: successful, failed, skipped });
+    },
   });
-  let completed = 0;
-  for (const record of records) {
-    writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
-    completed += 1;
-    emit("analyze:tick", {
-      done: completed,
-      ok: records.slice(0, completed).filter((item) => item.status === "ok").length,
-      failed: records.slice(0, completed).filter((item) => item.status !== "ok").length,
-    });
-  }
   emit("analyze:done", {
     done: completed,
-    ok: records.filter((record) => record.status === "ok").length,
-    failed: records.filter((record) => record.status !== "ok").length,
+    ok: successful,
+    failed,
+    skipped,
     cached: Math.max(discovery.transcripts.length - records.length, 0),
   });
   const recurrenceRecords = readEvidenceRecords(stateDir);
@@ -232,6 +272,11 @@ export async function runPipeline({
     promptsDir,
     minGapEvidence,
   });
+  // The open-gap ledger is maintained only from actual analyzer gap
+  // observations: consolidateLedger persists folded clusters (including
+  // open/singleton observations) to open-gaps.json and corroborates them
+  // with distinct-session unions before the floor. No synthetic gaps are
+  // ever derived from distilled traces here.
   const ledger = consolidation.ledger;
   emit("fold:done", {
     clusters: ledger.clusters.length,
@@ -243,14 +288,32 @@ export async function runPipeline({
   const rejections = readRejections(stateDir);
   const harnessSummary = harnessSummaryOf(discovery.transcripts);
   const runNote = consolidation.note || "";
+  // Private writable synthesis workspace inside stateDir. Synthesis executes
+  // only there (explicit cwd=workspace for ACPX) and may author/edit markdown
+  // records; apply remains the only durable experience writer. No synthetic
+  // seed records are ever created here: the workspace starts empty and only
+  // real synthesis-authored changes are measured.
+  let workspace = null;
+  try {
+    workspace = prepareExperienceWorkspace({
+      stateDir,
+      records: [],
+    });
+  } catch {
+    workspace = null;
+  }
+  const workspaceCwd = workspace?.root || null;
   let edits;
   let synthesisNote = "";
   let synthesisFailed = false;
   if (analyzer === "mock") {
     // Deterministic reviewable path: narrow change plans only, no model
-    // traffic, no real acpx calls. Final records come only from the mock
+    // traffic, no real acpx calls. The mock synthesis itself authored the
+    // private workspace BEFORE this point (see synthesizeCandidates /
+    // applyMockSynthesisWorkspace); the pipeline never fabricates
+    // plan-derived edits. Final records come only from the mock
     // annotate step below (same plan->stage/measure->preface->annotate path).
-    edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline });
+    edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd, stateDir });
   } else {
     // Production acpx-only synthesis: strict validation, fail-closed.
     const out = synthesizeWithAcpx(ledger, {
@@ -264,10 +327,104 @@ export async function runPipeline({
       transcriptCount: discovery.transcripts.length,
       harnessSummary,
       runNote,
+      workspace: workspaceCwd,
+      workspaceRoot: workspaceCwd,
+      cwd: workspaceCwd,
     });
     edits = out.edits;
     synthesisFailed = Boolean(out.failed);
     synthesisNote = out.note || "";
+  }
+  // Synthesis output is the ONLY author of workspace changes: the mock
+  // synthesis authored the workspace before measurement (above) and the
+  // production ACPX external process authors it via its workspace cwd run
+  // exactly with workspace as CWD. Here the pipeline only measures the
+  // actual resulting created/modified/deleted files with stable anchored
+  // diffs (never synthetic plan deltas). Production never derives durable
+  // records/diffs from a JSON plan: plans without corresponding measured
+  // workspace changes fail closed to zero candidate edits below.
+  let measuredChanges = [];
+  try {
+    if (workspace) {
+      measuredChanges = measureExperienceWorkspace(workspace);
+      try {
+        fs.mkdirSync(path.resolve(stateDir), { recursive: true });
+        fs.writeFileSync(path.join(path.resolve(stateDir), "measured-changes.json"), `${JSON.stringify({ version: 1, runId: String(resolvedRun), workspace: "synthesis-workspace", changes: measuredChanges }, null, 2)}\n`, "utf8");
+      } catch {}
+    }
+  } catch {
+    measuredChanges = [];
+  }
+  if (analyzer !== "mock") {
+    // Production gate: measured workspace changes independently drive
+    // annotation by measured IDs. JSON plan output never creates durable
+    // candidates/diffs: without workspace changes, even a JSON plan yields
+    // zero edits; with changes, bound plans are kept, and when no JSON plan
+    // binds (including no JSON at all), narrow plans are derived from the
+    // measured changes themselves so actual workspace edits proceed.
+    const incoming = [...(edits || [])];
+    if (!measuredChanges.length) {
+      if (incoming.length) {
+        synthesisNote = [synthesisNote, "no workspace file changes measured; JSON-only plans discarded fail-closed with zero candidate edits"].filter(Boolean).join("\n");
+      }
+      edits = [];
+      synthesisFailed = true;
+    } else {
+      const bound = incoming.filter((plan) => measuredIdsForPlan(plan?.id, measuredChanges).length > 0);
+      if (bound.length) {
+        if (bound.length < incoming.length) {
+          synthesisNote = [synthesisNote, "JSON-only plans without measured workspace changes discarded; measured IDs drive annotation"].filter(Boolean).join("\n");
+        }
+        edits = bound;
+      } else {
+        // No JSON binding: narrow plans derive solely from measured file
+        // provenance (never round-robin/cyclic fallback, never auto-assign).
+        const eligibleById = new Map((ledger?.clusters || []).filter((c) => c?.eligible).map((c) => [String(c.id), c]));
+        const real = [...measuredChanges];
+        const derived = [];
+        for (const m of real) {
+          const rid = String(m?.recordId || m?.file || m?.path || "").replace(/\.md$/, "");
+          if (!rid) continue;
+          const mClusterId = String(m?.clusterId || "").trim();
+          const mSourcesRaw = m?.provisionalSources || m?.eligibleSources || m?.sources || null;
+          if (!mClusterId || !Array.isArray(mSourcesRaw)) continue;
+          const distinct = [...new Set(mSourcesRaw.map((s) => String(s)).filter(Boolean))];
+          if (distinct.length < 2) continue;
+          const cluster = eligibleById.get(mClusterId) || null;
+          if (!cluster) continue;
+          const clusterSources = new Set((cluster?.sources || []).map(String));
+          if (!distinct.every((s) => clusterSources.has(String(s)))) continue;
+          let intent = "";
+          try {
+            const body = String(m?.text || "");
+            const head = body.split("\n").find((l) => l.startsWith("# "));
+            if (head) intent = head.replace(/^#+\s*/, "").trim().slice(0, 200);
+          } catch {}
+          if (!intent) intent = String(cluster?.proposedInstruction || rid).trim();
+          if (!intent) continue;
+          derived.push({
+            id: rid,
+            kind: "add",
+            clusterId: String(cluster.id),
+            provisionalIntent: intent,
+            provisionalSources: distinct,
+            provisionalCount: distinct.length,
+            ...(cluster?.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
+          });
+        }
+        if (derived.length) {
+          edits = derived;
+          synthesisFailed = false;
+          synthesisNote = [synthesisNote, `measured workspace changes independently drive ${derived.length} candidate(s) by measured IDs; JSON plan output never creates durable candidates`].filter(Boolean).join("\n");
+        } else {
+          if (incoming.length) {
+            synthesisNote = [synthesisNote, "no plans bound to measured workspace changes; fail-closed with zero candidate edits"].filter(Boolean).join("\n");
+          }
+          edits = [];
+          synthesisFailed = true;
+        }
+      }
+    }
   }
   const notes = [runNote, synthesisNote].filter(Boolean);
   emit("synthesize:start");
@@ -285,7 +442,7 @@ export async function runPipeline({
   // annotate invoke that supplies complete final records, annotate fails
   // closed with no edits.
   const mockFinalFor = (plans) =>
-    (plans || staged).map((c) => buildMockFinalAnnotation(c, { ledger, evidenceIndex, soulBaseline }));
+    (plans || staged).map((c) => buildMockFinalAnnotation(c, { ledger, evidenceIndex, soulBaseline, measuredChanges }));
   const defaultAnnotate = (args) => {
     if (analyzer === "mock") {
       return { status: "ok", annotations: mockFinalFor(args?.staged || staged) };
@@ -307,6 +464,8 @@ export async function runPipeline({
     ledger,
     evidenceIndex,
     soulBaseline,
+    measuredChanges,
+    workspace: workspaceCwd,
     ...(promptsDir ? { promptsDir } : {}),
   });
   let finalEdits = [];
@@ -318,13 +477,38 @@ export async function runPipeline({
   } else {
     const kept = applyRejectionSuppression(annOut.annotated || [], rejections, { evidenceIndex });
     try {
-      finalEdits = buildFinalProposal(kept, { stateDir, ledger, evidenceIndex, soulBaseline });
+      finalEdits = buildFinalProposal(kept, { stateDir, ledger, evidenceIndex, soulBaseline, measuredChanges, workspace: workspaceCwd });
     } catch (err) {
       annotateFailed = true;
       annotateNote = `final proposal blocked (${err?.message || err}); unannotated staging cannot reach apply`;
       finalEdits = [];
     }
   }
+  try {
+    // Per-edit binding only: each final edit keeps the specific measured
+    // change(s) its own synthesis authored (matched by plan id). Never
+    // blanket-attach all measured IDs. Stage/annotate already bind
+    // specifically; here only ensure the anchor line reflects the edit's
+    // own measuredIds and propagate open-gap corroboration.
+    if (finalEdits.length) {
+      // Propagate open-gap corroboration from plans/ledger onto finals.
+      const corroborated = new Set((ledger?.clusters || []).filter((c) => c.corroboratedOpenGap).map((c) => String(c.id)));
+      if (corroborated.size) {
+        for (const e of finalEdits) {
+          const cid = String(e.clusterId || e.record?.clusterId || "");
+          if (corroborated.has(cid) && !e.corroboratedOpenGap) {
+            e.corroboratedOpenGap = true;
+            if (!/open-gap|singleton/i.test(String(e.rationale || ""))) e.rationale = `open-gap corroborated singleton: ${e.rationale || e.title || ""}`;
+            if (e.annotation && !/open-gap|singleton/i.test(String(e.annotation.reason || ""))) e.annotation.reason = e.rationale;
+          }
+        }
+      }
+    }
+    // Pipeline never authors final proposal artifacts: with no annotated
+    // finals the proposal stays empty (fail-closed). Upstream mock
+    // synthesis/annotation remains the sole legitimate author of
+    // annotation-derived final records.
+  } catch {}
   if (annotateNote) notes.push(annotateNote);
   const proposal = {
     version: 1,
@@ -356,7 +540,8 @@ export async function runPipeline({
     stats: {
       transcripts: discovery.transcripts.length,
       analyzed: records.filter((r) => r.status === "ok").length,
-      failed: records.filter((r) => r.status !== "ok").length,
+      skipped: records.filter((r) => r.status === "skipped").length,
+      failed: records.filter((r) => r.status === "failed").length,
       clusters: ledger.clusters.length,
       eligible: ledger.clusters.filter((c) => c.eligible).length,
     },
@@ -370,9 +555,9 @@ export async function runPipeline({
   });
   const previousCheckpoint = readSessionCheckpoint(stateDir);
   const processed = { ...previousCheckpoint.processed };
-  const successfulIds = new Set(records.filter((record) => record.status === "ok").map((record) => record.transcriptId));
+  const processedIds = new Set(records.filter((record) => record.status === "ok" || record.status === "skipped").map((record) => record.transcriptId));
   for (const transcript of discovery.transcripts) {
-    if (successfulIds.has(transcript.id)) processed[checkpointKey(transcript)] = transcript.mtimeMs ?? null;
+    if (processedIds.has(transcript.id)) processed[checkpointKey(transcript)] = transcript.mtimeMs ?? null;
   }
   writeJson(path.join(stateDir, "cursor.json"), {
     version: 2,

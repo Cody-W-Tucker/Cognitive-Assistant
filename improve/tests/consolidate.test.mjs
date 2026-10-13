@@ -211,21 +211,85 @@ describe("review findings: provenance + eligible-only validation", () => {
     assert.equal(mc.mistake, "mistake-a");
   });
 
-  it("RED: merges validate only against eligible/open IDs shown in the prompt", () => {
+  it("RED: merges validate against every exact ID shown in the prompt (singletons included)", () => {
     const led = ledgerWith([
       cluster({ id: "g-a", sources: ["s1", "s2"], eligible: true }),
       cluster({ id: "g-b", sources: ["s3", "s4"], eligible: true }),
       cluster({ id: "g-x", sources: ["s9"], eligible: false }),
     ]);
-    assert.deepEqual(parseConsolidateResult({ merges: [["g-a", "g-x"]] }, led), []);
+    assert.deepEqual(parseConsolidateResult({ merges: [["g-a", "g-x"]] }, led), [["g-a", "g-x"]]);
     assert.deepEqual(parseConsolidateResult({ merges: [["g-a", "g-b"]] }, led), [["g-a", "g-b"]]);
+    assert.deepEqual(parseConsolidateResult({ merges: [["g-a", "g-nope"]] }, led), []);
+  });
+});
+
+describe("singleton actual gaps via consolidation merge (RED)", () => {
+  function singleton(overrides = {}) {
+    return cluster({
+      sources: ["s1"],
+      count: 1,
+      eligible: false,
+      ...overrides,
+    });
+  }
+
+  it("two distinct singleton actual gaps merged in the same run become eligible", () => {
+    const led = ledgerWith([
+      singleton({
+        id: "g-single-a",
+        proposedInstruction: "Bootstrap context once",
+        representativeQuote: "sessions re-derive project context from scratch",
+        mistake: "sessions re-derive project context from scratch",
+        sources: ["s1"],
+        perSource: { s1: { quote: "sessions re-derive project context from scratch", mistake: "m-a" } },
+      }),
+      singleton({
+        id: "g-single-b",
+        proposedInstruction: "Bootstrap context once",
+        representativeQuote: "sessions rebuild context every time",
+        mistake: "sessions rebuild context every time",
+        sources: ["s2"],
+        perSource: { s2: { quote: "sessions rebuild context every time", mistake: "m-b" } },
+      }),
+    ]);
+    let seenClusters = null;
+    let seenPrompt = null;
+    const out = consolidateLedger(led, {
+      invoke: (args) => {
+        seenClusters = args.clusters;
+        seenPrompt = args.prompt;
+        return { status: "ok", result: { merges: [["g-single-a", "g-single-b"]] } };
+      },
+      minGapEvidence: 2,
+    });
+    assert.ok(seenClusters, "consolidation must be submitted (not gated before ACPX)");
+    assert.equal(seenClusters.length, 2, "ALL open clusters must be submitted before eligibility gating");
+    assert.ok(seenPrompt.includes("g-single-a") && seenPrompt.includes("g-single-b"));
+    assert.equal(out.ledger.clusters.length, 1);
+    assert.deepEqual(out.ledger.clusters[0].sources, ["s1", "s2"]);
+    assert.equal(out.ledger.clusters[0].count, 2);
+    assert.ok(out.ledger.clusters[0].eligible, "merged distinct sessions reach the floor");
+    assert.equal(out.ledger.clusters[0].perSource.s1.quote, "sessions re-derive project context from scratch");
+    assert.equal(out.ledger.clusters[0].perSource.s2.quote, "sessions rebuild context every time");
+  });
+
+  it("parse validates against every exact cluster ID presented to the prompt", () => {
+    const led = ledgerWith([
+      singleton({ id: "g-single-a", sources: ["s1"] }),
+      singleton({ id: "g-single-b", sources: ["s2"] }),
+    ]);
+    assert.deepEqual(
+      parseConsolidateResult({ merges: [["g-single-a", "g-single-b"]] }, led),
+      [["g-single-a", "g-single-b"]],
+    );
+    assert.deepEqual(parseConsolidateResult({ merges: [["g-single-a", "g-nope"]] }, led), []);
   });
 });
 
 describe("consolidateLedger orchestration (acpx-only, fail-soft)", () => {
-  it("skips acpx when fewer than 2 eligible clusters (no invoke call)", () => {
+  it("skips acpx when fewer than 2 open clusters (no invoke call)", () => {
     let called = 0;
-    const led = ledgerWith([cluster({ id: "g-a", eligible: true }), cluster({ id: "g-b", eligible: false })]);
+    const led = ledgerWith([cluster({ id: "g-a", eligible: false, sources: ["s1"], count: 1 })]);
     const out = consolidateLedger(led, {
       invoke: () => {
         called += 1;

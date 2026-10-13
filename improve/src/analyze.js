@@ -13,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { renderPrompt } from "./prompts.js";
-import { runAcpxPromptFile } from "./acpx-text.js";
+import { runAcpxPromptFile, runAcpxPromptFileAsync } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
@@ -164,6 +164,23 @@ function safeName(text) {
   return clean || "unknown";
 }
 
+// Backpass's trivial-run gate, applied to CA's already-distilled trace. A
+// single-turn user sessions stay eligible when it has meaningful agent/tool
+// work; only genuinely tiny shells skip the ACPX call.
+export function distilledTraceStats(distilled) {
+  const text = String(distilled || "");
+  return {
+    userTurns: (text.match(/^## human\s*$/gm) || []).length,
+    assistantTurns: (text.match(/^## agent\s*$/gm) || []).length,
+    toolCalls: (text.match(/^- tool\s+/gm) || []).length,
+  };
+}
+
+export function isTrivialTrace(distilled) {
+  const { userTurns, assistantTurns, toolCalls } = distilledTraceStats(distilled);
+  return userTurns < 1 && assistantTurns < 4 && toolCalls < 3;
+}
+
 /**
  * Persist one rendered model prompt under private state (never the repo):
  * `<stateDir>/prompts/<runId>__<transcriptId|stage>.md` plus a `.json`
@@ -298,6 +315,7 @@ export function analyzeTraces(
     soulPath,
     posturePath,
     experienceRoot,
+    onRecord = null,
   } = {},
 ) {
   const merged = {
@@ -306,7 +324,19 @@ export function analyzeTraces(
   };
   const resolvedState = stateDir ? path.resolve(stateDir) : null;
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
-  return traces.map((trace) => {
+  const analyzeOne = (trace) => {
+    const activity = trace.activity || null;
+    if (activity && activity.userTurns < 1 && activity.assistantTurns < 4 && activity.toolCalls < 3) {
+      return {
+        transcriptId: trace.transcriptId,
+        harness: trace.harness,
+        status: "skipped",
+        error: `trivial session (${activity.userTurns} user turn(s), ${activity.assistantTurns} agent turn(s), ${activity.toolCalls} tool call(s))`,
+        positive: [],
+        negative: [],
+        gaps: [],
+      };
+    }
     const prompt = buildAnalysisPrompt(trace, merged, { promptsDir });
     let promptFile = null;
     if (resolvedState) {
@@ -351,5 +381,40 @@ export function analyzeTraces(
       negative: Array.isArray(evidence.negative) ? evidence.negative : [],
       gaps: Array.isArray(evidence.gaps) ? evidence.gaps : [],
     };
-  });
+  };
+  const records = [];
+  for (const trace of traces) {
+    const record = analyzeOne(trace);
+    records.push(record);
+    try {
+      onRecord?.(record);
+    } catch {
+      // Progress is observational only; a renderer cannot break analysis.
+    }
+  }
+  return records;
+}
+
+/** Async, bounded worker-pool form of analyzeTraces (Backpass jobs shape). */
+export async function analyzeTracesAsync(traces, options = {}) {
+  const { invoke = null, jobs = 4, onRecord = null, stateDir = null, runId = null, promptsDir, repoRoot, soulPath, posturePath, experienceRoot, contexts } = options;
+  const merged = { ...loadDefaultContexts({ repoRoot, soulPath, posturePath, experienceRoot }), ...(contexts || {}) };
+  const useInvoke = invoke || (async ({ promptFile }) => { const out = await runAcpxPromptFileAsync({ role: "analysis", promptFile, model: modelForRole("analysis"), timeoutSec: 180 }); return out.status === "ok" ? { status: "ok", evidence: out.result } : { status: "failed", error: out.error }; });
+  let next = 0;
+  const records = new Array(traces.length);
+  async function one(trace) {
+    const activity = trace.activity || distilledTraceStats(trace.distilled);
+    if (activity.userTurns < 1 && activity.assistantTurns < 4 && activity.toolCalls < 3) return { transcriptId: trace.transcriptId, harness: trace.harness, status: "skipped", error: `trivial session (${activity.userTurns} user turn(s), ${activity.assistantTurns} agent turn(s), ${activity.toolCalls} tool call(s))`, positive: [], negative: [], gaps: [] };
+    const prompt = buildAnalysisPrompt(trace, merged, { promptsDir });
+    let promptFile = null;
+    if (stateDir) { try { promptFile = persistPrompt(path.resolve(stateDir), { runId: runId || "run-unknown", transcriptId: trace.transcriptId, harness: trace.harness, prompt }); } catch {} }
+    let outcome;
+    try { outcome = await useInvoke({ trace, prompt, promptFile, contexts: merged, promptsDir }); } catch (err) { outcome = { status: "failed", error: err?.message || String(err) }; }
+    const evidence = outcome?.evidence;
+    const valid = outcome?.status === "ok" && evidence && Array.isArray(evidence.positive) && Array.isArray(evidence.negative) && Array.isArray(evidence.gaps) && (evidence.status === undefined || evidence.status === "ok");
+    return valid ? { transcriptId: trace.transcriptId, harness: trace.harness, status: "ok", positive: evidence.positive, negative: evidence.negative, gaps: evidence.gaps } : { transcriptId: trace.transcriptId, harness: trace.harness, status: "failed", error: outcome?.error || "analyzer failed", positive: [], negative: [], gaps: [] };
+  }
+  async function worker() { while (true) { const index = next++; if (index >= traces.length) return; const record = await one(traces[index]); records[index] = record; try { onRecord?.(record); } catch {} } }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(jobs) || 4, traces.length)) }, worker));
+  return records;
 }

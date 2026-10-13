@@ -14,6 +14,7 @@ The pipeline is invoked with `python -m core`.
 | `health-check` | profile | Validate prompts, provider configuration, and QMD availability. |
 | `improve-run` | global | Manual TTY route by default: prints `collect samples`, `calculate loss`, `aggregate gradients`, `gradient descent`, then directs review/apply; never applies/deploys. |
 | `improve-run --headless` | global | Headless improvement pass: discover/collect/distill/analyze/fold/synthesize into an XDG-state proposal; stdout is exactly one JSON object, no progress (status on stderr). |
+| `improve-synthesize` | global | Resume-only synthesis over persisted evidence/ledger: consolidate only if required, check floors, then fixed raw-stdout production synthesis -> workspace measure -> annotation -> fresh proposal JSON; never discovers/analyzes; absent/incomplete/corrupt state fails closed. |
 | `improve-apply` | global | Review gate for a proposal: the sole writer of experience records. |
 
 There is no `ingest-substrate` or `verify-alignment` command.
@@ -103,6 +104,28 @@ patches SOUL -- SOUL stays the read-only baseline, while
 `core/experience.py::compile_experience_block` (hooked into
 `prompt_creator.load_dataset_context`) compiles accepted staged
 experience into downstream builds.
+
+## Resume-only synthesis (`improve-synthesize`)
+
+`python -m core improve-synthesize --state-dir <dir> [--min-gap-evidence N] [--soul-path SOUL.md]`
+reuses persisted successful evidence (`state/evidence/*.json`) and the
+folded ledger (`state/ledger.json` + `state/open-gaps.json`) without any
+discovery, export, or ACPX analysis: no transcript discovery, no OpenCode
+export, no per-trace analyze. It consolidates only if required (the same
+`<2 gaps` skip / mock-free production path as `improve-run`), checks the
+eligibility/evidence floors (`>=min-gap-evidence` distinct sessions per
+eligible cluster), then runs fixed raw-stdout production synthesis
+(`synthesizeWithAcpx` with explicit `synthesis-workspace` cwd) ->
+workspace measure (`measured-changes.json`) -> fresh
+`annotate-preface` then `annotate` -> fresh reviewable `proposal.json`
+(`reviewed: false`, `appliedAt: null`). Absent/incomplete/corrupt state
+(zero ok evidence, missing `ledger.json`, non-array clusters, zero
+eligible clusters) fails closed with an actionable stderr error naming
+the state dir and the `improve-run --headless` rebuild step. Headless
+stdout is exactly one JSON proposal object; status goes to stderr only.
+Like `improve-run`, it never writes tracked repo files or live Hermes and
+never applies: `improve-apply` remains the sole durable experience
+writer.
 
 The Nix flake exposes `ca-improve` (headless package) and
 `nixosModules.ca-improve` (systemd **user** service + timer running the

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { initialState, reduceEvent, renderFrame, tuiEligible } from "../src/tui.js";
+import { initialState, reduceEvent, renderFrame, startTuiProcess, tuiEligible } from "../src/tui.js";
 
 describe("CA improvement live TUI", () => {
   it("uses the Backpass-shaped four-stage rail without touching JSON output", () => {
@@ -26,5 +26,18 @@ describe("CA improvement live TUI", () => {
     assert.equal(tuiEligible({ env: { TERM: "dumb" }, stderr: { isTTY: true, columns: 80 } }), false);
     assert.equal(tuiEligible({ env: { CI: "1" }, stderr: { isTTY: true, columns: 80 } }), false);
     assert.equal(tuiEligible({ env: {}, stderr: { isTTY: false, columns: 80 } }), false);
+  });
+
+  it("runs rendering in a separate event loop so synchronous ACPX calls cannot freeze it", () => {
+    const written = [];
+    let killed = false;
+    const child = { stdin: { write: (line) => written.push(line), end: () => written.push("END") }, kill: () => { killed = true; } };
+    const tui = startTuiProcess({ since: "30d" }, { env: { TERM: "xterm-256color" }, stderr: { isTTY: true, columns: 80 }, spawnFn: () => child });
+    tui.event("discover:start", { harnesses: ["codex"] });
+    tui.stop();
+    assert.match(written[0], /"type":"start"/);
+    assert.match(written[1], /"event":"discover:start"/);
+    assert.equal(written.at(-1), "END");
+    assert.equal(killed, false, "graceful stdin close lets the renderer erase itself");
   });
 });

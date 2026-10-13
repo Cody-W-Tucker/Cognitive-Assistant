@@ -12,7 +12,7 @@ import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
-import { validateCandidate, isSuppressedByRejection, renderStagedArtifact, renderDiff } from "./synthesize.js";
+import { validateCandidate, isSuppressedByRejection, isValidRecordId, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
 import { createHash } from "node:crypto";
 
@@ -36,7 +36,7 @@ function slugify(text) {
  * annotation deterministically so the pipeline stays reviewable with
  * zero model traffic.
  */
-export function buildMockFinalAnnotation(plan, { ledger, evidenceIndex = new Map(), soulBaseline = "" } = {}) {
+export function buildMockFinalAnnotation(plan, { ledger, evidenceIndex = new Map(), soulBaseline = "", measuredChanges = null, workspace = null } = {}) {
   void soulBaseline;
   const cluster = (ledger?.clusters || []).find((c) => String(c?.id) === String(plan?.clusterId));
   const sources = [...(plan?.provisionalSources || cluster?.sources || [])].map(String);
@@ -58,7 +58,7 @@ export function buildMockFinalAnnotation(plan, { ledger, evidenceIndex = new Map
   return {
     id: String(plan?.id),
     verdict: "keep",
-    reason: mistake || intent,
+    reason: plan?.corroboratedOpenGap ? `open-gap corroborated singleton: ${mistake || intent}` : mistake || intent,
     record: {
       id: recordId,
       title: intent,
@@ -85,12 +85,61 @@ function stagedSummary(list) {
     .join("\n");
 }
 
-function stagedCandidatesBlock(list) {
+function stagedCandidatesBlock(list, { ledger = null, evidenceIndex = null } = {}) {
   if (list.length === 0) return "(no staged change plans)";
+  const idx = evidenceIndex instanceof Map ? evidenceIndex : null;
+  const clustersById = new Map(((ledger && ledger.clusters) || []).map((c) => [String(c?.id), c]));
+  const MAX_SOURCES_PER_CANDIDATE = 8;
+  const MAX_QUOTES_PER_SOURCE = 2;
+  // Bounded whole-quote rendering policy: only complete unmodified quotes are
+  // ever emitted. Total prompt budget is enforced by skipping whole quotes,
+  // never by slicing/rewriting text (byte-for-byte contract).
+  const MAX_TOTAL_QUOTE_CHARS = 8000;
+  let budgetUsed = 0;
+  const allowedQuotesFor = (cluster, source) => {
+    const seen = new Set();
+    const out = [];
+    const push = (q) => {
+      if (typeof q !== "string") return;
+      const text = q;
+      if (!text || seen.has(text)) return;
+      seen.add(text);
+      if (out.length >= MAX_QUOTES_PER_SOURCE) return;
+      if (budgetUsed + text.length > MAX_TOTAL_QUOTE_CHARS) return;
+      budgetUsed += text.length;
+      out.push(text);
+    };
+    if (idx) {
+      for (const entry of idx.get(String(source)) || []) {
+        if (out.length >= MAX_QUOTES_PER_SOURCE) break;
+        if (entry && typeof entry.quote === "string") push(entry.quote);
+      }
+    }
+    const perQuote = cluster?.perSource?.[String(source)]?.quote;
+    if (out.length < MAX_QUOTES_PER_SOURCE && typeof perQuote === "string") push(perQuote);
+    return out;
+  };
   return list
     .map((c) => {
       const sources = c?.provisionalSources || [];
-      return `- [${c.id}] ${c.provisionalIntent || c.intent || "untitled"}\n    cluster=${c.clusterId || "unknown"} eligibleSources=${sources.join(", ") || "(none)"}\n    provisional intent (untrusted): ${c.provisionalIntent || c.intent || "(missing)"}`;
+      const cluster = clustersById.get(String(c?.clusterId || "")) || null;
+      let allowedLines = "    allowed evidence: (no ledger context)";
+      if (ledger && idx) {
+        const scoped = [...new Set(sources.map(String))].slice(0, MAX_SOURCES_PER_CANDIDATE);
+        if (scoped.length === 0) {
+          allowedLines = "    allowed evidence: (none)";
+        } else {
+          allowedLines = scoped
+            .map((s) => {
+              const quotes = allowedQuotesFor(cluster, s);
+              if (quotes.length === 0) return `    - [${s}] (no staged quote)`;
+              return quotes.map((q) => `    - [${s}] ${JSON.stringify(q)}`).join("\n");
+            })
+            .join("\n");
+          allowedLines = `    allowed evidence (copy byte-for-byte; same-source only):\n${allowedLines}`;
+        }
+      }
+      return `- [${c.id}] ${c.provisionalIntent || c.intent || "untitled"}\n    cluster=${c.clusterId || "unknown"} eligibleSources=${sources.join(", ") || "(none)"}\n    provisional intent (untrusted): ${c.provisionalIntent || c.intent || "(missing)"}\n${allowedLines}`;
     })
     .join("\n");
 }
@@ -118,17 +167,46 @@ export function renderAnnotatePreface(candidates, { runId = "run-unknown", promp
  * existing strict loader/renderer (sentinel FIRST). Accepts a single staged
  * candidate or a list.
  */
-export function renderAnnotatePrompt(candidates, { runId = "run-unknown", promptsDir } = {}) {
+export function renderAnnotatePrompt(candidates, { runId = "run-unknown", promptsDir, ledger = null, evidenceIndex = null } = {}) {
   const list = asList(candidates);
   return renderPrompt(
     "annotate",
     {
       COUNT: String(list.length),
-      STAGED_CANDIDATES: stagedCandidatesBlock(list),
+      STAGED_CANDIDATES: stagedCandidatesBlock(list, { ledger, evidenceIndex }),
       RUN_ID: String(runId),
     },
     { ...(promptsDir ? { promptsDir } : {}) },
   );
+}
+
+function specificMeasuredChanges(planId, workspaceChanges) {
+  const want = String(planId || "");
+  if (!want) return [];
+  return (Array.isArray(workspaceChanges) ? workspaceChanges : []).filter((m) => {
+    const rid = String(m?.recordId || "");
+    const file = String(m?.file || m?.path || "");
+    const mid = String(m?.id || "");
+    return rid === want || file === `${want}.md` || mid === `m-${want}`;
+  });
+}
+
+function measuredSourcesOf(m) {
+  const raw = m?.provisionalSources || m?.eligibleSources || m?.sources || null;
+  if (!Array.isArray(raw)) return null;
+  const distinct = [...new Set(raw.map((s) => String(s).trim()).filter(Boolean))];
+  return distinct.length ? distinct : null;
+}
+
+function validMeasuredProvenance(specific) {
+  for (const m of specific) {
+    const clusterId = String(m?.clusterId || "").trim();
+    const sources = measuredSourcesOf(m);
+    if (clusterId && sources && sources.length >= 2) {
+      return { change: m, clusterId, sources };
+    }
+  }
+  return null;
 }
 
 function stagingDir(stateDir) {
@@ -229,7 +307,7 @@ export function acpxAnnotateInvoke(options = {}) {
  * Run annotate-preface then annotate as two fresh logical invocations.
  * Persists both rendered prompts privately (run/stage naming, 0600).
  * Annotation is the SOLE full-record origin: for verdict keep the
- * annotation must carry the complete durable record (title/body/
+ * annotation must carry the complete durable record (id/title/body/
  * clusterId/sources/evidence/counterevidence/compilerImplication/
  * rationale); staged plans contribute no record/evidence. Mechanical
  * validation (exact session-bound quotes) applies to annotation finals;
@@ -239,8 +317,10 @@ export function acpxAnnotateInvoke(options = {}) {
  */
 export async function annotateStaging(
   staged,
-  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null, soulBaseline = "" } = {},
+  { stateDir = null, invoke = null, runId = null, ledger = null, evidenceIndex = null, promptsDir = null, soulBaseline = "", measuredChanges = null, workspace = null } = {},
 ) {
+  const workspaceChanges = Array.isArray(measuredChanges) ? measuredChanges : [];
+  const provenanceWorkspace = workspace ? String(workspace).split("/").slice(-1)[0] || "synthesis-workspace" : "synthesis-workspace";
   const list = Array.isArray(staged) ? staged : [];
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   const fail = (error) => {
@@ -254,7 +334,7 @@ export async function annotateStaging(
   let annotateFile = null;
   try {
     prefacePrompt = renderAnnotatePreface(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}) });
-    annotatePrompt = renderAnnotatePrompt(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}) });
+    annotatePrompt = renderAnnotatePrompt(list, { runId: String(resolvedRun), ...(promptsDir ? { promptsDir } : {}), ledger, evidenceIndex });
   } catch (err) {
     return fail(`annotate prompt render failed (${err?.message || err})`);
   }
@@ -299,7 +379,7 @@ export async function annotateStaging(
 
   let prefaceOutcome;
   try {
-    prefaceOutcome = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, promptFile: prefaceFile, staged: list, runId: String(resolvedRun) });
+    prefaceOutcome = await invoke({ stage: "annotate-preface", prompt: prefacePrompt, promptFile: prefaceFile, staged: list, runId: String(resolvedRun), measuredChanges: workspaceChanges });
   } catch (err) {
     return fail(err?.message || String(err));
   }
@@ -315,7 +395,7 @@ export async function annotateStaging(
 
   let outcome;
   try {
-    outcome = await invoke({ stage: "annotate", prompt: annotatePrompt, promptFile: annotateFile, staged: list, preface: prefaceOutcome, runId: String(resolvedRun) });
+    outcome = await invoke({ stage: "annotate", prompt: annotatePrompt, promptFile: annotateFile, staged: list, preface: prefaceOutcome, runId: String(resolvedRun), measuredChanges: workspaceChanges });
   } catch (err) {
     return fail(err?.message || String(err));
   }
@@ -332,6 +412,22 @@ export async function annotateStaging(
     if (c?.reverted === true) {
       annotated.push({ ...c });
       continue;
+    }
+    // Provenance gate: actual changed workspace files are the source of
+    // provenance. When measured workspace changes exist, every staged
+    // candidate must match its own specific measured change with valid
+    // explicit frontmatter (cluster id + >=2 distinct sources) AND bind the
+    // stable measured ID (m-<id>). A malformed/missing measured change or an
+    // unmatched candidate (no specific measured change) rejects that
+    // candidate individually; valid siblings proceed. Never auto-assigned:
+    // missing linkage never borrows a cluster and no candidate progresses
+    // absent a valid stable measured ID linkage.
+    const specificEarly = specificMeasuredChanges(c?.id, workspaceChanges);
+    if (workspaceChanges.length > 0) {
+      const earlyProv = validMeasuredProvenance(specificEarly);
+      if (!earlyProv) {
+        continue;
+      }
     }
     const ann = byId.get(String(c?.id));
     if (!ann || !ann.verdict || !String(ann.verdict).trim()) {
@@ -354,6 +450,19 @@ export async function annotateStaging(
     if (c?.record !== undefined || c?.evidence !== undefined || c?.title !== undefined) {
       return fail(`annotation invalid for ${String(c?.id)} (synth final record leaked into staging; annotation is the sole full-record origin)`);
     }
+    // Keep MUST carry a valid annotation-authored record id: a safe,
+    // stable, deterministic `exp-<slug>-<hash>` bound to the candidate
+    // identity. Run-local staged plan ids (e1, eN) and paths are never
+    // valid; synthesis never authors this id. No fallback downstream.
+    if (!finalRecord.id || !String(finalRecord.id).trim()) {
+      return fail(`annotation invalid for ${String(c?.id)} (record.id is required; annotation authors the deterministic experience-record id)`);
+    }
+    if (!isValidRecordId(finalRecord.id)) {
+      return fail(`annotation invalid for ${String(c?.id)} (record.id must be a safe stable id exp-<slug>-<hash>; got ${JSON.stringify(finalRecord.id)})`);
+    }
+    if (String(finalRecord.id) === String(c?.id)) {
+      return fail(`annotation invalid for ${String(c?.id)} (record.id must not reuse the run-local staged plan id)`);
+    }
     const merged = {
       ...c,
       annotation: {
@@ -366,6 +475,18 @@ export async function annotateStaging(
       finalRecord,
     };
     // Mechanical final-record validation; fail closed on fake quote/session.
+    // When measured provenance is present, the final record must match the
+    // measured file provenance (same cluster, sources within measured set);
+    // mismatches reject only that change.
+    const measuredForRecord = specificMeasuredChanges(c?.id, workspaceChanges);
+    const measuredValid = workspaceChanges.length > 0 && measuredForRecord.length > 0 ? validMeasuredProvenance(measuredForRecord) : null;
+    if (measuredValid) {
+      const recordSources = Array.isArray(finalRecord.sources) ? [...new Set(finalRecord.sources.map((s) => String(s)))] : [];
+      const measuredSet = new Set((measuredValid.sources || []).map((s) => String(s)));
+      if (String(finalRecord.clusterId || "") !== String(measuredValid.clusterId) || !recordSources.length || !recordSources.every((s) => measuredSet.has(String(s)))) {
+        continue;
+      }
+    }
     if (ledger) {
       const idx = evidenceIndex instanceof Map ? evidenceIndex : new Map();
       const check = validateCandidate({ record: finalRecord, evidence: finalRecord.evidence }, { ledger, evidenceIndex: idx });
@@ -378,13 +499,41 @@ export async function annotateStaging(
       if (!finalRecord.counterevidence || !String(finalRecord.counterevidence).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.counterevidence is required)`);
       if (!finalRecord.compilerImplication || !String(finalRecord.compilerImplication).trim()) return fail(`annotation invalid for ${String(c?.id)} (record.compilerImplication is required)`);
     }
-    // Render the staged artifact/diff from the annotation final record.
+    // Render the staged artifact/diff from the annotation final record id.
+    // No fallback: record.id was validated above as the sole origin.
     try {
       merged.stagedArtifact = renderStagedArtifact(finalRecord, soulBaseline);
-      merged.diff = renderDiff(finalRecord.id || String(c?.id), merged.stagedArtifact);
+      merged.diff = renderDiff(finalRecord.id, merged.stagedArtifact);
     } catch (err) {
       return fail(`annotation invalid for ${String(c?.id)} (artifact render failed: ${err?.message || err})`);
     }
+    try {
+      // Bind each annotation to its SPECIFIC measured change(s) only —
+      // matched by staged plan id (recordId / `<id>.md` / `m-<id>`). Never
+      // the blanket "all IDs" set; plans with no authored change bind none.
+      // Measured IDs, file provenance, exact diffs, and eligible quote
+      // context travel with the annotation.
+      const want = String(c?.id || "");
+      const specific = specificMeasuredChanges(want, workspaceChanges);
+      if (specific.length) {
+        const ids = specific.map((m) => String(m.id)).filter(Boolean);
+        const prov = validMeasuredProvenance(specific);
+        const diffs = specific.map((m) => String(m.diff || m.text || "")).filter(Boolean);
+        merged.measuredIds = ids;
+        merged.workspaceProvenance = {
+          measuredIds: ids,
+          workspace: provenanceWorkspace,
+          ...(prov ? { clusterId: prov.clusterId, provisionalSources: prov.sources, eligibleSources: prov.sources } : {}),
+          ...(diffs.length ? { diffs } : {}),
+        };
+        merged.measuredProvenance = merged.workspaceProvenance;
+        if (prov) {
+          merged.measuredClusterId = prov.clusterId;
+          merged.measuredSources = prov.sources;
+        }
+        if (diffs.length) merged.measuredDiffs = diffs;
+      }
+    } catch {}
     annotated.push(merged);
   }
 

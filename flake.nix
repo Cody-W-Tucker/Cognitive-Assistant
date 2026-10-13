@@ -83,6 +83,7 @@
         { pkgs }:
         let
           acpx = pkgs.callPackage ./packages/acpx/package.nix { };
+          caPython = pkgs.python312.withPackages (python-pkgs: [ python-pkgs.python-dotenv ]);
         in
         {
           inherit acpx;
@@ -94,20 +95,19 @@
               exec python -m core.langfuse_review "$@"
             '';
           };
-          # Headless improvement pass only: discovers global transcripts,
-          # distills/folds/synthesizes a proposal into XDG state. Never
-          # writes to the repo, never deploys to Hermes. Applying a proposal
-          # stays a manual `improve-apply` review step.
+          # Interactive by default: renders the live stderr progress view and
+          # writes only a private proposal. The systemd timer below explicitly
+          # selects --headless because it has no terminal to paint.
           ca-improve = pkgs.writeShellApplication {
             name = "ca-improve";
             runtimeInputs = [
-              pkgs.python312
+              caPython
               pkgs.nodejs
               acpx
             ];
             text = ''
               export PYTHONPATH=${self}
-              exec python -m core improve-run --headless "$@"
+              exec python -m core improve-run "$@"
             '';
           };
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
@@ -196,7 +196,7 @@
             systemd.user.services.ca-improve = {
               description = "CA headless improvement pass (proposal only, no deploy)";
               serviceConfig = {
-                ExecStart = "${cfg.package}/bin/ca-improve";
+                ExecStart = "${cfg.package}/bin/ca-improve --headless";
                 Type = "oneshot";
               };
             };

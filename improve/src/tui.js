@@ -3,6 +3,9 @@
 // terminal contract: JSON remains the sole stdout payload and a non-TTY run is
 // byte-for-byte headless.
 
+import { spawn as nodeSpawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
 const MIN_COLUMNS = 60;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 const INTERVAL_MS = 80;
@@ -27,7 +30,7 @@ export function initialState(meta = {}) {
   return {
     meta,
     discover: { status: "pending", transcripts: 0, perHarness: {} },
-    analyze: { status: "pending", total: 0, pending: 0, done: 0, ok: 0, failed: 0, cached: 0, analyzer: null },
+    analyze: { status: "pending", total: 0, pending: 0, done: 0, ok: 0, failed: 0, skipped: 0, cached: 0, analyzer: null },
     fold: { status: "pending", clusters: 0, eligible: 0 },
     synthesize: { status: "pending", staged: 0, annotated: 0, edits: 0, note: "" },
   };
@@ -38,8 +41,8 @@ export function reduceEvent(state, event, data = {}, now = Date.now()) {
   if (event === "discover:start") state.discover = { ...state.discover, status: "active", harnesses: data.harnesses || [] };
   if (event === "discover:done") state.discover = { ...state.discover, status: "done", transcripts: data.transcripts || 0, perHarness: data.perHarness || {} };
   if (event === "analyze:start") state.analyze = { ...state.analyze, status: "active", total: data.total || 0, pending: data.pending || 0, cached: data.cached || 0, analyzer: data.analyzer || null };
-  if (event === "analyze:tick") state.analyze = { ...state.analyze, done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0 };
-  if (event === "analyze:done") state.analyze = { ...state.analyze, status: "done", done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0, cached: data.cached || 0 };
+  if (event === "analyze:tick") state.analyze = { ...state.analyze, done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0, skipped: data.skipped || 0 };
+  if (event === "analyze:done") state.analyze = { ...state.analyze, status: "done", done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0, skipped: data.skipped || 0, cached: data.cached || 0 };
   if (event === "fold:start") state.fold = { ...state.fold, status: "active" };
   if (event === "fold:done") state.fold = { ...state.fold, status: "done", clusters: data.clusters || 0, eligible: data.eligible || 0 };
   if (event === "synthesize:start") state.synthesize = { ...state.synthesize, status: "active" };
@@ -61,7 +64,7 @@ function stageSummary(key, state) {
   const s = state[key];
   if (key === "discover" && s.status === "done") return `${s.transcripts} transcript(s) · ${Object.entries(s.perHarness).map(([h, n]) => `${h} ${n}`).join(", ") || "no eligible sessions"}`;
   if (key === "analyze" && s.status === "active") return `${gauge(s.done, s.pending)} ${s.done}/${s.pending} · ${s.cached} reused · ${s.analyzer || "analyzer"}`;
-  if (key === "analyze" && s.status === "done") return `${s.ok} ok · ${s.failed} failed · ${s.cached} reused`;
+  if (key === "analyze" && s.status === "done") return `${s.ok} ok · ${s.skipped} skipped · ${s.failed} failed · ${s.cached} reused`;
   if (key === "fold" && s.status === "done") return `${s.clusters} recurrence cluster(s) · ${s.eligible} eligible`;
   if (key === "synthesize" && s.status === "done") return `${s.edits} candidate edit(s) · ${s.annotated}/${s.staged} annotated`;
   if (s.status === "active") return "working…";
@@ -111,6 +114,39 @@ export function startTui(meta, { stderr = process.stderr } = {}) {
       clearInterval(timer);
       if (painted) stderr.write(`\x1b[${painted}A\r\x1b[0J`);
       stderr.write("\x1b[?25h");
+    },
+  };
+}
+
+/**
+ * Keep the repaint loop in a sibling event loop. CA's ACPX calls use spawnSync;
+ * without this boundary an interval in the pipeline process cannot advance
+ * while a model is working.
+ */
+export function startTuiProcess(meta, { stderr = process.stderr, env = process.env, spawnFn = nodeSpawn } = {}) {
+  if (!tuiEligible({ env, stderr })) return null;
+  const childPath = fileURLToPath(new URL("./tui-child.js", import.meta.url));
+  const child = spawnFn(process.execPath, [childPath], { stdio: ["pipe", "inherit", "inherit"] });
+  let stopped = false;
+  const send = (message) => {
+    if (stopped || !child?.stdin?.write) return;
+    try {
+      child.stdin.write(`${JSON.stringify(message)}\n`);
+    } catch {
+      // Rendering is optional; it cannot change the pipeline outcome.
+    }
+  };
+  send({ type: "start", meta });
+  return {
+    event(event, data) { send({ type: "event", event, data }); },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      try {
+        child?.stdin?.end?.();
+      } catch {
+        // Child already exited.
+      }
     },
   };
 }

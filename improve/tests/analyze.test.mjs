@@ -251,3 +251,19 @@ describe("evidence status normalization (ACPX omitted-status default)", () => {
     }
   });
 });
+
+describe("analysis progress", () => {
+  it("reports each finished trace before the next synchronous invoke starts", () => {
+    const reported = [];
+    const calls = [];
+    analyzeTraces([trace({ transcriptId: "one" }), trace({ transcriptId: "two" })], {
+      invoke: ({ trace: item }) => {
+        calls.push(item.transcriptId);
+        return { status: "ok", evidence: { positive: [], negative: [], gaps: [] } };
+      },
+      onRecord: (record) => reported.push(record.transcriptId),
+    });
+    assert.deepEqual(calls, ["one", "two"]);
+    assert.deepEqual(reported, ["one", "two"]);
+  });
+});

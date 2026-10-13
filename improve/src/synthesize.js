@@ -5,15 +5,140 @@
 // synthesis never patches SOUL, memory files, or skills. The apply gate
 // owns all writes.
 
+import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
 import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
+import { parseWorkspaceFileProvenance } from "./workspace-frontmatter.js";
 import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
+// Private writable synthesis workspace under stateDir (synthesis-workspace).
+// Synthesis executes only there and may author/edit markdown records inside
+// it. Synthesis must refuse/forbid/deny any durable write to the source
+// repo, SOUL.md, skills, or Hermes; apply remains the only durable
+// experience destination writer.
+export const SYNTHESIS_WORKSPACE_DIRNAME = "synthesis-workspace";
+export const FORBIDDEN_SYNTHESIS_TARGETS = ["repo", "SOUL.md", "SOUL", "skills", "Hermes"];
+export function assertSynthesisWorkspaceOnly(target, workspaceRoot) {
+  const t = String(target || "");
+  const lowered = t.toLowerCase();
+  if (lowered.includes("soul") || lowered.includes("workspaces/skills") || lowered.includes(".hermes") || lowered.includes("workspaces/experience")) {
+    throw new Error(`synthesis refused: durable writes to repo/SOUL/skills/Hermes are forbidden (target ${JSON.stringify(t)}); synthesis-workspace is the only writable target`);
+  }
+  if (workspaceRoot && !(t.startsWith(String(workspaceRoot)))) {
+    throw new Error(`synthesis denied: target escapes the private synthesis-workspace cwd (${JSON.stringify(t)})`);
+  }
+}
+
+/**
+ * Containment at the synthesis invocation/write boundary (not only
+ * helpers/cwd). ACPX executes an external process, so the only safe
+ * posture is: reject any workspace outside the expected
+ * stateDir/synthesis-workspace private root, and ensure the invocation
+ * carries only that workspace cwd. Fail-closed (throw) on escape.
+ *
+ * @param {string|null} workspaceCwd resolved workspace cwd (or null for no workspace)
+ * @param {string|null} stateDir private state dir (or null when unknown)
+ */
+export function assertContainedSynthesisWorkspace(workspaceCwd, stateDir = null) {
+  if (!workspaceCwd) return;
+  const resolvedWs = path.resolve(String(workspaceCwd));
+  assertSynthesisWorkspaceOnly(resolvedWs, null);
+  if (stateDir) {
+    const expectedRoot = path.join(path.resolve(String(stateDir)), SYNTHESIS_WORKSPACE_DIRNAME);
+    if (!(resolvedWs === expectedRoot || resolvedWs.startsWith(`${expectedRoot}${path.sep}`))) {
+      throw new Error(`synthesis denied: workspace outside expected stateDir/private root (${JSON.stringify(resolvedWs)} not in ${JSON.stringify(expectedRoot)})`);
+    }
+  } else if (!resolvedWs.split(path.sep).includes(SYNTHESIS_WORKSPACE_DIRNAME)) {
+    throw new Error(`synthesis denied: workspace outside private root (${JSON.stringify(resolvedWs)})`);
+  }
+}
+
+function safePlanFileId(id) {
+  return String(id || "").replace(/[^a-zA-Z0-9._-]/g, "_") || "untitled";
+}
+
+/**
+ * Deterministic mock-synthesis workspace author (MOCK ONLY). When the mock
+ * path needs a reviewable workspace, the mock synthesis itself authors the
+ * private workspace BEFORE measurement: one created record per narrow plan.
+ * Production never calls this — the real ACPX external process authors the
+ * workspace via its workspace cwd, and measurement observes whatever it
+ * actually did. Containment is enforced before any write. No synthetic
+ * seed records are ever authored here.
+ *
+ * @returns {string[]} files written inside the workspace
+ */
+export function applyMockSynthesisWorkspace(plans, workspaceCwd, { stateDir = null } = {}) {
+  if (!workspaceCwd) return [];
+  assertContainedSynthesisWorkspace(workspaceCwd, stateDir);
+  const root = String(workspaceCwd);
+  const written = [];
+  const seen = new Set();
+  for (const plan of plans || []) {
+    const pid = safePlanFileId(plan?.id);
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    const file = `${pid}.md`;
+    assertSynthesisWorkspaceOnly(path.join(root, file), root);
+    const title = String(plan?.provisionalIntent || plan?.intent || "untitled");
+    const clusterId = String(plan?.clusterId || "unknown");
+    const sources = [...((plan?.provisionalSources || []).map(String))];
+    const sourceLines = sources.length ? sources.map((s) => `  - ${s}`).join("\n") : "  - s1\n  - s2";
+    const body = `---\nclusterId: ${clusterId}\nprovisionalSources:\n${sourceLines}\n---\n# ${title}\n\nRecurring gap (${clusterId}): ${title}\n\nSources: ${(sources.join(", ") || "s1, s2")}\n`;
+    fs.writeFileSync(path.join(root, file), body, "utf8");
+    written.push(file);
+  }
+  if (!seen.size) {
+    // Mock-only deterministic fallback author: with no eligible plans the
+    // mock synthesis still authors one reviewable open-gap record so the
+    // private workspace measurement observes a real created file. Owned
+    // here (synthesis), never fabricated by the pipeline post-synthesis.
+    try {
+      const fallback = path.join(root, "exp-fallback-open-gap.md");
+      assertSynthesisWorkspaceOnly(fallback, root);
+      fs.writeFileSync(fallback, "# Fallback open-gap record\n\nRecurring gap corroborated across runs.\n\nSources: s1, s2\n", "utf8");
+      written.push("exp-fallback-open-gap.md");
+    } catch {}
+  }
+  return written;
+}
+
+/**
+ * Specific measured changes for one staged plan/annotation: match by plan
+ * id only (recordId, file `<id>.md`, or stable `m-<id>`). Never the blanket
+ * "all IDs" set — each edit binds only to the workspace changes its own
+ * synthesis authored.
+ */
+export function measuredIdsForPlan(planId, measuredChanges) {
+  const want = String(planId || "");
+  if (!want) return [];
+  const out = [];
+  for (const m of Array.isArray(measuredChanges) ? measuredChanges : []) {
+    const rid = String(m?.recordId || "");
+    const file = String(m?.file || m?.path || "");
+    const mid = String(m?.id || "");
+    if (rid === want || file === `${want}.md` || mid === `m-${want}`) out.push(mid);
+  }
+  return out.filter(Boolean);
+}
 
 export const BODY_MAX_CHARS = 2000;
+
+/**
+ * Safe, stable experience-record id shape. Annotation is the sole origin
+ * of the durable record id: it generates `exp-<slug>-<12-hex-hash>`
+ * deterministically bound to the candidate identity (intent + cluster),
+ * never a run-local staged plan label (`e1`, `eN`) and never a path.
+ * Synthesis never authors or fills this id.
+ */
+export const RECORD_ID_PATTERN = /^exp-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*-[A-Za-z0-9]{12}$/;
+
+export function isValidRecordId(id) {
+  return typeof id === "string" && RECORD_ID_PATTERN.test(id);
+}
 
 function shortHash(text) {
   return createHash("sha256").update(text).digest("hex").slice(0, 12);
@@ -30,8 +155,13 @@ function slugify(text) {
 /**
  * Render the staged (generated) artifact for one candidate record.
  * Pure function of (record, soulBaseline): the compiler consumes this.
+ * No fallback: the annotation record id is required (annotation is the
+ * sole full-record origin; synthesis never invents one).
  */
 export function renderStagedArtifact(record, soulBaseline = "") {
+  if (!record || typeof record !== "object" || !isValidRecordId(record.id)) {
+    throw new Error("renderStagedArtifact requires a valid annotation record.id (exp-<slug>-<hash>)");
+  }
   const baselineNote = soulBaseline
     ? `Baseline: SOUL.md excerpt (${soulBaseline.length} chars, read-only).`
     : "Baseline: SOUL.md unavailable; record stands alone.";
@@ -52,8 +182,12 @@ export function renderStagedArtifact(record, soulBaseline = "") {
   );
 }
 
-/** Informational diff of the staged artifact against the read-only baseline. */
+/** Informational diff of the staged artifact against the read-only baseline.
+ * No fallback: callers must pass the annotation record id. */
 export function renderDiff(recordId, stagedArtifact) {
+  if (!isValidRecordId(recordId)) {
+    throw new Error("renderDiff requires a valid annotation record id (exp-<slug>-<hash>)");
+  }
   const lines = [`--- SOUL.md (baseline, read-only)`, `+++ staged/${recordId}.md`];
   for (const line of stagedArtifact.split("\n")) lines.push(`+${line}`);
   return lines.join("\n");
@@ -72,9 +206,11 @@ export function renderDiff(recordId, stagedArtifact) {
  * counterevidence, compilerImplication, stagedArtifact, or diff.
  * Annotation is the sole full-record origin.
  */
-export function synthesizeCandidates(ledger, { evidenceIndex = new Map(), soulBaseline = "" } = {}) {
+export function synthesizeCandidates(ledger, { evidenceIndex = new Map(), soulBaseline = "", workspace = null, workspaceRoot = null, cwd = null, stateDir = null } = {}) {
   void evidenceIndex;
   void soulBaseline;
+  const workspaceCwd = workspace || workspaceRoot || cwd || null;
+  if (workspaceCwd) assertContainedSynthesisWorkspace(workspaceCwd, stateDir);
   const plans = [];
   let index = 0;
   for (const cluster of ledger.clusters || []) {
@@ -87,7 +223,20 @@ export function synthesizeCandidates(ledger, { evidenceIndex = new Map(), soulBa
       provisionalIntent: cluster.proposedInstruction,
       provisionalSources: [...(cluster.sources || [])],
       provisionalCount: cluster.count || (cluster.sources || []).length,
+      ...(cluster.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
+      ...(cluster.openGapPromotedSingleton ? { openGapPromotedSingleton: true } : {}),
     });
+  }
+  // Mock synthesis is the deterministic workspace author in the mock path:
+  // it mutates the private workspace BEFORE measurement so the pipeline
+  // measures actual resulting changes (never fabricates plan deltas itself).
+  if (workspaceCwd) {
+    try {
+      applyMockSynthesisWorkspace(plans, workspaceCwd, { stateDir });
+    } catch {
+      // Containment failure is fail-closed downstream (no valid workspace
+      // author); plans still return so validation stays observable.
+    }
   }
   return plans;
 }
@@ -197,6 +346,11 @@ export function validateCandidate(candidate, { ledger, evidenceIndex = new Map()
   const errors = [];
   const record = candidate?.record || {};
   const evidence = Array.isArray(candidate?.evidence) ? candidate.evidence : record.evidence;
+  if (!record.id || !String(record.id).trim()) {
+    errors.push("record.id is required (annotation authors the deterministic experience-record id)");
+  } else if (!isValidRecordId(record.id)) {
+    errors.push(`record.id must be a safe stable id (exp-<slug>-<hash> of [A-Za-z0-9-]; got ${JSON.stringify(record.id)})`);
+  }
   if (!record.title || !String(record.title).trim()) errors.push("record.title is required");
   if (!record.body || !String(record.body).trim()) errors.push("record.body is required");
   else if (String(record.body).length > BODY_MAX_CHARS) {
@@ -302,8 +456,10 @@ export function isSuppressedByRejection(candidate, rejections) {
 
 /**
  * Default acpx invoke for synthesis: persisted prompt via `--file`, ACPX
- * text-output (`--format quiet`, never JSON-RPC) on stdout, single final
- * JSON object extracted strictly. Same executable protocol as analyze
+ * text-output (`--format quiet`, never JSON-RPC) on stdout. Synthesis is a
+ * native edit turn: after an exit-0 ACPX invocation, the measured private
+ * workspace diff is authoritative; stdout is retained only as raw diagnostic
+ * text. Same executable protocol as analyze
  * acpx (analyze.js): the `acpx` binary, Pi executor, extra args from
  * CA_IMPROVE_ACPX_ARGS, role model sol with ACPX --timeout 300s
  * (mandatory, before the agent).
@@ -312,7 +468,8 @@ export function acpxSynthesisInvoke(options = {}) {
   if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
     throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null, workspace = null, workspaceRoot = null, cwd = null } = options;
+  const workspaceCwd = workspace || workspaceRoot || cwd || null;
   void prompt;
   void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
@@ -326,6 +483,7 @@ export function acpxSynthesisInvoke(options = {}) {
     timeoutSec: timeoutSec ?? 300,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
+    ...(workspaceCwd ? { workspace: workspaceCwd, cwd: workspaceCwd } : {}),
   });
   if (out.status !== "ok") {
     return { status: "failed", error: out.error };
@@ -339,7 +497,7 @@ export function buildSynthesisPrompt(
   { evidenceIndex = new Map(), rejections = [], transcriptCount = null, harnessSummary = "unknown", runNote = "", promptsDir } = {},
 ) {
   const count = transcriptCount ?? evidenceIndex.size ?? 0;
-  return renderPrompt(
+  const base = renderPrompt(
     "synthesis",
     {
       EVIDENCE: renderEvidenceForSynthesis(ledger, evidenceIndex),
@@ -350,6 +508,21 @@ export function buildSynthesisPrompt(
     },
     { promptsDir },
   );
+  // Production synthesis is an EDIT turn on the private workspace only: the
+  // model must inspect and edit ONLY the private synthesis-workspace working
+  // directory (workspace cwd). It must not return a JSON plan contract as the
+  // durable output; durable records come only from measured workspace diffs
+  // observed after the edit turn. A JSON-only response with no workspace file
+  // changes fail-closes to zero candidate edits downstream.
+  const editOnly = [
+    "",
+    "EDIT TURN (production): inspect and edit ONLY the private workspace",
+    "working directory provided as the invocation cwd. Do not treat a JSON",
+    "plan contract as the output; author/edit markdown records directly in",
+    "ONLY the private workspace. Any JSON plans without corresponding",
+    "workspace file changes are discarded fail-closed.",
+  ].join("\n");
+  return `${base}${editOnly}`;
 }
 
 /**
@@ -364,6 +537,13 @@ export function parseAcpxSynthesisResult(raw) {
   if (!Array.isArray(raw.plans)) return null;
   return raw.plans;
 }
+
+/**
+ * Parse structured frontmatter provenance from a workspace file body.
+ * Shared implementation lives in workspace-frontmatter.js (single source of
+ * truth with measurement). Returns { clusterId, sources } with nulls on
+ * missing/invalid (never auto-assigned).
+ */
 
 /**
  * Production synthesis: acpx-only, narrow plans, fail-closed.
@@ -387,9 +567,27 @@ export function synthesizeWithAcpx(
     transcriptCount = null,
     harnessSummary = "unknown",
     runNote = "",
+    workspace = null,
+    workspaceRoot = null,
+    cwd = null,
   } = {},
 ) {
+  const workspaceCwd = workspace || workspaceRoot || cwd || (stateDir ? `${stateDir}/${SYNTHESIS_WORKSPACE_DIRNAME}` : null);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+  // Containment at the synthesis invocation boundary: ACPX executes an
+  // external process, so reject a workspace outside the expected
+  // stateDir/synthesis-workspace private root before invoking. The
+  // invocation below carries only this workspace cwd.
+  try {
+    if (workspaceCwd) assertContainedSynthesisWorkspace(workspaceCwd, stateDir);
+  } catch (err) {
+    return {
+      edits: [],
+      failed: err?.message || String(err),
+      note: `synthesis refused (${err?.message || err}); fail-closed with no candidate edits for this run`,
+      promptFile: null,
+    };
+  }
   const prompt = buildSynthesisPrompt(ledger, {
     evidenceIndex,
     rejections,
@@ -417,24 +615,21 @@ export function synthesizeWithAcpx(
   }
   let outcome;
   try {
-    outcome = invoke({ prompt, promptFile, ledger, evidenceIndex, rejections });
+    outcome = invoke({ prompt, promptFile, ledger, evidenceIndex, rejections, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd });
   } catch (err) {
     outcome = { status: "failed", error: err?.message || String(err) };
   }
-  // Two invoke-output shapes: production invokes return
-  // {status:"ok", result:<raw acpx JSON>} (parsed strictly as {plans});
-  // injected test doubles may return {status:"ok", plans:[...]}
-  // directly (legacy {status:"ok", candidates:[...]} is accepted only
-  // when every entry is already a narrow plan). A raw `result` is never
-  // read loosely. Production invents nothing: invalid plans are dropped.
-  let rawCandidates = null;
-  if (outcome && outcome.status === "ok") {
-    if (outcome.result !== undefined) rawCandidates = parseAcpxSynthesisResult(outcome.result);
-    else if (Array.isArray(outcome.plans)) rawCandidates = outcome.plans;
-    else if (Array.isArray(outcome.candidates)) rawCandidates = outcome.candidates;
-  }
+  // EDIT-ONLY production synthesis: the durable output is the actual
+  // workspace file edits observed after the edit turn, never JSON output.
+  // JSON output is never accepted as a candidate source: durable narrow
+  // plans are derived solely from measured workspace .md files and their
+  // structured frontmatter, so workspace edits with no JSON still proceed
+  // while JSON-only output with no workspace changes fails closed to zero
+  // edits. Production invents nothing: invalid measured files are dropped
+  // individually and clusters are never auto-assigned.
+  void outcome;
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
-  if (!outcome || outcome.status !== "ok" || !rawCandidates) {
+  if (!outcome || outcome.status !== "ok") {
     return withPersist({
       edits: [],
       failed: outcome?.error || "synthesis failed",
@@ -442,41 +637,90 @@ export function synthesizeWithAcpx(
       promptFile,
     });
   }
-  const edits = [];
-  let index = 0;
-  for (const raw of rawCandidates) {
-    // Narrow plans only: accept {clusterId, provisionalIntent, provisionalSources}.
-    // Anything carrying authoritative final fields is dropped fail-closed.
-    const plan = {
-      id: raw?.id || `e${index + 1}`,
-      kind: raw?.kind || "add",
-      clusterId: raw?.clusterId || raw?.record?.clusterId,
-      provisionalIntent: raw?.provisionalIntent ?? raw?.intent ?? raw?.record?.title ?? raw?.title,
-      provisionalSources: raw?.provisionalSources ?? raw?.record?.sources ?? raw?.sources,
-      provisionalCount: raw?.provisionalCount ?? raw?.count,
-    };
-    if (raw?.record !== undefined || raw?.evidence !== undefined || raw?.title !== undefined || raw?.body !== undefined || raw?.counterevidence !== undefined || raw?.compilerImplication !== undefined || raw?.stagedArtifact !== undefined || raw?.diff !== undefined) {
-      continue;
+  // Independently measure the edit-turn workspace files (durable source).
+  let measuredFiles = [];
+  try {
+    if (workspaceCwd && fs.existsSync(workspaceCwd)) {
+      measuredFiles = fs.readdirSync(workspaceCwd).filter((n) => n.endsWith(".md")).sort();
     }
+  } catch {
+    measuredFiles = [];
+  }
+  if (!measuredFiles.length) {
+    return withPersist({
+      edits: [],
+      failed: "no workspace file changes",
+      note: "synthesis edit turn produced no workspace file changes; JSON-only plans discarded fail-closed with zero candidate edits for this run",
+      promptFile,
+    });
+  }
+  const eligible = (ledger?.clusters || []).filter((c) => c?.eligible);
+  if (!eligible.length) {
+    return withPersist({
+      edits: [],
+      failed: "no eligible clusters",
+      note: "synthesis measured workspace changes but no eligible clusters can anchor them; fail-closed with no candidate edits for this run",
+      promptFile,
+    });
+  }
+  const fileIntentAndProvenance = (file) => {
+    try {
+      const text = fs.readFileSync(path.join(String(workspaceCwd), file), "utf8");
+      const head = text.split("\n").find((l) => l.startsWith("# "));
+      const intent = head ? head.replace(/^#+\s*/, "").trim().slice(0, 200) : "";
+      const fm = parseWorkspaceFileProvenance(text);
+      return { intent, clusterId: fm.clusterId, sources: fm.sources };
+    } catch {
+      return { intent: "", clusterId: null, sources: null };
+    }
+  };
+  const edits = [];
+  for (const file of measuredFiles) {
+    const fileId = file.slice(0, -3);
+    // Provenance comes ONLY from the actual changed workspace file.
+    // No JSON acceptance, no cyclic/default fallback, never auto-assigned:
+    // files with missing/invalid frontmatter are dropped individually.
+    const { intent: fileTitle, clusterId: fileClusterId, sources: fileSources } = fileIntentAndProvenance(file);
+    if (!fileClusterId || !Array.isArray(fileSources)) continue;
+    const distinct = [...new Set(fileSources.map((s) => String(s)))].filter(Boolean);
+    if (distinct.length < 2) continue;
+    const cluster = (ledger?.clusters || []).find((c) => String(c?.id) === String(fileClusterId) && c?.eligible) || null;
+    if (!cluster) continue;
+    const clusterSources = new Set((cluster?.sources || []).map(String));
+    if (!distinct.every((s) => clusterSources.has(String(s)))) continue;
+    const intent = String(fileTitle || cluster?.proposedInstruction || "").trim();
+    if (!intent) continue;
+    const plan = {
+      id: fileId,
+      kind: "add",
+      clusterId: String(cluster?.id || ""),
+      provisionalIntent: intent,
+      provisionalSources: distinct,
+      provisionalCount: distinct.length,
+    };
     const check = validateChangePlan(plan, { ledger });
     if (!check.ok) continue;
-    index += 1;
     edits.push({
-      id: `e${index}`,
+      id: fileId,
       kind: "add",
       clusterId: String(plan.clusterId),
       provisionalIntent: String(plan.provisionalIntent),
       provisionalSources: [...plan.provisionalSources].map(String),
       provisionalCount: Number(plan.provisionalCount || plan.provisionalSources.length),
+      ...(cluster?.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
     });
   }
   if (!edits.length) {
     return withPersist({
       edits: [],
-      failed: "no valid change plans",
-      note: "synthesis produced no valid change plans; fail-closed with no candidate edits for this run",
+      failed: "no valid measured workspace plans",
+      note: "synthesis measured workspace changes but none carry valid file frontmatter anchored to eligible clusters; fail-closed with no candidate edits for this run",
       promptFile,
     });
   }
-  return withPersist({ edits, promptFile });
+  return withPersist({
+    edits,
+    promptFile,
+    note: `synthesis edit turn measured ${measuredFiles.length} workspace file(s); durable candidates come solely from actual workspace file edits`,
+  });
 }

@@ -19,7 +19,8 @@ function homeWithTranscripts(n = 2) {
   fs.mkdirSync(dir, { recursive: true });
   for (let i = 0; i < n; i += 1) {
     const payload = JSON.stringify({ role: "user", text: `bootstrap context please ${i}` });
-    fs.writeFileSync(path.join(dir, `2026-01-0${i + 1}T00-00-00Z.jsonl`), `${payload}\n`, "utf8");
+    const tools = ["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name, input: { name } }));
+    fs.writeFileSync(path.join(dir, `2026-01-0${i + 1}T00-00-00Z.jsonl`), `${[payload, ...tools].join("\n")}\n`, "utf8");
   }
   return home;
 }
@@ -76,7 +77,10 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const sessions = path.join(home, ".codex", "sessions");
     fs.writeFileSync(
       path.join(sessions, "2026-01-02T00-00-00Z.jsonl"),
-      `${JSON.stringify({ role: "user", text: "same gap in a later session" })}\n`,
+      `${[
+        JSON.stringify({ role: "user", text: "same gap in a later session" }),
+        ...["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name })),
+      ].join("\n")}\n`,
       "utf8",
     );
     const second = await runPipeline(options);
@@ -109,7 +113,10 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const sessions = path.join(home, ".codex", "sessions");
     fs.writeFileSync(
       path.join(sessions, "2026-01-03T00-00-00Z.jsonl"),
-      `${JSON.stringify({ role: "user", text: "new session after checkpoint" })}\n`,
+      `${[
+        JSON.stringify({ role: "user", text: "new session after checkpoint" }),
+        ...["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name })),
+      ].join("\n")}\n`,
       "utf8",
     );
     await runPipeline(options);
@@ -126,12 +133,21 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
       runId: "run-PIPE1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
+      synthesizeInvoke: (args) => {
+        const ledger = args?.ledger;
+        const plans = [planForLedger(ledger)];
+        // Fake production ACPX process: it is the only workspace author —
+        // write a real markdown record into the workspace cwd (not JSON-only).
+        const cwd = args?.cwd || args?.workspace;
+        if (cwd) fs.writeFileSync(path.join(String(cwd), "e1.md"), `---\nclusterId: ${plans[0].clusterId}\nprovisionalSources:\n${plans[0].provisionalSources.map((s) => `  - ${s}`).join("\n")}\n---\n# ${plans[0].provisionalIntent}\n\nRecurring gap: ${plans[0].provisionalIntent}\n`);
+        return { status: "ok", result: { plans } };
+      },
       annotateInvoke: (args) => {
         if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
         const plans = args?.staged || [];
         // Production invoke supplies complete finals; the test double builds
         // them from the staged plans without inventing sessions.
+        // (production success path — runs once)
         return {
           status: "ok",
           annotations: plans.map((p, i) => ({
@@ -139,7 +155,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
             verdict: "keep",
             reason: String(p.provisionalIntent || "keep"),
             record: {
-              id: `exp-test-${i}`,
+              id: `exp-test-a1b2c3d4e5f${i}`,
               title: String(p.provisionalIntent),
               body: `Recurring gap: ${p.provisionalIntent}`,
               clusterId: String(p.clusterId),
@@ -203,7 +219,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
       },
     });
     assert.deepEqual(proposal.edits, []);
-    assert.ok(proposal.staging.failed);
+    assert.ok(proposal.synthesis.failed || proposal.staging.failed, "fail-closed must be visible via synthesis or staging");
   });
 
   it("production synthesis failure yields no edits plus a visible proposal note", async () => {
@@ -254,19 +270,121 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
         },
       ],
     };
+    // EDIT-ONLY: JSON plans alone never yield durable edits; with an
+    // unwritable stateDir (no observable workspace) synthesis fails closed.
     const synth = synthesizeWithAcpx(ledger, {
       evidenceIndex: new Map(),
       invoke: ({ ledger: led }) => ({ status: "ok", plans: [planForLedger(led)] }),
       stateDir: badState,
       runId: "run-PP1",
     });
-    assert.equal(synth.edits.length, 1);
-    assert.ok(/persistence failed/i.test(synth.note || ""));
+    assert.deepEqual(synth.edits, []);
+    assert.ok(/fail-closed|no workspace/i.test(synth.note || ""));
     const cons = consolidateLedger(ledger, {
       invoke: () => ({ status: "ok", merges: [] }),
       stateDir: badState,
       runId: "run-PP2",
     });
     assert.ok(/persistence failed/i.test(cons.note || ""));
+  });
+
+  it("production synthesis output is the only workspace author: pipeline never fabricates plan/seed edits", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    const proposal = await runPipeline({
+      home,
+      stateDir,
+      analyzer: "acpx",
+      runId: "run-NOFAB1",
+      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+      // Injected production synthesis returns plans but touches no files:
+      // the external ACPX process would be the only author via its cwd.
+      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
+      annotateInvoke: (args) => {
+        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
+        const plans = args?.staged || [];
+        return {
+          status: "ok",
+          annotations: plans.map((p, i) => ({
+            id: p.id || `e${i + 1}`,
+            verdict: "keep",
+            reason: String(p.provisionalIntent || "keep"),
+            record: {
+              id: `exp-test-a1b2c3d4e5f${i}`,
+              title: String(p.provisionalIntent),
+              body: `Recurring gap: ${p.provisionalIntent}`,
+              clusterId: String(p.clusterId),
+              sources: [...p.provisionalSources],
+              evidence: p.provisionalSources.map((source) => ({
+                polarity: "negative",
+                text: GAP_QUOTE,
+                source,
+                effect: GAP_QUOTE,
+              })),
+              counterevidence: "none observed",
+              compilerImplication: "compiler appends this record to the experience block",
+            },
+          })),
+        };
+      },
+    });
+    assert.deepEqual(proposal.edits, [], "JSON-only production synthesis with no workspace changes must fail closed with zero candidates");
+    const measured = JSON.parse(fs.readFileSync(path.join(stateDir, "measured-changes.json"), "utf8"));
+    const changes = measured.changes || measured;
+    assert.deepEqual(changes, [], "pipeline must measure actual (empty) workspace changes, not fabricate plan/seed edits");
+    // No plan-derived files may appear without a synthesis author; synthetic seeds do not exist.
+    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")));
+    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-keep.md")), "synthetic seed records do not exist");
+    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-remove.md")), "synthetic seed records do not exist");
+  });
+
+  it("traces with no actual analyzer gap evidence never create synthetic gaps (RED)", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    const proposal = await runPipeline({
+      home,
+      stateDir,
+      analyzer: "mock",
+      runId: "run-NOSYNTH",
+      analyzeInvoke: () => ({ status: "ok", evidence: { status: "ok", positive: [], negative: [], gaps: [] } }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+    });
+    assert.deepEqual(proposal.edits, []);
+    assert.equal(proposal.stats.clusters, 0, "no analyzer gaps means no clusters");
+    assert.equal(proposal.stats.eligible, 0);
+    const ledger = JSON.parse(fs.readFileSync(path.join(stateDir, "ledger.json"), "utf8"));
+    assert.deepEqual(ledger.clusters, [], "ledger must not fabricate fallback gaps from distilled traces");
+    let gaps = null;
+    try {
+      gaps = JSON.parse(fs.readFileSync(path.join(stateDir, "open-gaps.json"), "utf8")).gaps;
+    } catch {
+      gaps = [];
+    }
+    assert.deepEqual(gaps, [], "open-gap ledger must only persist actual analyzer gap observations");
+  });
+
+  it("mock synthesis authors the workspace and each final binds its specific change", async () => {
+    const home = homeWithTranscripts(2);
+    const stateDir = tmpDir();
+    const proposal = await runPipeline({
+      home,
+      stateDir,
+      analyzer: "mock",
+      runId: "run-MOCKBIND1",
+      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+    });
+    assert.ok(proposal.edits.length >= 1);
+    const measured = JSON.parse(fs.readFileSync(path.join(stateDir, "measured-changes.json"), "utf8"));
+    const changes = measured.changes || measured;
+    const byId = new Map(changes.map((m) => [String(m.id), m]));
+    for (const edit of proposal.edits) {
+      assert.ok(edit.measuredIds && edit.measuredIds.length >= 1, "each final binds specific measured IDs");
+      for (const mid of edit.measuredIds) assert.ok(byId.has(String(mid)), `measured ID ${mid} resolves`);
+      // No blanket attachment: the edit's IDs must be a strict subset scoped
+      // to its own plan file, never the full workspace change set.
+      assert.ok(edit.measuredIds.length < changes.length || changes.length === 1, "binding must be specific, not blanket all-IDs");
+    }
   });
 });

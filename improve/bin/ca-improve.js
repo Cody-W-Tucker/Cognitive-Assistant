@@ -3,8 +3,9 @@
 
 import { discoverTranscripts } from "../src/discovery.js";
 import { runPipeline } from "../src/pipeline.js";
+import { runSynthesizeResume } from "../src/synthesize-resume.js";
 import { defaultStateDir } from "../src/state.js";
-import { startTui } from "../src/tui.js";
+import { startTuiProcess } from "../src/tui.js";
 
 function flagValue(args, name) {
   const index = args.indexOf(name);
@@ -54,7 +55,7 @@ async function main() {
     const posturePath = flagValue(rest, "--posture-path") || null;
     const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
     const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
-    const tui = tuiRequested ? startTui({ since, analyzer }) : null;
+    const tui = tuiRequested ? startTuiProcess({ since, analyzer }) : null;
     return runPipeline({
       home: home || undefined,
       stateDir,
@@ -78,7 +79,28 @@ async function main() {
       },
     );
   }
-  process.stderr.write(`ca-improve: unknown command "${command || ""}" (expected: discover, run)\n`);
+  if (command === "synthesize") {
+    const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
+    const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
+    const soulPath = flagValue(rest, "--soul-path") || null;
+    const runId = flagValue(rest, "--run-id") || null;
+    return runSynthesizeResume({
+      stateDir,
+      minGapEvidence,
+      soulPath,
+      runId,
+    }).then(
+      (proposal) => {
+        console.log(JSON.stringify(proposal));
+        return 0;
+      },
+      (err) => {
+        process.stderr.write(`ca-improve synthesize: ${err?.message || err}\n`);
+        return 1;
+      },
+    );
+  }
+  process.stderr.write(`ca-improve: unknown command "${command || ""}" (expected: discover, run, synthesize)\n`);
   return 2;
 }
 

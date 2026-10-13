@@ -431,6 +431,7 @@ class ImproveRunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home = _make_fixture_home(root)
+            _add_eligible_codex_sessions(home)
             state_dir = root / "xdg" / "improve"
             elsewhere = root / "elsewhere"
             elsewhere.mkdir()
@@ -449,8 +450,30 @@ class ImproveRunTests(unittest.TestCase):
         self.assertEqual(_git_tracked_status(), before)
 
 
+def _add_eligible_codex_sessions(home: Path) -> None:
+    """Add substantial Codex sessions so mock analysis meets the recurrence floor legitimately.
+
+    The base fixture sessions are intentionally trivial (skipped by analysis).
+    These two sessions carry 1 user turn + 3 tool calls each, so mockInvoke
+    yields the same canonical gap for both and the fold floor (minGapEvidence=2)
+    is met via the plan->stage->measure->annotate path. No pipeline fabrication.
+    """
+    for i in range(2):
+        _write_jsonl(
+            home / ".codex" / "sessions" / "2026" / "10" / "12" / f"rollout-eligible-{i}-codex-eligible.jsonl",
+            [
+                {"type": "session_meta", "cwd": "/tmp/proj", "id": f"codex-eligible-{i}"},
+                {"role": "user", "content": "bootstrap context please"},
+                {"kind": "tool", "name": "read", "input": {"file_path": "a"}},
+                {"kind": "tool", "name": "search", "input": {"query": "b"}},
+                {"kind": "tool", "name": "test", "input": {"command": "c"}},
+            ],
+        )
+
+
 def _run_fixture_proposal(root: Path) -> tuple[Path, dict]:
     home = _make_fixture_home(root)
+    _add_eligible_codex_sessions(home)
     state_dir = root / "xdg" / "improve"
     elsewhere = root / "elsewhere"
     elsewhere.mkdir(exist_ok=True)
@@ -656,6 +679,63 @@ class ImproveApplyTests(unittest.TestCase):
             self.assertFalse(authored.exists(), "authored half must be rolled back")
             self.assertFalse(staged.exists(), "staged half must not exist")
 
+    def test_apply_dry_run_accepts_valid_proposal_with_deterministic_record_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_dir, proposal = _run_fixture_proposal(root)
+            edit = proposal["edits"][0]
+            edit_id = edit["id"]
+            record_id = edit["record"]["id"]
+            # Deterministic annotation-authored id, never the run-local plan id.
+            self.assertTrue(record_id.startswith("exp-"))
+            self.assertNotEqual(record_id, edit_id)
+            result = improve.apply(
+                state_dir=state_dir,
+                experience_root=root / "exp",
+                decisions={edit_id: "accepted"},
+                dry_run=True,
+            )
+            self.assertEqual(result["accepted"], [edit_id])
+            self.assertEqual(result["written"], [])
+            self.assertTrue(result["dry_run"])
+            self.assertFalse((root / "exp").exists(), "dry run must write nothing")
+
+    def test_apply_rejects_accepted_keep_missing_record_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_dir = root / "xdg" / "improve"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            proposal = {
+                "id": "prop-no-record-id",
+                "appliedAt": None,
+                "edits": [
+                    {
+                        "id": "e1",
+                        "kind": "add",
+                        "annotation": {"verdict": "keep", "reason": "m"},
+                        "record": {
+                            "title": "t",
+                            "body": "b",
+                            "sources": ["s1", "s2"],
+                            "clusterId": "g-aaa",
+                            "evidence": [],
+                            "counterevidence": "none observed",
+                            "compilerImplication": "compiler appends",
+                        },
+                        "stagedArtifact": "artifact",
+                        "diff": "diff",
+                    }
+                ],
+            }
+            (state_dir / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "missing id"):
+                improve.apply(
+                    state_dir=state_dir,
+                    experience_root=root / "exp",
+                    decisions={"e1": "accepted"},
+                )
+            self.assertFalse((root / "exp").exists())
+
 
 class ImproveCompilerTests(unittest.TestCase):
     def test_canonical_staged_experience_is_compiler_consumed(self) -> None:
@@ -755,6 +835,20 @@ class ImproveCLIRegistrationTests(unittest.TestCase):
         )
         self.assertEqual(args.command, "improve-apply")
         self.assertEqual(args.decisions, ["e1=accepted"])
+
+    def test_decisions_hint_uses_actual_edit_ids(self) -> None:
+        from core.cli import _decisions_hint
+
+        hint = _decisions_hint({"edits": [{"id": "e7"}, {"id": "e8"}]})
+        self.assertIn("e7=accepted", hint)
+        self.assertIn("e8=accepted", hint)
+        self.assertNotIn("e1=accepted", hint)
+
+    def test_decisions_hint_empty_proposal_uses_neutral_placeholder(self) -> None:
+        from core.cli import _decisions_hint
+
+        hint = _decisions_hint({"edits": []})
+        self.assertNotIn("e1=accepted", hint)
 
 
 if __name__ == "__main__":

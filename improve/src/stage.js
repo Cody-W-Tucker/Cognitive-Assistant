@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { validateCandidate, validateChangePlan, renderStagedArtifact, renderDiff } from "./synthesize.js";
+import { validateCandidate, validateChangePlan, isValidRecordId, renderStagedArtifact, renderDiff } from "./synthesize.js";
 
 function stagingDir(stateDir) {
   return path.join(path.resolve(stateDir), "staging");
@@ -100,7 +100,7 @@ function readMeasurements(stateDir) {
  * Throws when any non-reverted plan lacks a final annotation —
  * unannotated staging can never reach apply/final proposal.
  * For verdict keep, the annotation must carry the complete durable
- * record (title/body/clusterId/sources/evidence/counterevidence/
+ * record (id/title/body/clusterId/sources/evidence/counterevidence/
  * compilerImplication/rationale); the record is mechanically validated
  * (exact session-bound quotes) and the staged artifact/diff are rendered
  * here from that final record. Synth plans contribute no record/evidence.
@@ -109,7 +109,8 @@ function readMeasurements(stateDir) {
  * explicit revert. Returns the kept finalists (reverted/dropped
  * excluded) as full edits for proposal/apply.
  */
-export function buildFinalProposal(staged, { stateDir = null, ledger = null, evidenceIndex = new Map(), soulBaseline = "" } = {}) {
+export function buildFinalProposal(staged, { stateDir = null, ledger = null, evidenceIndex = new Map(), soulBaseline = "", measuredChanges = null, workspace = null } = {}) {
+  const provenanceWorkspace = workspace ? String(workspace).split("/").slice(-1)[0] || "synthesis-workspace" : "synthesis-workspace";
   const list = Array.isArray(staged) ? staged : [];
   const measurements = stateDir ? readMeasurements(stateDir) : null;
   const byCandidate = new Map((measurements || []).map((m) => [String(m.candidateId || m.id), m]));
@@ -137,6 +138,17 @@ export function buildFinalProposal(staged, { stateDir = null, ledger = null, evi
     if (c.record !== undefined || c.evidence !== undefined || c.title !== undefined) {
       throw new Error(`candidate ${id} carries a synth final record; annotation is the sole full-record origin`);
     }
+    // Keep requires the annotation-authored deterministic record id:
+    // safe, stable `exp-<slug>-<hash>`, never the run-local plan id.
+    if (!record.id || !String(record.id).trim()) {
+      throw new Error(`candidate ${id} record.id is required; annotation authors the deterministic experience-record id`);
+    }
+    if (!isValidRecordId(record.id)) {
+      throw new Error(`candidate ${id} record.id must be a safe stable id exp-<slug>-<hash> (got ${JSON.stringify(record.id)})`);
+    }
+    if (String(record.id) === String(id)) {
+      throw new Error(`candidate ${id} record.id must not reuse the run-local staged plan id`);
+    }
     if (ledger) {
       const idx = evidenceIndex instanceof Map ? evidenceIndex : new Map();
       const check = validateCandidate({ record, evidence: record.evidence }, { ledger, evidenceIndex: idx });
@@ -161,7 +173,24 @@ export function buildFinalProposal(staged, { stateDir = null, ledger = null, evi
     }
     const finalRecord = { ...record };
     const stagedArtifact = renderStagedArtifact(finalRecord, soulBaseline);
-    const rationale = c.annotation.reason || c.annotation.rationale || finalRecord.body || "";
+    // Bind each final edit to its SPECIFIC measured change(s) only —
+    // matched by staged plan id. Never the blanket "all IDs" set.
+    const want = String(c?.id || id || "");
+    const specific = (Array.isArray(measuredChanges) ? measuredChanges : []).filter((m) => {
+      const rid = String(m?.recordId || "");
+      const file = String(m?.file || m?.path || "");
+      const mid = String(m?.id || "");
+      return rid === want || file === `${want}.md` || mid === `m-${want}`;
+    });
+    const measuredIds = specific.map((m) => String(m.id)).filter(Boolean);
+    const anchorLine = measuredIds.length ? `\n<!-- measured: ${measuredIds.join(", ")} -->` : "";
+    const baseRationale = c.annotation.reason || c.annotation.rationale || finalRecord.body || "";
+    const rationale = c.corroboratedOpenGap || c.annotation?.record?.corroboratedOpenGap
+      ? `open-gap corroborated singleton: ${baseRationale}`
+      : (c.measuredIds && c.measuredIds.length ? baseRationale : baseRationale);
+    const diffBase = renderDiff(finalRecord.id, stagedArtifact);
+    const diff = measuredIds.length ? `${diffBase}${anchorLine}` : diffBase;
+    const provenance = measuredIds.length ? { measuredIds, workspace: provenanceWorkspace, changes: measuredIds } : null;
     finals.push({
       id,
       kind: "add",
@@ -172,10 +201,12 @@ export function buildFinalProposal(staged, { stateDir = null, ledger = null, evi
       record: finalRecord,
       counterevidence: finalRecord.counterevidence,
       compilerImplication: finalRecord.compilerImplication,
-      stagedArtifact,
-      diff: renderDiff(finalRecord.id || id, stagedArtifact),
+      stagedArtifact: measuredIds.length ? `${stagedArtifact}${anchorLine}` : stagedArtifact,
+      diff,
       annotation: { verdict: "keep", reason: rationale },
       clusterId: finalRecord.clusterId,
+      ...(measuredIds.length ? { measuredIds, workspaceProvenance: provenance, measuredProvenance: provenance } : {}),
+      ...((c.corroboratedOpenGap || c.annotation?.corroboratedOpenGap) ? { corroboratedOpenGap: true } : {}),
     });
   }
   return finals;

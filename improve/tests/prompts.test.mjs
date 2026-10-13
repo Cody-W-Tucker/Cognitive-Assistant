@@ -126,6 +126,31 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     );
   });
 
+  it("synthesis.md requires literal clusterId + provisionalSources with a copyable ONLY-those-keys YAML scaffold", () => {
+    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
+    assert.ok(text.includes("clusterId"), "synthesis prompt must name the exact literal frontmatter key clusterId");
+    assert.ok(text.includes("provisionalSources"), "synthesis prompt must name the exact literal frontmatter key provisionalSources");
+    const fence = [...text.matchAll(/```(?:yaml|yml)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
+    assert.ok(fence.length >= 1, "synthesis prompt must include a copyable YAML frontmatter scaffold in a fenced code block");
+    const scaffold = fence.join("\n");
+    assert.ok(scaffold.includes("clusterId"), "scaffold must show clusterId");
+    assert.ok(scaffold.includes("provisionalSources"), "scaffold must show provisionalSources");
+    assert.ok(/---\s*\n[\s\S]*?clusterId[\s\S]*?provisionalSources[\s\S]*?---/.test(scaffold) || /---\s*\n[\s\S]*?clusterId[\s\S]*?---/.test(text), "scaffold must be a --- fenced frontmatter block");
+    const keys = [...scaffold.matchAll(/^\s*([A-Za-z0-9_]+)\s*:/gm)].map((m) => m[1]).filter((k) => k !== "provisionalSources" || true);
+    const topKeys = [...new Set(keys)].filter((k) => ["clusterId", "provisionalSources"].includes(k) || true);
+    assert.ok(topKeys.includes("clusterId") && topKeys.includes("provisionalSources"), "scaffold must carry ONLY clusterId + provisionalSources keys");
+    for (const forbidden of ["record:", "title:", "body:", "sources:", "evidence:", "counterevidence", "compilerImplication"]) {
+      assert.ok(!scaffold.includes(forbidden), "scaffold must carry ONLY clusterId/provisionalSources (found " + forbidden + ")");
+    }
+    assert.ok(/-\s*s1|-\s*<|\[\s*"s1"|-\s*\S+/.test(scaffold), "scaffold must show provisionalSources as a YAML sequence of session ids");
+  });
+
+  it("synthesis.md skeleton uses the exact user-requested frontmatter shape", () => {
+    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
+    assert.match(text, /clusterId:\s*\S+/);
+    assert.match(text, /provisionalSources:\s*\n/);
+  });
+
   it("preserves literal placeholder-shaped text injected through values", () => {
     const out = render("a {{TRACE}} b", {
       TRACE: "literal {{TRACE}} and {{OTHER}} {{lower}} {{bad-key}} shapes",

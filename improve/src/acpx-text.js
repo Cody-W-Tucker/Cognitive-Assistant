@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 import { modelForRole } from "./models.js";
@@ -195,7 +195,8 @@ export function runAcpxPromptFile(options = {}) {
   if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
     throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const { role, promptFile, model = null, timeoutSec = null, timeoutMs = null, bin = null, spawnFn = null } = options;
+  const { role, promptFile, model = null, timeoutSec = null, timeoutMs = null, bin = null, spawnFn = null, workspace = null, cwd = null } = options;
+  const workspaceCwd = workspace || cwd || null;
   const roleKey = String(role || "");
   let secs = timeoutSec;
   if (secs === null || secs === undefined) {
@@ -232,15 +233,44 @@ export function runAcpxPromptFile(options = {}) {
   const spawn = spawnFn || spawnSync;
   const spawnTimeout =
     timeoutMs !== null && timeoutMs !== undefined ? timeoutMs : Number(secs) * 1000 + ACPX_SPAWN_TIMEOUT_BUFFER_MS;
-  const result = spawn(effectiveBin, argv, { encoding: "utf8", timeout: spawnTimeout });
+  const spawnOpts = { encoding: "utf8", timeout: spawnTimeout, ...(workspaceCwd ? { cwd: String(workspaceCwd) } : {}) };
+  const result = spawn(effectiveBin, argv, spawnOpts);
   if (result?.error || result?.status !== 0) {
     return { status: "failed", error: result?.error?.message || `acpx exit ${result?.status}`, argv };
   }
-  const parsed = extractAcpxFinalJson(result?.stdout);
+  const stdout = result?.stdout ?? "";
+  // Synthesis is a native edit turn. Its authoritative result is the
+  // subsequently measured private-workspace diff, never its stdout.
+  if (roleKey === "synthesis") {
+    return { status: "ok", result: stdout, stdout, raw: stdout, argv };
+  }
+  const parsed = extractAcpxFinalJson(stdout);
   if (!parsed) {
     return { status: "failed", error: "acpx returned unparseable output", argv };
   }
   return { status: "ok", result: parsed, argv };
+}
+
+/** Non-blocking ACPX boundary for parallel trace analysis. */
+export async function runAcpxPromptFileAsync({ role, promptFile, model = null, timeoutSec = null, bin = null, workspace = null, cwd = null, spawnFn = null } = {}) {
+  const workspaceCwd = workspace || cwd || null;
+  const roleKey = String(role || "");
+  const secs = timeoutSec ?? ROLE_TIMEOUT_SEC[roleKey];
+  if (!secs) return { status: "failed", error: `acpx timeout is required (unknown role ${JSON.stringify(roleKey)})` };
+  try { if (!promptFile || !fs.statSync(promptFile).isFile()) return { status: "failed", error: "acpx prompt file not found" }; } catch { return { status: "failed", error: "acpx prompt file not found" }; }
+  let argv;
+  try { argv = buildAcpxArgs({ model: model || modelForRole(String(role)), timeoutSec: secs, promptFile }); } catch (err) { return { status: "failed", error: err?.message || String(err) }; }
+  return await new Promise((resolve) => {
+    let child;
+    const spawner = spawnFn || spawn;
+    const spawnOpts = { stdio: ["ignore", "pipe", "pipe"], ...(workspaceCwd ? { cwd: String(workspaceCwd) } : {}) };
+    try { child = spawner(bin || resolveAcpxBin(), argv, spawnOpts); } catch (err) { resolve({ status: "failed", error: err?.message || String(err), argv }); return; }
+    let stdout = "", stderr = "", expired = false;
+    const timer = setTimeout(() => { expired = true; child.kill("SIGTERM"); }, Number(secs) * 1000 + ACPX_SPAWN_TIMEOUT_BUFFER_MS);
+    child.stdout.on("data", (part) => { stdout += part; }); child.stderr.on("data", (part) => { stderr += part; });
+    child.on("error", (err) => { clearTimeout(timer); resolve({ status: "failed", error: err.message, argv }); });
+    child.on("close", (code) => { clearTimeout(timer); if (expired || code !== 0) { resolve({ status: "failed", error: expired ? "acpx timed out" : (stderr.trim() || `acpx exit ${code}`), argv }); return; } if (roleKey === "synthesis") { resolve({ status: "ok", result: stdout, stdout, raw: stdout, argv }); return; } const parsed = extractAcpxFinalJson(stdout); resolve(parsed ? { status: "ok", result: parsed, argv } : { status: "failed", error: "acpx returned unparseable output", argv }); });
+  });
 }
 
 /**
@@ -437,23 +467,18 @@ function unwrapSingleFence(trimmed) {
 }
 
 /**
- * Strict deterministic extractor for exactly one final JSON object in ACPX
- * text output. Tolerates ONLY known ACPX framing (`[acpx] ...` lines),
- * one known Pi quiet preamble (version/separator/Context/Skills shape,
- * plus an optional upgrade-notice tail: one 3+ hyphen separator and one
- * `New version available:` line),
- * surrounding whitespace, and one optional ```json fenced block.
- * Fail-closed (returns null) on: absent/malformed JSON, unbalanced braces,
- * zero or ambiguous (>=2) top-level object candidates, top-level
- * arrays/scalars, JSON-RPC envelopes, non-object finals, any model prose
- * or arbitrary embedded JSON outside the single final object.
+ * Backpass-compatible deterministic extractor for one JSON object in ACPX text
+ * output. ACPX/OpenCode may add prose or fenced formatting around its final
+ * object; Backpass deliberately unwraps that transport decoration. CA keeps
+ * object-only and JSON-RPC rejection, but otherwise follows its order: first
+ * fenced candidate, then the full cleaned reply; try whole JSON, then the span
+ * from its first `{` through its last `}`.
  *
  * @param {string} stdout raw ACPX stdout (text-output mode)
- * @returns {Record<string, unknown> | null} the single final object or null
+ * @returns {Record<string, unknown> | null} the final object or null
  */
 export function extractAcpxFinalJson(stdout) {
   if (typeof stdout !== "string") return null;
-  // Strip BOM when present.
   let text = stdout;
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   text = stripAcpxFraming(text).trim();
@@ -461,28 +486,26 @@ export function extractAcpxFinalJson(stdout) {
   text = stripPiQuietPreamble(text).trim();
   if (!text) return null;
 
-  const unwrapped = unwrapSingleFence(text);
-  if (unwrapped === null) return null;
-  const candidate = unwrapped.inner.trim();
-  if (!candidate) return null;
-
-  // Top-level arrays/scalars can never be model-final JSON.
-  if (candidate[0] !== "{") return null;
-
-  const spans = scanObjectSpans(candidate);
-  if (spans.length !== 1) return null;
-  const span = spans[0];
-  // The single object must be the entire payload (whitespace only outside).
-  if (candidate.slice(0, span.start).trim() !== "") return null;
-  if (candidate.slice(span.end + 1).trim() !== "") return null;
-
-  let parsed = null;
-  try {
-    parsed = JSON.parse(candidate.slice(span.start, span.end + 1));
-  } catch {
-    return null;
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const candidates = [];
+  if (fenced) candidates.push(fenced[1]);
+  candidates.push(text);
+  for (const raw of candidates) {
+    const candidate = raw.trim();
+    const forms = [candidate];
+    const first = candidate.indexOf("{");
+    const last = candidate.lastIndexOf("}");
+    if (first !== -1 && last > first) forms.push(candidate.slice(first, last + 1));
+    for (const form of forms) {
+      let parsed;
+      try {
+        parsed = JSON.parse(form);
+      } catch {
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || isJsonRpcEnvelope(parsed)) continue;
+      return parsed;
+    }
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  if (isJsonRpcEnvelope(parsed)) return null;
-  return parsed;
+  return null;
 }

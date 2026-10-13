@@ -13,7 +13,8 @@ Subcommands:
   update             Run build-prompts, build-skills, build-translation-layer, build-alignment-spec, and build-tool-specs
   health-check       Validate prompts, paths, provider access, and QMD availability
    improve-run        Improvement pass: manual TTY route by default, --headless for JSON proposal into XDG state (never writes repo/Hermes)
-  improve-apply      Review gate: apply a proposal (sole writer of experience records)
+   improve-apply      Review gate: apply a proposal (sole writer of experience records)
+   improve-synthesize   Resume-only synthesis over persisted evidence/ledger (never discovers/analyzes)
 
 Common flags:
   --profile <name>   Required for most commands. Optional for 'update' (all profiles).
@@ -27,6 +28,20 @@ from pathlib import Path
 from typing import Sequence
 
 from core.config import Config, list_profiles
+
+
+def _decisions_hint(proposal: dict) -> str:
+    """Build the improve-apply next-step hint from actual proposal edit ids.
+
+    Never hardcodes a run-local label: with edits, names each actual edit
+    id; with none, uses a neutral placeholder.
+    """
+    edits = proposal.get("edits", []) or []
+    ids = [str(edit.get("id", "?")) for edit in edits if isinstance(edit, dict)]
+    if not ids:
+        return "next: nothing to review (no candidate edits); re-run, then review with `improve-apply --decisions \"<edit>=accepted ...\"`"
+    vector = " ".join(f"{edit_id}=accepted" for edit_id in ids)
+    return f"next: review with `improve-apply --decisions \"{vector}\"`"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -199,6 +214,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Report what would be written; write nothing.",
     )
 
+    improve_synth_parser = subparsers.add_parser(
+        "improve-synthesize",
+        help="Resume-only synthesis over persisted evidence/ledger (never discovers or analyzes).",
+    )
+    improve_synth_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Private state dir holding evidence/ledger (default: $XDG_DATA_HOME/cognitive-assistant/improve).",
+    )
+    improve_synth_parser.add_argument(
+        "--min-gap-evidence",
+        type=int,
+        default=2,
+        help="Sessions of shared gap evidence needed before a candidate is proposed.",
+    )
+    improve_synth_parser.add_argument(
+        "--soul-path",
+        type=Path,
+        help="Read-only SOUL baseline for synthesis context.",
+    )
+
     return parser
 
 
@@ -272,7 +308,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 + str(args.state_dir or improve_runtime.default_state_dir()),
                 file=sys.stderr,
             )
-            print("next: review with `improve-apply --decisions \"e1=accepted ...\"`", file=sys.stderr)
+            print(_decisions_hint(proposal), file=sys.stderr)
             return 0
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             print(
@@ -295,7 +331,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{proposal.get('stats', {}).get('transcripts', 0)} transcript(s) discovered"
         )
         print("state: " + str(args.state_dir or improve_runtime.default_state_dir()))
-        print("next: review with `improve-apply --decisions \"e1=accepted ...\"`")
+        print(_decisions_hint(proposal))
         return 0
 
     if args.command == "improve-apply":
@@ -329,6 +365,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  wrote {written}")
         if not result["written"]:
             print("  nothing written")
+        return 0
+
+    if args.command == "improve-synthesize":
+        import json
+
+        from core import improve as improve_runtime
+
+        proposal = improve_runtime.synthesize_resume(
+            state_dir=args.state_dir,
+            min_gap_evidence=args.min_gap_evidence,
+            soul_path=args.soul_path,
+        )
+        print(json.dumps(proposal))
+        print(
+            f"proposal {proposal.get('id', '?')}: "
+            f"{len(proposal.get('edits', []))} candidate edit(s), "
+            f"{proposal.get('stats', {}).get('transcripts', 0)} transcript(s) resumed",
+            file=sys.stderr,
+        )
+        print(
+            "state: "
+            + str(args.state_dir or improve_runtime.default_state_dir()),
+            file=sys.stderr,
+        )
+        print(_decisions_hint(proposal), file=sys.stderr)
         return 0
 
     # update command handles profile resolution internally (supports "all profiles" mode)

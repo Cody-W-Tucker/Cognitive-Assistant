@@ -4,6 +4,7 @@
 // judges same-gap paraphrases, the merge itself stays mechanical. Failure is
 // fail-soft to deterministic lexical identity with a visible run note.
 
+import fs from "node:fs";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
@@ -12,6 +13,96 @@ import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
+export const OPEN_GAPS_FILENAME = "open-gaps.json";
+function normalizeOpenGapKey(cluster) {
+  const raw = String(cluster?.proposedInstruction || cluster?.representativeQuote || cluster?.mistake || cluster?.id || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+  return raw || String(cluster?.id || "unknown");
+}
+export function loadOpenGaps(stateDir) {
+  if (!stateDir) return { version: 1, gaps: [] };
+  try {
+    const raw = fs.readFileSync(path.join(path.resolve(stateDir), OPEN_GAPS_FILENAME), "utf8");
+    const parsed = JSON.parse(raw);
+    const gaps = Array.isArray(parsed?.gaps) ? parsed.gaps : Array.isArray(parsed) ? parsed : [];
+    return { version: 1, gaps };
+  } catch {
+    return { version: 1, gaps: [] };
+  }
+}
+export function saveOpenGaps(stateDir, gaps) {
+  if (!stateDir) return null;
+  const resolved = path.resolve(stateDir);
+  fs.mkdirSync(resolved, { recursive: true });
+  const payload = { version: 1, updatedAt: new Date().toISOString(), gaps: gaps || [] };
+  fs.writeFileSync(path.join(resolved, OPEN_GAPS_FILENAME), `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return path.join(resolved, OPEN_GAPS_FILENAME);
+}
+/**
+ * Mechanically judge/merge all open/singleton observations BEFORE the
+ * minGapEvidence eligibility floor. Unions current clusters (including
+ * ineligible singletons) with persisted open gaps by stable key/id; when
+ * the union reaches the floor the merged cluster becomes eligible and is
+ * marked corroboratedOpenGap so the proposal can cite the open-gap merge.
+ */
+export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = {}) {
+  const clusters = Array.isArray(ledger?.clusters) ? ledger.clusters.map((c) => ({ ...c })) : [];
+  const open = Array.isArray(persisted?.gaps) ? persisted.gaps : [];
+  const byId = new Map(open.map((g) => [String(g.id), g]));
+  const byKey = new Map(open.map((g) => [String(g.key || normalizeOpenGapKey(g)), g]));
+  let corroborated = 0;
+  for (const c of clusters) {
+    const key = normalizeOpenGapKey(c);
+    const match = byId.get(String(c.id)) || byKey.get(key);
+    if (!match) continue;
+    const before = [...(c.sources || []).map(String)].sort();
+    const union = [...new Set([...before, ...((match.sources || []).map(String))])].sort();
+    // Cross-run corroboration: a persisted match at/above the floor still
+    // marks the eligible cluster as open-gap corroborated on later runs even
+    // when this run adds no new distinct sessions. Growth promotes
+    // singletons; identity still corroborates eligible repeats.
+    if (union.length <= before.length) {
+      if (union.length >= minGapEvidence) {
+        const was = Boolean(c.corroboratedOpenGap);
+        c.sources = union;
+        c.count = union.length;
+        c.eligible = true;
+        c.corroboratedOpenGap = true;
+        if (!was) corroborated += 1;
+      }
+      continue;
+    }
+    if (union.length >= minGapEvidence) {
+      const wasEligible = Boolean(c.eligible);
+      c.sources = union;
+      c.count = union.length;
+      c.eligible = true;
+      c.corroboratedOpenGap = true;
+      if (!wasEligible) c.openGapPromotedSingleton = true;
+      corroborated += 1;
+    } else if (!c.eligible) {
+      c.sources = union;
+      c.count = union.length;
+      c.eligible = union.length >= minGapEvidence;
+    }
+  }
+  // Persistable snapshot: union of persisted + current (mechanical, no drop).
+  const snapshot = new Map();
+  for (const g of open) snapshot.set(String(g.id || g.key), { ...g });
+  for (const c of clusters) {
+    const snap = {
+      id: String(c.id),
+      key: normalizeOpenGapKey(c),
+      proposedInstruction: c.proposedInstruction,
+      representativeQuote: c.representativeQuote,
+      mistake: c.mistake,
+      sources: [...(c.sources || []).map(String)],
+      count: (c.sources || []).length,
+      eligible: Boolean(c.eligible),
+    };
+    snapshot.set(String(c.id), snap);
+  }
+  return { clusters, corroborated, snapshot: [...snapshot.values()] };
+}
 
 function firstMistake(cluster) {
   const flat = String(cluster.mistake || "").replace(/\s+/g, " ").trim();
@@ -41,15 +132,13 @@ export function buildConsolidatePrompt(ledger, { promptsDir } = {}) {
 
 /**
  * Validate a raw consolidate answer against the folded ledger.
- * Only eligible/open cluster IDs — the exact set presented in the prompt —
- * can merge. Keeps groups with >=2 distinct eligible IDs and unique
- * membership; drops malformed groups, unknown or ineligible IDs,
- * singletons, and repeat claims.
+ * Every exact cluster ID presented in the prompt can merge (eligibility is
+ * gated after consolidation, so open/singleton IDs are valid merge members).
+ * Keeps groups with >=2 distinct presented IDs and unique membership; drops
+ * malformed groups, unknown IDs, singletons, and repeat claims.
  */
 export function parseConsolidateResult(parsed, ledger) {
-  const known = new Set(
-    (ledger?.clusters || []).filter((c) => c?.eligible).map((c) => String(c.id)),
-  );
+  const known = new Set((ledger?.clusters || []).map((c) => String(c?.id)));
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.merges)) return [];
   const claimed = new Set();
   const out = [];
@@ -178,28 +267,79 @@ export function acpxConsolidateInvoke(options = {}) {
 }
 
 /**
- * Run consolidation: acpx-only when >=2 eligible clusters exist.
- * Persists the rendered prompt privately with run/stage metadata.
- * acpx failure/invalid degrades to the deterministic lexical current
- * result with a visible note; it never aborts the run.
+ * Run consolidation: acpx-only when >=2 current/open clusters exist.
+ * ALL current/open clusters (including ineligible singletons from actual
+ * analyzer gap observations) are submitted to the ACPX consolidation prompt
+ * BEFORE minGapEvidence eligibility gating; the merge itself can promote
+ * distinct-session singletons to eligible. Persists the rendered prompt
+ * privately with run/stage metadata. acpx failure/invalid degrades to the
+ * deterministic lexical current result with a visible note; it never aborts
+ * the run.
  */
 export function consolidateLedger(
   ledger,
-  { invoke = acpxConsolidateInvoke, promptsDir, stateDir = null, runId = null, minGapEvidence = 2, analyzer = "acpx" } = {},
+  { invoke = acpxConsolidateInvoke, promptsDir, stateDir = null, runId = null, minGapEvidence = 2, analyzer = "acpx", persist = true, archivePrompt = null } = {},
 ) {
-  const clusters = ledger?.clusters || [];
-  const eligible = clusters.filter((c) => c.eligible);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
-  if (eligible.length < MIN_CONSOLIDATE_ENTRIES) {
-    return { ledger, skipped: "fewer than two eligible gaps", merged: 0, note: "consolidation skipped: fewer than two eligible gaps" };
+  // Prompt for deferred persistence (resume validates eligibility before any
+  // state mutation). Populated below when the judged call is needed.
+  let pendingPrompt = null;
+  let pendingPromptFile = null;
+  let pendingFinalLedger = null;
+  // Open/singleton observations are mechanically judged/merged BEFORE the
+  // minGapEvidence eligibility floor, then persisted for future runs.
+  let working = ledger;
+  let openCorroborated = 0;
+  let openSnapshot = null;
+  try {
+    const persisted = loadOpenGaps(stateDir);
+    const out = corroborateOpenGaps(ledger, persisted, { minGapEvidence });
+    working = { ...ledger, clusters: out.clusters };
+    openCorroborated = out.corroborated;
+    openSnapshot = out.snapshot;
+  } catch {
+    working = ledger;
+  }
+  const persistOpen = (finalLedger) => {
+    if (!persist) {
+      pendingFinalLedger = finalLedger;
+      return;
+    }
+    try {
+      const gaps = (finalLedger?.clusters || []).map((c) => ({
+        id: String(c.id),
+        key: normalizeOpenGapKey(c),
+        proposedInstruction: c.proposedInstruction,
+        representativeQuote: c.representativeQuote,
+        mistake: c.mistake,
+        sources: [...(c.sources || []).map(String)],
+        count: (c.sources || []).length,
+        eligible: Boolean(c.eligible),
+      }));
+      const merged = new Map((openSnapshot || []).map((g) => [String(g.id), g]));
+      for (const g of gaps) merged.set(String(g.id), g);
+      saveOpenGaps(stateDir, [...merged.values()]);
+    } catch {
+      // persistence best-effort; ledger result still flows downstream
+    }
+  };
+  const clusters = working?.clusters || [];
+  const openNote = openCorroborated > 0 ? ` open-gap corroboration merged ${openCorroborated} singleton/eligible gap(s) before the floor.` : "";
+  if (clusters.length < MIN_CONSOLIDATE_ENTRIES) {
+    persistOpen(working);
+    const base = "consolidation skipped: fewer than two open gaps";
+    return { ledger: working, skipped: "fewer than two open gaps", merged: openCorroborated, note: `${base}.${openNote}`.trim() };
   }
   if (analyzer === "mock") {
-    return { ledger, skipped: "mock analyzer: deterministic lexical identity", merged: 0, note: "consolidation skipped (mock analyzer): deterministic lexical identity" };
+    persistOpen(working);
+    const base = "consolidation skipped (mock analyzer): deterministic lexical identity";
+    return { ledger: working, skipped: "mock analyzer: deterministic lexical identity", merged: openCorroborated, note: `${base}.${openNote}`.trim() };
   }
-  const prompt = buildConsolidatePrompt({ ...ledger, clusters: eligible }, { promptsDir });
+  const prompt = buildConsolidatePrompt({ ...working, clusters }, { promptsDir });
   let promptFile = null;
   let persistNote = "";
-  if (stateDir) {
+  const shouldArchivePrompt = archivePrompt ?? persist;
+  if (stateDir && shouldArchivePrompt) {
     try {
       promptFile = persistPrompt(path.resolve(stateDir), {
         runId: resolvedRun,
@@ -215,41 +355,56 @@ export function consolidateLedger(
     }
   }
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
+  if (!promptFile && invoke === acpxConsolidateInvoke) {
+    persistOpen(working);
+    return withPersist({
+      ledger: working,
+      failed: "acpx prompt file is required (reuse persisted prompt)",
+      merged: 0,
+      note: "consolidation failed (acpx prompt file is required (reuse persisted prompt)); continuing with lexical gap identity for this run",
+      promptFile,
+    });
+  }
   let outcome;
   try {
-    outcome = invoke({ prompt, promptFile, clusters: eligible, promptsDir });
+    outcome = invoke({ prompt, promptFile, clusters, promptsDir });
   } catch (err) {
     outcome = { status: "failed", error: err?.message || String(err) };
   }
   if (!outcome || outcome.status !== "ok" || !outcome.result) {
     // Support test doubles returning {status:"ok", merges} directly.
     if (outcome && outcome.status === "ok" && Array.isArray(outcome.merges)) {
-      const groups = parseConsolidateResult({ merges: outcome.merges }, ledger);
+      const groups = parseConsolidateResult({ merges: outcome.merges }, working);
       if (!groups.length) {
-        return withPersist({ ledger, failed: "no valid merges", merged: 0, note: "consolidation returned no valid merges; continuing with lexical gap identity for this run", promptFile });
+        persistOpen(working);
+        return withPersist({ ledger: working, failed: "no valid merges", merged: 0, note: "consolidation returned no valid merges; continuing with lexical gap identity for this run", promptFile });
       }
-      const merged = mergeClusters(ledger, groups, { minGapEvidence });
-      return withPersist({ ledger: merged, merged: groups.reduce((n, g) => n + g.length - 1, 0), note: `consolidation merged ${groups.length} group(s)`, promptFile });
+      const merged = mergeClusters(working, groups, { minGapEvidence });
+      persistOpen(merged);
+      return withPersist({ ledger: merged, merged: groups.reduce((n, g) => n + g.length - 1, 0) + openCorroborated, note: `consolidation merged ${groups.length} group(s).${openNote}`.trim(), promptFile });
     }
+    persistOpen(working);
     return withPersist({
-      ledger,
+      ledger: working,
       failed: outcome?.error || "consolidation failed",
       merged: 0,
       note: `consolidation failed (${outcome?.error || "unparseable output"}); continuing with lexical gap identity for this run`,
       promptFile,
     });
   }
-  const groups = parseConsolidateResult(outcome.result, { ...ledger, clusters: eligible });
+  const groups = parseConsolidateResult(outcome.result, working);
   if (!groups.length) {
+    persistOpen(working);
     const failed = outcome.result && typeof outcome.result === "object" && Array.isArray(outcome.result.merges) ? false : true;
     return withPersist({
-      ledger,
+      ledger: working,
       ...(failed ? { failed: "no parseable merge list" } : {}),
       merged: 0,
       note: "consolidation returned no valid merges; continuing with lexical gap identity for this run",
       promptFile,
     });
   }
-  const merged = mergeClusters(ledger, groups, { minGapEvidence });
-  return withPersist({ ledger: merged, merged: groups.reduce((n, g) => n + g.length - 1, 0), note: `consolidation merged ${groups.length} group(s)`, promptFile });
+  const merged = mergeClusters(working, groups, { minGapEvidence });
+  persistOpen(merged);
+  return withPersist({ ledger: merged, merged: groups.reduce((n, g) => n + g.length - 1, 0) + openCorroborated, note: `consolidation merged ${groups.length} group(s).${openNote}`.trim(), promptFile });
 }

@@ -55,7 +55,7 @@ function changePlan(overrides = {}) {
 
 function finalRecord(overrides = {}) {
   return {
-    id: "exp-bootstrap-aaa",
+    id: "exp-bootstrap-a1b2c3d4e5f6",
     title: "Bootstrap context once",
     body: "Recurring gap seen in 2 session(s): sessions re-derive project context from scratch",
     sources: ["s1", "s2"],
@@ -369,5 +369,269 @@ describe("synth->private stage / measure->annotate-preface->annotate (annotation
     const keep = { ...changePlan({ id: "e3" }), annotation: { verdict: "keep", reason: "m", record: finalRecord() }, finalRecord: finalRecord() };
     const suppressed = annotate.applyRejectionSuppression([keep], rejections, { evidenceIndex: evidenceIndex() });
     assert.equal(suppressed.length, 0, "equivalent keep final must stay suppressible");
+  });
+});
+
+describe("review findings: per-change measured binding (no blanket all-IDs)", () => {
+  function twoPlans() {
+    return [
+      { id: "e1", kind: "add", clusterId: "g-aaa", provisionalIntent: "Bootstrap context once", provisionalSources: ["s1", "s2"], provisionalCount: 2 },
+      { id: "e2", kind: "add", clusterId: "g-aaa", provisionalIntent: "Bootstrap context once", provisionalSources: ["s1", "s2"], provisionalCount: 2 },
+    ];
+  }
+  function workspaceChanges() {
+    return [
+      { id: "m-e1", recordId: "e1", file: "e1.md", kind: "created", text: "sessions re-derive project context from scratch", diff: "--- a (m-e1)\n+++ b/e1.md (m-e1)\n+sessions re-derive project context from scratch", clusterId: "g-aaa", provisionalSources: ["s1", "s2"], eligibleSources: ["s1", "s2"], sources: ["s1", "s2"] },
+      { id: "m-e2", recordId: "e2", file: "e2.md", kind: "created", text: "sessions re-derive project context from scratch", diff: "--- a (m-e2)\n+++ b/e2.md (m-e2)\n+sessions re-derive project context from scratch", clusterId: "g-aaa", provisionalSources: ["s1", "s2"], eligibleSources: ["s1", "s2"], sources: ["s1", "s2"] },
+      { id: "m-other", recordId: "other", file: "other.md", kind: "modified", before: "x", text: "y", diff: "--- a (m-other)\n+++ b (m-other)" },
+    ];
+  }
+  it("annotateStaging binds each keep to its specific change only", async () => {
+    const annotate = await loadAnnotate();
+    const out = await annotate.annotateStaging(twoPlans(), {
+      stateDir: tmpDir(),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      measuredChanges: workspaceChanges(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [
+          { id: "e1", verdict: "keep", reason: "m", record: finalRecord() },
+          { id: "e2", verdict: "keep", reason: "m", record: { ...finalRecord(), id: "exp-second-a1b2c3d4e5f6" } },
+        ]};
+      },
+    });
+    assert.equal(out.failed, false);
+    assert.equal(out.annotated.length, 2);
+    const e1 = out.annotated.find((a) => a.id === "e1");
+    const e2 = out.annotated.find((a) => a.id === "e2");
+    assert.deepEqual(e1.measuredIds, ["m-e1"]);
+    assert.deepEqual(e2.measuredIds, ["m-e2"]);
+  });
+  it("buildFinalProposal binds each final to its specific change only", async () => {
+    const stage = await loadStage();
+    const annotate = await loadAnnotate();
+    const out = await annotate.annotateStaging(twoPlans(), {
+      stateDir: tmpDir(),
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      measuredChanges: workspaceChanges(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [
+          { id: "e1", verdict: "keep", reason: "m", record: finalRecord() },
+          { id: "e2", verdict: "keep", reason: "m", record: { ...finalRecord(), id: "exp-second-a1b2c3d4e5f6" } },
+        ]};
+      },
+    });
+    const finals = stage.buildFinalProposal(out.annotated, {
+      stateDir: null,
+      ledger: ledger(),
+      evidenceIndex: evidenceIndex(),
+      measuredChanges: workspaceChanges(),
+    });
+    assert.equal(finals.length, 2);
+    const f1 = finals.find((f) => f.id === "e1");
+    const f2 = finals.find((f) => f.id === "e2");
+    assert.deepEqual(f1.measuredIds, ["m-e1"]);
+    assert.deepEqual(f2.measuredIds, ["m-e2"]);
+    assert.ok(!f1.measuredIds.includes("m-e2") && !f1.measuredIds.includes("m-other"));
+    assert.ok(!JSON.stringify(workspaceChanges()).includes("seed-"), "synthetic seed records do not exist");
+  });
+});
+
+describe("annotate prompt binds staged session-bound allowed evidence", () => {
+  function distinctLedger() {
+    return {
+      version: 1,
+      minGapEvidence: 2,
+      clusters: [
+        {
+          id: "g-bbb",
+          proposedInstruction: "Rebuild index incrementally",
+          representativeQuote: "representative fallback quote",
+          mistake: "rebuilds full index every run",
+          sources: ["s1", "s2"],
+          count: 2,
+          eligible: true,
+          perSource: {
+            s1: { quote: "alpha exact quote from session one", mistake: "m" },
+            s2: { quote: "beta exact quote from session two", mistake: "m" },
+          },
+        },
+      ],
+    };
+  }
+  function distinctIndex() {
+    return new Map([
+      ["s1", [{ quote: "alpha exact quote from session one", effect: "e1" }]],
+      ["s2", [{ quote: "beta exact quote from session two", effect: "e2" }]],
+      ["s3-global", [{ quote: "unrelated global quote must not leak", effect: "eg" }]],
+    ]);
+  }
+  function distinctPlan(overrides = {}) {
+    return {
+      id: "e9",
+      kind: "add",
+      clusterId: "g-bbb",
+      provisionalIntent: "Rebuild index incrementally",
+      provisionalSources: ["s1", "s2"],
+      provisionalCount: 2,
+      ...overrides,
+    };
+  }
+  function distinctRecord(overrides = {}) {
+    return {
+      id: "exp-rebuild-b1c2d3e4f5a6",
+      title: "Rebuild index incrementally",
+      body: "Recurring gap seen in 2 session(s): rebuilds full index every run",
+      sources: ["s1", "s2"],
+      clusterId: "g-bbb",
+      evidence: [
+        { polarity: "negative", text: "alpha exact quote from session one", source: "s1", effect: "m" },
+        { polarity: "negative", text: "beta exact quote from session two", source: "s2", effect: "m" },
+      ],
+      counterevidence: "none observed",
+      compilerImplication: "compiler appends this record to the experience block",
+      ...overrides,
+    };
+  }
+
+  it("prompt lists exact source-specific allowed quotes (bounded, no global leak)", async () => {
+    const annotate = await loadAnnotate();
+    const prompt = annotate.renderAnnotatePrompt([distinctPlan()], {
+      runId: "run-ALLOW1",
+      ledger: distinctLedger(),
+      evidenceIndex: distinctIndex(),
+    });
+    assert.ok(prompt.includes("alpha exact quote from session one"), "prompt must list s1 exact quote");
+    assert.ok(prompt.includes("beta exact quote from session two"), "prompt must list s2 exact quote");
+    assert.ok(prompt.includes("[s1]"), "prompt must bind s1 source id");
+    assert.ok(prompt.includes("[s2]"), "prompt must bind s2 source id");
+    assert.ok(!prompt.includes("unrelated global quote must not leak"), "prompt must not show arbitrary global evidence");
+  });
+
+  it("swapped or paraphrased quote still fails closed", async () => {
+    const annotate = await loadAnnotate();
+    const swapped = distinctRecord({
+      evidence: [
+        { polarity: "negative", text: "beta exact quote from session two", source: "s1", effect: "m" },
+        { polarity: "negative", text: "alpha exact quote from session one", source: "s2", effect: "m" },
+      ],
+    });
+    const outSwapped = await annotate.annotateStaging([distinctPlan()], {
+      stateDir: tmpDir(),
+      ledger: distinctLedger(),
+      evidenceIndex: distinctIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e9", verdict: "keep", reason: "m", record: swapped }] };
+      },
+    });
+    assert.ok(outSwapped.failed, "swapped cross-source quote must fail closed");
+    assert.deepEqual(outSwapped.edits || [], []);
+    const paraphrased = distinctRecord({
+      evidence: [
+        { polarity: "negative", text: "alpha exact quote from session one (reworded)", source: "s1", effect: "m" },
+        { polarity: "negative", text: "beta exact quote from session two", source: "s2", effect: "m" },
+      ],
+    });
+    const outPara = await annotate.annotateStaging([distinctPlan()], {
+      stateDir: tmpDir(),
+      ledger: distinctLedger(),
+      evidenceIndex: distinctIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e9", verdict: "keep", reason: "m", record: paraphrased }] };
+      },
+    });
+    assert.ok(outPara.failed, "paraphrased/reconstructed quote must fail closed");
+    assert.deepEqual(outPara.edits || [], []);
+  });
+
+  it("live-shaped fixture with exact copied evidence succeeds", async () => {
+    const annotate = await loadAnnotate();
+    const out = await annotate.annotateStaging([distinctPlan()], {
+      stateDir: tmpDir(),
+      ledger: distinctLedger(),
+      evidenceIndex: distinctIndex(),
+      invoke: (args) => {
+        if (args.stage === "annotate-preface") return { status: "ok", ready: true };
+        return { status: "ok", annotations: [{ id: "e9", verdict: "keep", reason: "m", record: distinctRecord() }] };
+      },
+    });
+    assert.equal(out.failed, false);
+    assert.equal(out.annotated.length, 1);
+    assert.equal(out.annotated[0].finalRecord.evidence[0].text, "alpha exact quote from session one");
+    assert.equal(out.annotated[0].finalRecord.evidence[1].text, "beta exact quote from session two");
+  });
+
+  it("long quotes are never sliced: complete or omitted as a whole", async () => {
+    const annotate = await loadAnnotate();
+    const longQuote = `LONG-START-${"x".repeat(600)}-LONG-END`;
+    assert.ok(longQuote.length > 500, "fixture must exceed the old 500-char cap");
+    const longLedger = {
+      version: 1,
+      minGapEvidence: 2,
+      clusters: [
+        {
+          id: "g-bbb",
+          proposedInstruction: "Rebuild index incrementally",
+          representativeQuote: "representative fallback quote",
+          mistake: "rebuilds full index every run",
+          sources: ["s1", "s2"],
+          count: 2,
+          eligible: true,
+          perSource: {
+            s1: { quote: longQuote, mistake: "m" },
+            s2: { quote: "beta exact quote from session two", mistake: "m" },
+          },
+        },
+      ],
+    };
+    const longIndex = new Map([
+      ["s1", [{ quote: longQuote, effect: "e1" }]],
+      ["s2", [{ quote: "beta exact quote from session two", effect: "e2" }]],
+    ]);
+    const prompt = annotate.renderAnnotatePrompt([distinctPlan()], {
+      runId: "run-LONG1",
+      ledger: longLedger,
+      evidenceIndex: longIndex,
+    });
+    const prefix = longQuote.slice(0, 500);
+    // Either the complete quote renders, or the whole quote is skipped:
+    // a 500-char prefix must never appear without the full text + END marker.
+    assert.ok(!prompt.includes(prefix) || prompt.includes(longQuote), "long quote must not appear as a truncated prefix");
+    if (prompt.includes("LONG-START-")) {
+      assert.ok(prompt.includes(longQuote), "started long quote must render complete");
+      assert.ok(prompt.includes("-LONG-END"), "complete long quote must keep its END marker");
+    }
+    // Over-budget quotes are skipped as a whole: a quote larger than the
+    // total budget leaves no fragment behind.
+    const hugeQuote = `HUGE-START-${"y".repeat(20000)}-HUGE-END`;
+    const hugeLedger = {
+      version: 1,
+      minGapEvidence: 2,
+      clusters: [
+        {
+          id: "g-bbb",
+          proposedInstruction: "Rebuild index incrementally",
+          representativeQuote: "representative fallback quote",
+          mistake: "rebuilds full index every run",
+          sources: ["s1"],
+          count: 1,
+          eligible: true,
+          perSource: { s1: { quote: hugeQuote, mistake: "m" } },
+        },
+      ],
+    };
+    const hugeIndex = new Map([["s1", [{ quote: hugeQuote, effect: "e1" }]]]);
+    const hugePrompt = annotate.renderAnnotatePrompt([distinctPlan({ provisionalSources: ["s1"] })], {
+      runId: "run-HUGE1",
+      ledger: hugeLedger,
+      evidenceIndex: hugeIndex,
+    });
+    assert.ok(!hugePrompt.includes("HUGE-START-") || hugePrompt.includes(hugeQuote), "over-budget quote must be whole or omitted");
+    assert.ok(!hugePrompt.includes(hugeQuote.slice(0, 500)) || hugePrompt.includes("-HUGE-END"), "over-budget quote must never leak a truncated prefix");
   });
 });

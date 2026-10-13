@@ -156,6 +156,50 @@ def run_tui(
     return json.loads(proc.stdout)
 
 
+def synthesize_resume(
+    *,
+    state_dir: Optional[Path] = None,
+    min_gap_evidence: int = 2,
+    soul_path: Optional[Path] = None,
+    cwd: Optional[Path] = None,
+) -> Dict:
+    """Resume-only synthesis over persisted successful evidence + ledger.
+
+    Loads ``evidence/`` + ``ledger.json``/``open-gaps.json`` from ``state_dir``
+    (default XDG), consolidates only if required, checks the
+    eligibility/evidence floors, then runs fixed raw-stdout production
+    synthesis -> workspace measure -> annotation -> fresh proposal JSON.
+
+    Never invokes discovery/export/ACPX analysis. Absent/incomplete/corrupt
+    state fails closed with an actionable error. Never writes the CA repo or
+    Hermes; apply remains the sole durable experience writer.
+    """
+    resolved_state = state_dir or default_state_dir()
+    cmd = [
+        node_bin(),
+        str(RUNTIME_BIN),
+        "synthesize",
+        "--state-dir",
+        str(resolved_state),
+        "--min-gap-evidence",
+        str(min_gap_evidence),
+    ]
+    if soul_path is not None:
+        cmd.extend(["--soul-path", str(soul_path)])
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd or Path.cwd()),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ca-improve synthesize failed: {proc.stderr.strip() or proc.stdout.strip()}"
+        )
+    return json.loads(proc.stdout)
+
+
 def read_proposal(state_dir: Path) -> Dict:
     """Read the headless proposal from private state, or raise."""
     proposal_path = state_dir / "proposal.json"
