@@ -16,7 +16,7 @@ import { synthesizeCandidates, synthesizeWithAcpx } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
-import { checkpointKey, initStateDir, readSessionCheckpoint, writeJson } from "./state.js";
+import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson } from "./state.js";
 
 function readJsonlEvents(file) {
   const events = [];
@@ -201,7 +201,8 @@ export async function runPipeline({
   for (const record of records) {
     writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
   }
-  const folded = foldEvidence(records, { minGapEvidence });
+  const recurrenceRecords = readEvidenceRecords(stateDir);
+  const folded = foldEvidence(recurrenceRecords, { minGapEvidence });
   // Consolidation is acpx-only when >=2 eligible gaps exist; the mock
   // analyzer keeps deterministic lexical identity with a visible note.
   const consolidation = consolidateLedger(folded, {
@@ -213,7 +214,7 @@ export async function runPipeline({
   });
   const ledger = consolidation.ledger;
   writeJson(path.join(stateDir, "ledger.json"), ledger);
-  const evidenceIndex = new Map(records.map((r) => [r.transcriptId, r.positive || []]));
+  const evidenceIndex = new Map(recurrenceRecords.map((r) => [r.transcriptId, r.positive || []]));
   const soulBaseline = readSoulBaseline(soulPath);
   const rejections = readRejections(stateDir);
   const harnessSummary = harnessSummaryOf(discovery.transcripts);

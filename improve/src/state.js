@@ -50,3 +50,18 @@ export function readSessionCheckpoint(stateDir) {
     : new Set(Array.isArray(cursor.analyzedIds) ? cursor.analyzedIds.map(String) : []);
   return { processed, legacyIds };
 }
+
+/** Successful evidence is the recurrence corpus; raw sessions stay behind the cursor. */
+export function readEvidenceRecords(stateDir) {
+  const evidenceDir = path.join(stateDir, "evidence");
+  try {
+    return fs
+      .readdirSync(evidenceDir)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+      .map((name) => readJson(path.join(evidenceDir, name)))
+      .filter((record) => record && record.status === "ok");
+  } catch {
+    return [];
+  }
+}

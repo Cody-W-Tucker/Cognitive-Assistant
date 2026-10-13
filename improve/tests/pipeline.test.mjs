@@ -59,6 +59,31 @@ function finalAnnotationForPlan(plan, ledger, evidenceIndex) {
 }
 
 describe("pipeline production wiring (injectable invokes, no real acpx)", () => {
+  it("counts successful evidence from earlier checkpointed runs toward recurrence", async () => {
+    const home = homeWithTranscripts(1);
+    const stateDir = tmpDir();
+    const options = {
+      home,
+      stateDir,
+      analyzer: "mock",
+      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
+      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+    };
+
+    const first = await runPipeline(options);
+    assert.equal(first.stats.eligible, 0, "one session alone cannot satisfy the recurrence floor");
+
+    const sessions = path.join(home, ".codex", "sessions");
+    fs.writeFileSync(
+      path.join(sessions, "2026-01-02T00-00-00Z.jsonl"),
+      `${JSON.stringify({ role: "user", text: "same gap in a later session" })}\n`,
+      "utf8",
+    );
+    const second = await runPipeline(options);
+    assert.ok(second.stats.eligible >= 1, "prior successful evidence combines with the new session");
+    assert.ok(second.edits.length >= 1, "eligible recurrence reaches the proposal path");
+  });
+
   it("keeps successful session checkpoints across runs and analyzes only a newly discovered session", async () => {
     const home = homeWithTranscripts(2);
     const stateDir = tmpDir();
