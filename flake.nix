@@ -81,7 +81,11 @@
     {
       packages = forEachSupportedSystem (
         { pkgs }:
+        let
+          acpx = pkgs.callPackage ./packages/acpx/package.nix { };
+        in
         {
+          inherit acpx;
           langfuse-review-queue = pkgs.writeShellApplication {
             name = "langfuse-review-queue";
             runtimeInputs = [ pkgs.python312 ];
@@ -99,6 +103,7 @@
             runtimeInputs = [
               pkgs.python312
               pkgs.nodejs
+              acpx
             ];
             text = ''
               export PYTHONPATH=${self}
@@ -237,6 +242,7 @@
                 cudaSupport = false;
               })
               pkgs.nodejs
+              (pkgs.callPackage ./packages/acpx/package.nix { })
               ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
             ];
           };
