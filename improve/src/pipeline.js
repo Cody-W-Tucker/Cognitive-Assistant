@@ -1,6 +1,6 @@
 // Full headless pipeline: discover -> collect -> distill -> analyze
 // (acpx-only, injectable) -> fold (deterministic) -> consolidate (one
-// judged acpx call, fail-soft to lexical) -> synthesize (mock deterministic
+// judged acpx call, fail-soft to exact observation identity) -> synthesize (mock deterministic
 // or production acpx, fail-closed) -> proposal. Writes private state only;
 // never touches the CA repo, tracked files, or live Hermes.
 
@@ -257,7 +257,7 @@ export async function runPipeline({
   emit("fold:start");
   const folded = foldEvidence(recurrenceRecords, { minGapEvidence });
   // Consolidation is acpx-only when >=2 eligible gaps exist; the mock
-  // analyzer keeps deterministic lexical identity with a visible note.
+  // analyzer keeps deterministic exact observation identity with a visible note.
   const consolidation = consolidateLedger(folded, {
     ...(consolidateInvoke ? { invoke: consolidateInvoke } : analyzer === "mock" ? { analyzer: "mock" } : {}),
     stateDir,

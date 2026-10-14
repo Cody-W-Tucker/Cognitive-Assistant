@@ -2,7 +2,7 @@
 // Consolidation adapted from Backpass src/consolidate.js + src/gap-ledger.js
 // (commit 0268201), narrowed to the CA folded ledger: one bounded acpx call
 // judges same-gap paraphrases, the merge itself stays mechanical. Failure is
-// fail-soft to deterministic lexical identity with a visible run note.
+// fail-soft to deterministic exact observation identity with a visible run note.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -14,9 +14,20 @@ import { modelForRole } from "./models.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
 export const OPEN_GAPS_FILENAME = "open-gaps.json";
+/**
+ * Stable raw observation identity: normalized exact gap quote/mistake only.
+ * Never uses proposedInstruction or arbitrary instruction text: the same
+ * generic instruction across unrelated quotes must not collide. Mirrors the
+ * fold identity (fold.js normalizeQuote) so mechanical recurrence only fires
+ * on the same stable observation. Returns "" when no observation text exists
+ * so callers must not fall back to instruction text for matching.
+ */
+function normalizeObservationKey(cluster) {
+  const raw = String(cluster?.representativeQuote || cluster?.mistake || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+  return raw;
+}
 function normalizeOpenGapKey(cluster) {
-  const raw = String(cluster?.proposedInstruction || cluster?.representativeQuote || cluster?.mistake || cluster?.id || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
-  return raw || String(cluster?.id || "unknown");
+  return normalizeObservationKey(cluster);
 }
 export function loadOpenGaps(stateDir) {
   if (!stateDir) return { version: 1, gaps: [] };
@@ -38,24 +49,90 @@ export function saveOpenGaps(stateDir, gaps) {
   return path.join(resolved, OPEN_GAPS_FILENAME);
 }
 /**
- * Mechanically judge/merge all open/singleton observations BEFORE the
- * minGapEvidence eligibility floor. Unions current clusters (including
- * ineligible singletons) with persisted open gaps by stable key/id; when
- * the union reaches the floor the merged cluster becomes eligible and is
- * marked corroboratedOpenGap so the proposal can cite the open-gap merge.
+ * Mechanically corroborate open/singleton observations BEFORE the
+ * minGapEvidence eligibility floor. Matches ONLY on stable raw observation
+ * identity (normalized exact gap quote/mistake) or on an explicitly
+ * ACPX-validated merge membership persisted with member IDs/provenance.
+ * Never uses proposedInstruction/instruction text for matching: the same
+ * generic instruction across unrelated quotes/sessions must not corroborate.
+ * Unions distinct session sources, preserves every source-backed quote
+ * sighting (first-wins perSource plus quoteProvenance), and only then
+ * re-checks the floor.
  */
 export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = {}) {
-  const clusters = Array.isArray(ledger?.clusters) ? ledger.clusters.map((c) => ({ ...c })) : [];
+  const clusters = Array.isArray(ledger?.clusters) ? ledger.clusters.map((c) => ({ ...c, sources: [...(c.sources || []).map(String)] })) : [];
   const open = Array.isArray(persisted?.gaps) ? persisted.gaps : [];
   const byId = new Map(open.map((g) => [String(g.id), g]));
-  const byKey = new Map(open.map((g) => [String(g.key || normalizeOpenGapKey(g)), g]));
+  const byKey = new Map();
+  const byMemberId = new Map();
+  const byMemberKey = new Map();
+  for (const g of open) {
+    const gKey = String(g.key || normalizeObservationKey(g) || "");
+    if (gKey) byKey.set(gKey, g);
+    for (const mid of g.mergedFrom || g.memberIds || []) byMemberId.set(String(mid), g);
+    for (const mk of g.memberKeys || []) {
+      const nk = String(mk || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+      if (nk) byMemberKey.set(nk, g);
+    }
+    for (const entry of g.quoteProvenance || []) {
+      const eq = String(entry?.quote || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+      if (eq && !byMemberKey.has(eq)) byMemberKey.set(eq, g);
+    }
+    for (const sighting of Object.values(g.perSource || {})) {
+      const sq = String(sighting?.quote || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+      if (sq && !byMemberKey.has(sq)) byMemberKey.set(sq, g);
+    }
+  }
+  const findMatch = (c) => {
+    const id = String(c.id);
+    const key = normalizeObservationKey(c);
+    const direct = byId.get(id);
+    if (direct) {
+      const directKey = String(direct.key || normalizeObservationKey(direct) || "");
+      if (key && directKey) {
+        if (key === directKey) return direct;
+      } else if (!key && !directKey) {
+        return direct;
+      }
+      // Same id but different observation text: NOT the same gap; fall
+      // through to key/member lookup instead of merging distinct gaps.
+    }
+    if (key && byKey.has(key)) return byKey.get(key);
+    if (byMemberId.has(id)) return byMemberId.get(id);
+    if (key && byMemberKey.has(key)) return byMemberKey.get(key);
+    return null;
+  };
+  const mergeProvenance = (c, match) => {
+    const perSource = { ...(c.perSource || {}) };
+    const quoteProvenance = [...(c.quoteProvenance || [])];
+    for (const [source, sighting] of Object.entries(match.perSource || {})) {
+      quoteProvenance.push({
+        source: String(source),
+        quote: String(sighting?.quote || ""),
+        mistake: String(sighting?.mistake || ""),
+        from: String(match.id),
+      });
+      if (!perSource[source]) perSource[source] = { ...sighting };
+    }
+    for (const entry of match.quoteProvenance || []) {
+      quoteProvenance.push({ ...entry });
+      if (entry?.source && !perSource[entry.source] && entry.quote) {
+        perSource[entry.source] = { quote: entry.quote, mistake: entry.mistake || "" };
+      }
+    }
+    // Persisted member keys survive so paraphrase members stay reusable.
+    const memberKeys = new Set([...(match.memberKeys || [])].map(String));
+    const mk = String(match.key || normalizeObservationKey(match) || "");
+    if (mk) memberKeys.add(mk);
+    return { perSource, quoteProvenance, memberKeys: [...memberKeys] };
+  };
   let corroborated = 0;
   for (const c of clusters) {
-    const key = normalizeOpenGapKey(c);
-    const match = byId.get(String(c.id)) || byKey.get(key);
+    const match = findMatch(c);
     if (!match) continue;
     const before = [...(c.sources || []).map(String)].sort();
     const union = [...new Set([...before, ...((match.sources || []).map(String))])].sort();
+    const { perSource, quoteProvenance } = mergeProvenance(c, match);
     // Cross-run corroboration: a persisted match at/above the floor still
     // marks the eligible cluster as open-gap corroborated on later runs even
     // when this run adds no new distinct sessions. Growth promotes
@@ -67,6 +144,8 @@ export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = 
         c.count = union.length;
         c.eligible = true;
         c.corroboratedOpenGap = true;
+        if (Object.keys(perSource).length) c.perSource = perSource;
+        if (quoteProvenance.length) c.quoteProvenance = quoteProvenance;
         if (!was) corroborated += 1;
       }
       continue;
@@ -77,27 +156,46 @@ export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = 
       c.count = union.length;
       c.eligible = true;
       c.corroboratedOpenGap = true;
+      if (Object.keys(perSource).length) c.perSource = perSource;
+      if (quoteProvenance.length) c.quoteProvenance = quoteProvenance;
       if (!wasEligible) c.openGapPromotedSingleton = true;
       corroborated += 1;
     } else if (!c.eligible) {
       c.sources = union;
       c.count = union.length;
       c.eligible = union.length >= minGapEvidence;
+      if (Object.keys(perSource).length) c.perSource = perSource;
+      if (quoteProvenance.length) c.quoteProvenance = quoteProvenance;
     }
   }
   // Persistable snapshot: union of persisted + current (mechanical, no drop).
+  // Persisted entries carry member IDs/provenance so ACPX-validated paraphrase
+  // merges stay safely reusable across runs; instruction text is stored for
+  // display only and never used for matching.
   const snapshot = new Map();
   for (const g of open) snapshot.set(String(g.id || g.key), { ...g });
   for (const c of clusters) {
+    const key = normalizeObservationKey(c);
+    const memberKeys = new Set([...(c.memberKeys || [])].map(String));
+    if (key) memberKeys.add(key);
+    for (const entry of c.quoteProvenance || []) {
+      const eq = String(entry?.quote || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+      if (eq) memberKeys.add(eq);
+    }
     const snap = {
       id: String(c.id),
-      key: normalizeOpenGapKey(c),
+      key,
       proposedInstruction: c.proposedInstruction,
       representativeQuote: c.representativeQuote,
       mistake: c.mistake,
       sources: [...(c.sources || []).map(String)],
       count: (c.sources || []).length,
       eligible: Boolean(c.eligible),
+      ...(c.mergedFrom ? { mergedFrom: [...c.mergedFrom] } : {}),
+      ...(c.perSource ? { perSource: { ...c.perSource } } : {}),
+      ...(c.quoteProvenance ? { quoteProvenance: c.quoteProvenance.map((e) => ({ ...e })) } : {}),
+      memberKeys: [...memberKeys].filter(Boolean),
+      memberIds: [...(c.mergedFrom || [String(c.id)])].map(String),
     };
     snapshot.set(String(c.id), snap);
   }
@@ -217,6 +315,7 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
     const canonical = members.reduce((best, m) =>
       String(m.proposedInstruction || "").length < String(best.proposedInstruction || "").length ? m : best,
     );
+    const memberKeys = [...new Set(members.map((m) => normalizeObservationKey(m)).filter(Boolean))];
     mergedClusters.push({
       ...canonical,
       id: canonical.id,
@@ -229,6 +328,8 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
       perSource,
       quoteProvenance,
       mergedFrom: group.slice(),
+      memberIds: group.slice(),
+      memberKeys,
     });
   }
   mergedClusters.sort((a, b) => b.count - a.count || String(a.id).localeCompare(String(b.id)));
@@ -273,8 +374,8 @@ export function acpxConsolidateInvoke(options = {}) {
  * BEFORE minGapEvidence eligibility gating; the merge itself can promote
  * distinct-session singletons to eligible. Persists the rendered prompt
  * privately with run/stage metadata. acpx failure/invalid degrades to the
- * deterministic lexical current result with a visible note; it never aborts
- * the run.
+ * deterministic exact observation identity current result with a visible
+ * note; it never aborts the run.
  */
 export function consolidateLedger(
   ledger,
@@ -306,16 +407,30 @@ export function consolidateLedger(
       return;
     }
     try {
-      const gaps = (finalLedger?.clusters || []).map((c) => ({
-        id: String(c.id),
-        key: normalizeOpenGapKey(c),
-        proposedInstruction: c.proposedInstruction,
-        representativeQuote: c.representativeQuote,
-        mistake: c.mistake,
-        sources: [...(c.sources || []).map(String)],
-        count: (c.sources || []).length,
-        eligible: Boolean(c.eligible),
-      }));
+      const gaps = (finalLedger?.clusters || []).map((c) => {
+        const key = normalizeObservationKey(c);
+        const memberKeys = new Set([...(c.memberKeys || [])].map(String));
+        if (key) memberKeys.add(key);
+        for (const entry of c.quoteProvenance || []) {
+          const eq = String(entry?.quote || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
+          if (eq) memberKeys.add(eq);
+        }
+        return {
+          id: String(c.id),
+          key,
+          proposedInstruction: c.proposedInstruction,
+          representativeQuote: c.representativeQuote,
+          mistake: c.mistake,
+          sources: [...(c.sources || []).map(String)],
+          count: (c.sources || []).length,
+          eligible: Boolean(c.eligible),
+          ...(c.mergedFrom ? { mergedFrom: [...c.mergedFrom] } : {}),
+          memberIds: [...(c.mergedFrom || c.memberIds || [String(c.id)])].map(String),
+          memberKeys: [...memberKeys].filter(Boolean),
+          ...(c.perSource ? { perSource: { ...c.perSource } } : {}),
+          ...(c.quoteProvenance ? { quoteProvenance: c.quoteProvenance.map((e) => ({ ...e })) } : {}),
+        };
+      });
       const merged = new Map((openSnapshot || []).map((g) => [String(g.id), g]));
       for (const g of gaps) merged.set(String(g.id), g);
       saveOpenGaps(stateDir, [...merged.values()]);
@@ -332,8 +447,8 @@ export function consolidateLedger(
   }
   if (analyzer === "mock") {
     persistOpen(working);
-    const base = "consolidation skipped (mock analyzer): deterministic lexical identity";
-    return { ledger: working, skipped: "mock analyzer: deterministic lexical identity", merged: openCorroborated, note: `${base}.${openNote}`.trim() };
+    const base = "consolidation skipped (mock analyzer): deterministic exact observation identity";
+    return { ledger: working, skipped: "mock analyzer: deterministic exact observation identity", merged: openCorroborated, note: `${base}.${openNote}`.trim() };
   }
   const prompt = buildConsolidatePrompt({ ...working, clusters }, { promptsDir });
   let promptFile = null;
@@ -361,7 +476,7 @@ export function consolidateLedger(
       ledger: working,
       failed: "acpx prompt file is required (reuse persisted prompt)",
       merged: 0,
-      note: "consolidation failed (acpx prompt file is required (reuse persisted prompt)); continuing with lexical gap identity for this run",
+      note: "consolidation failed (acpx prompt file is required (reuse persisted prompt)); continuing with exact observation identity for this run",
       promptFile,
     });
   }
@@ -377,7 +492,7 @@ export function consolidateLedger(
       const groups = parseConsolidateResult({ merges: outcome.merges }, working);
       if (!groups.length) {
         persistOpen(working);
-        return withPersist({ ledger: working, failed: "no valid merges", merged: 0, note: "consolidation returned no valid merges; continuing with lexical gap identity for this run", promptFile });
+        return withPersist({ ledger: working, failed: "no valid merges", merged: 0, note: "consolidation returned no valid merges; continuing with exact observation identity for this run", promptFile });
       }
       const merged = mergeClusters(working, groups, { minGapEvidence });
       persistOpen(merged);
@@ -388,7 +503,7 @@ export function consolidateLedger(
       ledger: working,
       failed: outcome?.error || "consolidation failed",
       merged: 0,
-      note: `consolidation failed (${outcome?.error || "unparseable output"}); continuing with lexical gap identity for this run`,
+      note: `consolidation failed (${outcome?.error || "unparseable output"}); continuing with exact observation identity for this run`,
       promptFile,
     });
   }
@@ -400,7 +515,7 @@ export function consolidateLedger(
       ledger: working,
       ...(failed ? { failed: "no parseable merge list" } : {}),
       merged: 0,
-      note: "consolidation returned no valid merges; continuing with lexical gap identity for this run",
+      note: "consolidation returned no valid merges; continuing with exact observation identity for this run",
       promptFile,
     });
   }
