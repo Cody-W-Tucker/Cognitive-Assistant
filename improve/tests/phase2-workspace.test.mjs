@@ -51,8 +51,8 @@ describe("phase2 open-gap persistence", () => {
   });
 });
 
-describe("phase2 acpx workspace cwd", () => {
-  it("threads explicit workspace cwd without breaking existing callers", () => {
+describe("phase2 acpx text-only (no workspace cwd)", () => {
+  it("is text-only without workspace cwd; deterministic code materializes", () => {
     const stateDir = tmpDir();
     const ws = prepareExperienceWorkspace({ stateDir, records: [] });
     let seen = null;
@@ -61,21 +61,25 @@ describe("phase2 acpx workspace cwd", () => {
       evidenceIndex: new Map([["s1", [{ quote: "q" }]], ["s2", [{ quote: "q" }]]]),
       invoke: (args) => {
         seen = args;
-        // EDIT-ONLY edit turn: the production process authors the workspace cwd.
-        fs.writeFileSync(path.join(String(args?.workspace || ws.root), "e1.md"), "---\nclusterId: g-1\nprovisionalSources:\n  - s1\n  - s2\n---\n# do x\n\nbody q\n", "utf8");
+        // TEXT-ONLY: the production proposer returns stdout plans only and
+        // must not receive any workspace/cwd; deterministic code materializes.
         return { status: "ok", plans: [{ id: "e1", clusterId: "g-1", provisionalIntent: "do x", provisionalSources: ["s1", "s2"] }] };
       },
-      stateDir, runId: "run-WS1", workspace: ws.root, cwd: ws.root,
+      stateDir, runId: "run-WS1",
+      soulSnapshot: "soul snapshot", soulSha256: "abc123",
     });
     assert.equal(out.edits.length, 1);
     assert.equal(out.edits[0].id, "e1");
-    assert.ok(seen && (seen.workspace === ws.root || seen.cwd === ws.root));
-    // Existing caller without workspace stays compatible: fail-closed with no edits (never throws).
+    assert.equal(seen.workspace, undefined, "text-only invoke must not receive workspace");
+    assert.equal(seen.cwd, undefined, "text-only invoke must not receive cwd");
+    assert.ok(fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")), "deterministic code materializes validated plans");
+    // Unknown cluster fails closed (never throws).
     const freshState = tmpDir();
     const out2 = synthesizeWithAcpx(ledger, {
       evidenceIndex: new Map(),
-      invoke: () => ({ status: "ok", plans: [{ clusterId: "g-1", provisionalIntent: "do x", provisionalSources: ["s1", "s2"] }] }),
+      invoke: () => ({ status: "ok", plans: [{ clusterId: "g-ghost", provisionalIntent: "do x", provisionalSources: ["s1", "s2"] }] }),
       stateDir: freshState, runId: "run-WS2",
+      soulSnapshot: "soul snapshot", soulSha256: "abc123",
     });
     assert.deepEqual(out2.edits, []);
     void runAcpxPromptFile;

@@ -27,6 +27,7 @@ import {
   readEvidenceRecords,
   readJson,
   writeJson,
+  assertMinGapEvidence,
 } from "./state.js";
 import {
   prepareExperienceWorkspace,
@@ -86,11 +87,11 @@ export async function runSynthesizeResume({
   if (!stateDir) fail("improve-synthesize: --state-dir is required");
   const resolvedState = path.resolve(String(stateDir));
 
-  const floor = Number(minGapEvidence);
-  if (!Number.isInteger(floor) || floor < 2) {
-    fail(
-      `improve-synthesize: --min-gap-evidence must be an integer >= 2 (got ${JSON.stringify(minGapEvidence)})`,
-    );
+  let floor;
+  try {
+    floor = assertMinGapEvidence(minGapEvidence, "improve-synthesize: --min-gap-evidence");
+  } catch (err) {
+    fail(err?.message || String(err));
   }
 
   // Read-only validation first: no state directories are created and no
@@ -211,8 +212,10 @@ export async function runSynthesizeResume({
 
   // 5. Private run-isolated synthesis workspace inside stateDir. Each run
   // gets a clean synthesis-workspace/<runId> root so stale artifacts from
-  // prior runs can never be measured/annotated/proposed. Synthesis
-  // executes only there; apply remains the only durable experience writer.
+  // prior runs can never be measured/annotated/proposed. ACPX synthesis is
+  // text-only (no workspace cwd); validated plans are materialized
+  // deterministically by code there. Apply remains the only durable
+  // experience writer.
   let workspace = null;
   try {
     workspace = prepareExperienceWorkspace({ stateDir: resolvedState, records: [], runId: resolvedRun });
@@ -237,9 +240,8 @@ export async function runSynthesizeResume({
     transcriptCount: evidenceRecords.length,
     harnessSummary: "resume",
     runNote,
-    workspace: workspaceCwd,
+    minGapEvidence: floor,
     workspaceRoot: workspaceCwd,
-    cwd: workspaceCwd,
   });
   let edits = out.edits || [];
   let synthesisNote = out.note || "";
@@ -267,7 +269,7 @@ export async function runSynthesizeResume({
     if (incoming.length) {
       synthesisNote = [
         synthesisNote,
-        "no workspace file changes measured; JSON-only plans discarded fail-closed with zero candidate edits",
+        "no workspace file changes measured; validated plans discarded fail-closed with zero candidate edits",
       ]
         .filter(Boolean)
         .join("\n");
@@ -278,73 +280,16 @@ export async function runSynthesizeResume({
     const bound = incoming.filter(
       (plan) => measuredIdsForPlan(plan?.id, measuredChanges).length > 0,
     );
-    if (bound.length) {
-      if (bound.length < incoming.length) {
-        synthesisNote = [
-          synthesisNote,
-          "JSON-only plans without measured workspace changes discarded; measured IDs drive annotation",
-        ]
-          .filter(Boolean)
-          .join("\n");
-      }
-      edits = bound;
-    } else {
-      const eligibleById = new Map(
-        (ledger?.clusters || []).filter((c) => c?.eligible).map((c) => [String(c.id), c]),
-      );
-      const derived = [];
-      for (const m of measuredChanges) {
-        const rid = String(m?.recordId || m?.file || m?.path || "").replace(/\.md$/, "");
-        if (!rid) continue;
-        const mClusterId = String(m?.clusterId || "").trim();
-        const mSourcesRaw = m?.provisionalSources || m?.eligibleSources || m?.sources || null;
-        if (!mClusterId || !Array.isArray(mSourcesRaw)) continue;
-        const distinct = [...new Set(mSourcesRaw.map((s) => String(s)).filter(Boolean))];
-        if (distinct.length < floor) continue;
-        const cluster = eligibleById.get(mClusterId) || null;
-        if (!cluster) continue;
-        const clusterSources = new Set((cluster?.sources || []).map(String));
-        if (!distinct.every((s) => clusterSources.has(String(s)))) continue;
-        let intent = "";
-        try {
-          const body = String(m?.text || "");
-          const head = body.split("\n").find((l) => l.startsWith("# "));
-          if (head) intent = head.replace(/^#+\s*/, "").trim().slice(0, 200);
-        } catch {}
-        if (!intent) intent = String(cluster?.proposedInstruction || rid).trim();
-        if (!intent) continue;
-        derived.push({
-          id: rid,
-          kind: "add",
-          clusterId: String(cluster.id),
-          provisionalIntent: intent,
-          provisionalSources: distinct,
-          provisionalCount: distinct.length,
-          ...(cluster?.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
-        });
-      }
-      if (derived.length) {
-        edits = derived;
-        synthesisFailed = false;
-        synthesisNote = [
-          synthesisNote,
-          `measured workspace changes independently drive ${derived.length} candidate(s) by measured IDs; JSON plan output never creates durable candidates`,
-        ]
-          .filter(Boolean)
-          .join("\n");
-      } else {
-        if (incoming.length) {
-          synthesisNote = [
-            synthesisNote,
-            "no plans bound to measured workspace changes; fail-closed with zero candidate edits",
-          ]
-            .filter(Boolean)
-            .join("\n");
-        }
-        edits = [];
-        synthesisFailed = true;
-      }
+    if (bound.length < incoming.length) {
+      synthesisNote = [
+        synthesisNote,
+        "plans without measured workspace changes discarded; measured IDs drive annotation",
+      ]
+        .filter(Boolean)
+        .join("\n");
     }
+    if (!bound.length) synthesisFailed = true;
+    edits = bound;
   }
 
   // 8. Stage -> measure -> fresh preface->annotate -> fresh proposal.

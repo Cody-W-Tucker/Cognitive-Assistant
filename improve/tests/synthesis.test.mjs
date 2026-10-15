@@ -119,31 +119,26 @@ describe("synthesis.md narrow-plan contract (Backpass src/prompts/synthesis.md @
     assert.ok(!fs.readFileSync(SYNTH_MD, "utf8").includes("ca-improve:self-session"));
   });
 
-  it("contracts edit-only workspace edits; no JSON plan contract, annotation owns durable fields", () => {
+  it("contracts text-only provisional plans; never asks to inspect/edit workspace/edit turn", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
-    assert.ok(/edit-only|edit only/i.test(text), "synthesis prompt must declare edit-only workspace edits");
-    assert.ok(/workspace/i.test(text), "synthesis prompt must mention workspace");
-    assert.ok(!/change plan/i.test(text), "synthesis prompt must not contract a JSON change plan");
-    assert.ok(!/"plans"/.test(text) && !/\bplans\s*:/i.test(text), "synthesis prompt must not contract a plans JSON key");
-    // Mandated provenance YAML frontmatter contract: workspace files carry
-    // ONLY clusterId + provisionalSources as structured frontmatter (not JSON).
-    assert.ok(/clusterId/.test(text), "synthesis prompt must mandate clusterId frontmatter provenance");
-    assert.ok(/provisionalSources/.test(text), "synthesis prompt must mandate provisionalSources frontmatter provenance");
-    assert.ok(/frontmatter[\s\S]{0,400}ONLY\s+`?clusterId`?\s+and\s+`?provisionalSources`?/i.test(text), "synthesis prompt must restrict frontmatter to ONLY the two provenance keys");
-    assert.ok(!/provisionalIntent/.test(text), "synthesis prompt must not contract provisionalIntent (only the two mandated frontmatter keys)");
-    // Edit turn still requires structured frontmatter per record and keeps
-    // annotation as the sole full-record origin.
-    assert.ok(/frontmatter/i.test(text), "synthesis prompt must require structured YAML frontmatter");
+    assert.ok(/text-only/i.test(text), "synthesis prompt must declare text-only proposer");
+    assert.ok(/"plans"/.test(text), "synthesis prompt must contract the plans JSON key");
+    assert.ok(!/edit-only|edit turn/i.test(text), "synthesis prompt must never describe an edit turn");
+    assert.ok(!/inspect and edit ONLY/i.test(text), "synthesis prompt must never ask to inspect/edit workspace");
+    assert.ok(!/invocation cwd/i.test(text), "synthesis prompt must never reference invocation cwd");
+    assert.ok(!/workspace working directory/i.test(text), "synthesis prompt must never ask to work in a workspace directory");
+    assert.ok(/clusterId/.test(text), "synthesis prompt must mandate clusterId provenance");
+    assert.ok(/provisionalSources/.test(text), "synthesis prompt must mandate provisionalSources provenance");
+    assert.ok(/provisionalIntent/.test(text), "synthesis prompt must contract provisionalIntent");
     assert.ok(/at least 2 distinct session/i.test(text), "synthesis prompt must require >=2 distinct session ids");
-    // Synthesis never authors final durable fields; annotation does.
     assert.ok(/never.*(record|final)|annotation.*(sole|origin)/is.test(text));
-    assert.ok(/counterevidence/i.test(text) || /compilerImplication/i.test(text));
+    assert.ok(!/synthesis-workspace/i.test(text), "synthesis prompt must not direct workspace edits");
   });
 
-  it("contracts staged artifact/diff from annotated finals, workspace-only edits, apply as sole writer", () => {
+  it("contracts staged artifact/diff from annotated finals, propose-only, apply as sole writer", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
     assert.ok(/staged artifact/i.test(text) && /diff/i.test(text));
-    assert.ok(/synthesis-workspace/i.test(text), "synthesis prompt must confine edits to synthesis-workspace");
+    assert.ok(!/edit only the workspace/i.test(text), "synthesis prompt must not contain edit-only workspace directive");
     assert.ok(/never.*(SOUL|tracked|live|Hermes)|no .*SOUL/i.test(text));
     assert.ok(/apply.*sole|sole.*writer|not authoritative|pre-apply|until.*appl/i.test(text));
   });
@@ -305,16 +300,15 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
     return `---\nclusterId: g-aaa\nprovisionalSources:\n  - s1\n  - s2\n---\n# Bootstrap context once\n\nsessions re-derive project context from scratch\n`;
   }
   it("validates acpx plans and returns narrow plans only (no final record)", () => {
-    // EDIT-ONLY: durable plans come from measured workspace files, never JSON alone.
+    // TEXT-ONLY: durable plans come from validated stdout payload,
+    // materialized deterministically by code (no ACPX filesystem write).
     const stateDir = tmpDir();
-    const ws = `${stateDir}/synthesis-workspace`;
-    fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(`${ws}/e1.md`, validWorkspaceBody(), "utf8");
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ ...plan(), id: "e1" }] }),
-      workspace: ws,
       stateDir,
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     assert.equal(out.failed, undefined);
     assert.equal(out.edits.length, 1);
@@ -325,16 +319,27 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
     }
   });
 
-  it("JSON-only plans with no workspace changes fail closed (never durable)", () => {
+  it("valid JSON plans materialize deterministically (text-only, no ACPX filesystem write)", () => {
+    const stateDir = tmpDir();
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", plans: [plan()] }),
+      invoke: (args) => {
+        assert.equal(args.workspace, undefined, "production invoke must not receive workspace");
+        assert.equal(args.cwd, undefined, "production invoke must not receive cwd");
+        return { status: "ok", plans: [{ ...plan(), id: "e1" }] };
+      },
+      stateDir,
+      runId: "run-TXT1",
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
-    assert.deepEqual(out.edits, []);
-    assert.ok(out.failed);
+    assert.equal(out.failed, undefined);
+    assert.equal(out.edits.length, 1);
+    assert.equal(out.edits[0].id, "e1");
+    assert.ok(fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")));
   });
 
-  it("workspace edits with no JSON plan still proceed via measured IDs", () => {
+  it("exact empty plans succeed as no-candidate result (no file, no fallback)", () => {
     const stateDir = tmpDir();
     const ws = `${stateDir}/synthesis-workspace`;
     fs.mkdirSync(ws, { recursive: true });
@@ -342,17 +347,13 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", result: { plans: [] } }),
-    });
-    // No workspace passed -> cannot observe the file; fail closed.
-    assert.deepEqual(out.edits, []);
-    const out2 = synthesizeWithAcpx(ledger(), {
-      evidenceIndex: evidenceIndex(),
-      invoke: () => ({ status: "ok", result: { plans: [] } }),
-      workspace: ws,
       stateDir,
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
-    assert.equal(out2.edits.length, 1);
-    assert.equal(out2.edits[0].id, "e9");
+    assert.deepEqual(out.edits, []);
+    assert.equal(out.failed, undefined);
+    assert.deepEqual(fs.readdirSync(ws), ["e9.md"]);
   });
 
   it("drops plans carrying authoritative final fields; fails closed when none remain", () => {
@@ -413,15 +414,13 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
   it("does not suppress at synthesis; suppression operates on annotated finals downstream", () => {
     const rejections = [{ edit: "e9", title: "Bootstrap context once", clusterId: "g-aaa", sources: ["s1", "s2"] }];
     const stateDir = tmpDir();
-    const ws = `${stateDir}/synthesis-workspace`;
-    fs.mkdirSync(ws, { recursive: true });
-    fs.writeFileSync(`${ws}/e1.md`, validWorkspaceBody(), "utf8");
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ ...plan(), id: "e1" }] }),
       rejections,
-      workspace: ws,
       stateDir,
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
     assert.equal(out.edits.length, 1);
   });
@@ -651,22 +650,22 @@ describe("review findings: quote/session binding + cluster linkage + suppression
 });
 
 describe("synthesis invocation/write containment + mock workspace author", () => {
-  it("rejects a workspace outside the expected stateDir/private root fail-closed", async () => {
-    const { synthesizeWithAcpx, assertContainedSynthesisWorkspace } = await import("../src/synthesize.js");
+  it("rejects workspace/cwd on the text-only invoke and guards materialization root", async () => {
+    const { synthesizeWithAcpx, assertContainedSynthesisWorkspace, acpxSynthesisInvoke } = await import("../src/synthesize.js");
     const stateDir = tmpDir();
     assert.throws(() => assertContainedSynthesisWorkspace("/tmp/evil-workspace", stateDir), /denied|outside|private/);
     assert.throws(() => assertContainedSynthesisWorkspace("/tmp/evil-workspace/synthesis-workspace-evil", null), /denied|outside|private/);
+    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", workspace: "/tmp/evil" }), /text-only/);
+    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", cwd: "/tmp/evil" }), /text-only/);
     const out = synthesizeWithAcpx(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ clusterId: "g-aaa", provisionalIntent: "x", provisionalSources: ["s1", "s2"] }] }),
       stateDir,
       runId: "run-DENY1",
-      workspace: "/tmp/evil-workspace",
-      cwd: "/tmp/evil-workspace",
+      soulSnapshot: "soul snapshot",
+      soulSha256: "abc123",
     });
-    assert.deepEqual(out.edits, []);
-    assert.ok(out.failed, "escape must fail closed with no plans");
-    assert.ok(/denied|refused|outside/i.test(out.note || out.failed || ""));
+    assert.equal(out.edits.length, 1, "no workspace escape exists on the text-only path");
   });
 
   it("mock synthesis authors the private workspace before measurement (deterministic created)", async () => {

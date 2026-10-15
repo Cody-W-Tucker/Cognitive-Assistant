@@ -45,20 +45,16 @@ function validFrontmatterBody() {
   return `---\nclusterId: g-aaa\nprovisionalSources:\n  - s1\n  - s2\n---\n# Bootstrap context once\n\nsessions re-derive project context from scratch\n`;
 }
 
-describe("TDD RED: synthesis prompt is edit-only with no JSON plan contract", () => {
-  it("checked-in synthesis.md is edit-only and contains no JSON plan contract", () => {
+describe("TDD: synthesis prompt is text-only with a strict JSON plans contract", () => {
+  it("checked-in synthesis.md is text-only and contracts the plans payload", () => {
     const text = fs.readFileSync(SYNTH_MD, "utf8");
-    // Edit-only contract: must frame work as workspace file edits.
-    assert.ok(/edit-only|edit only/i.test(text), "synthesis prompt must declare edit-only workspace edits");
-    assert.ok(/workspace/i.test(text), "synthesis prompt must mention workspace");
-    // No JSON plan contract: must not contract change plans / plans JSON.
-    // The mandated provenance YAML frontmatter contract (clusterId +
-    // provisionalSources, frontmatter only) is affirmed, not forbidden.
-    assert.ok(!/change plan/i.test(text), "synthesis prompt must not contract a JSON change plan");
-    assert.ok(/clusterId/.test(text), "synthesis prompt must mandate clusterId frontmatter provenance");
-    assert.ok(/provisionalSources/.test(text), "synthesis prompt must mandate provisionalSources frontmatter provenance");
-    assert.ok(!/provisionalIntent/.test(text), "synthesis prompt must not contract provisionalIntent (only the two mandated frontmatter keys)");
-    assert.ok(!/"plans"/.test(text) && !/\bplans\s*:/i.test(text), "synthesis prompt must not contract a plans JSON key");
+    assert.ok(/text-only/i.test(text), "synthesis prompt must declare text-only proposer");
+    assert.ok(!/edit-only|edit turn/i.test(text), "synthesis prompt must not describe an edit turn");
+    assert.ok(!/inspect and edit ONLY/i.test(text), "synthesis prompt must never ask to inspect/edit workspace");
+    assert.ok(/clusterId/.test(text), "synthesis prompt must mandate clusterId provenance");
+    assert.ok(/provisionalSources/.test(text), "synthesis prompt must mandate provisionalSources provenance");
+    assert.ok(/provisionalIntent/.test(text), "synthesis prompt must contract provisionalIntent");
+    assert.ok(/"plans"/.test(text), "synthesis prompt must contract a plans JSON key");
   });
 });
 

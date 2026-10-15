@@ -1,9 +1,10 @@
 // SPDX: MIT (Backpass MIT (c) 2026 Kun Chen) — see improve/LICENSE.NOTICE.
 // Synthesis adapted from Backpass src/synthesize.js + src/proposal.js
-// (commit 0268201), narrowed to this slice's contract: produce candidate
-// *experience records* only. The SOUL baseline is read-only context —
-// synthesis never patches SOUL, memory files, or skills. The apply gate
-// owns all writes.
+// (commit 0268201), narrowed to this slice's contract: text-only ACPX
+// proposer of narrow staged change plans plus deterministic code
+// materialization under stateDir/synthesis-workspace. The SOUL baseline
+// is read-only context — synthesis never patches SOUL, memory files, or
+// skills. The apply gate owns all durable writes.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -13,13 +14,16 @@ import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { parseWorkspaceFileProvenance } from "./workspace-frontmatter.js";
 import { runAcpxPromptFile } from "./acpx-text.js";
+import { parseStrictBoundedSynthesisStdout } from "./synthesis-parser.js";
 import { modelForRole } from "./models.js";
 import { readSoulSnapshot } from "./soul.js";
+import { assertMinGapEvidence } from "./state.js";
 // Private writable synthesis workspace under stateDir (synthesis-workspace).
-// Synthesis executes only there and may author/edit markdown records inside
-// it. Synthesis must refuse/forbid/deny any durable write to the source
-// repo, SOUL.md, skills, or Hermes; apply remains the only durable
-// experience destination writer.
+// ACPX synthesis is text-only (no workspace cwd); validated narrow plans
+// are materialized deterministically by code inside it. Synthesis must
+// refuse/forbid/deny any durable write to the source repo, SOUL.md,
+// skills, or Hermes; apply remains the only durable experience
+// destination writer.
 export const SYNTHESIS_WORKSPACE_DIRNAME = "synthesis-workspace";
 export const FORBIDDEN_SYNTHESIS_TARGETS = ["repo", "SOUL.md", "SOUL", "skills", "Hermes"];
 export function assertSynthesisWorkspaceOnly(target, workspaceRoot) {
@@ -38,7 +42,7 @@ export function assertSynthesisWorkspaceOnly(target, workspaceRoot) {
  * helpers/cwd). ACPX executes an external process, so the only safe
  * posture is: reject any workspace outside the expected
  * stateDir/synthesis-workspace private root, and ensure the invocation
- * carries only that workspace cwd. Fail-closed (throw) on escape.
+ * carries no workspace cwd (text-only). Fail-closed (throw) on escape.
  *
  * @param {string|null} workspaceCwd resolved workspace cwd (or null for no workspace)
  * @param {string|null} stateDir private state dir (or null when unknown)
@@ -65,9 +69,10 @@ function safePlanFileId(id) {
  * Deterministic mock-synthesis workspace author (MOCK ONLY). When the mock
  * path needs a reviewable workspace, the mock synthesis itself authors the
  * private workspace BEFORE measurement: one created record per narrow plan.
- * Production never calls this — the real ACPX external process authors the
- * workspace via its workspace cwd, and measurement observes whatever it
- * actually did. Containment is enforced before any write. No synthetic
+ * Production never calls this and never passes a workspace/cwd to ACPX —
+ * production synthesis is a text-only proposer (no workspace cwd) and
+ * deterministic code materializes validated plans inside the private
+ * workspace. Containment is enforced before any write. No synthetic
  * seed records are ever authored here.
  *
  * @returns {string[]} files written inside the workspace
@@ -92,18 +97,8 @@ export function applyMockSynthesisWorkspace(plans, workspaceCwd, { stateDir = nu
     fs.writeFileSync(path.join(root, file), body, "utf8");
     written.push(file);
   }
-  if (!seen.size) {
-    // Mock-only deterministic fallback author: with no eligible plans the
-    // mock synthesis still authors one reviewable open-gap record so the
-    // private workspace measurement observes a real created file. Owned
-    // here (synthesis), never fabricated by the pipeline post-synthesis.
-    try {
-      const fallback = path.join(root, "exp-fallback-open-gap.md");
-      assertSynthesisWorkspaceOnly(fallback, root);
-      fs.writeFileSync(fallback, "# Fallback open-gap record\n\nRecurring gap corroborated across runs.\n\nSources: s1, s2\n", "utf8");
-      written.push("exp-fallback-open-gap.md");
-    } catch {}
-  }
+  // No synthetic fallback: with no eligible plans the mock authors nothing.
+  // Empty evidence yields zero workspace files and zero edits downstream.
   return written;
 }
 
@@ -273,6 +268,34 @@ export function validateChangePlan(plan, { ledger } = {}) {
   }
   for (const forbidden of ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff", "rationale", "instructions"]) {
     if (plan[forbidden] !== undefined) errors.push(`authoritative field ${forbidden} must not appear on a staged change plan (annotation owns it)`);
+  }
+  for (const forbidden of ["file", "path", "workspace", "workspaceRoot", "cwd", "sources"]) {
+    if (plan[forbidden] !== undefined) errors.push(`filesystem/source field ${forbidden} must not appear on a staged change plan (deterministic code assigns storage)`);
+  }
+  const allowedPlanKeys = new Set(["id", "kind", "clusterId", "provisionalIntent", "intent", "provisionalSources", "provisionalCount", "corroboratedOpenGap", "openGapPromotedSingleton", "reverted"]);
+  for (const key of Object.keys(plan)) {
+    if (!allowedPlanKeys.has(key)) errors.push(`unexpected field ${JSON.stringify(key)} on staged change plan`);
+  }
+  if (plan.id !== undefined) {
+    const sid = String(plan.id);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(sid) || sid.includes("..") || sid.includes("/") || sid.includes("\\")) {
+      errors.push(`plan id is not a safe label (got ${JSON.stringify(plan.id)})`);
+    }
+  }
+  if (Array.isArray(provisionalSources)) {
+    for (const s of provisionalSources) {
+      const ss = String(s);
+      if (!ss.trim() || ss.includes("/") || ss.includes("\\") || ss.includes("..")) {
+        errors.push(`provisional source is path-like or empty (${JSON.stringify(s)})`);
+        break;
+      }
+    }
+  }
+  if (plan.clusterId !== undefined) {
+    const cid = String(plan.clusterId);
+    if (cid.includes("/") || cid.includes("\\") || cid.includes("..")) {
+      errors.push(`clusterId is path-like (${JSON.stringify(plan.clusterId)})`);
+    }
   }
   return { ok: errors.length === 0, errors };
 }
@@ -455,22 +478,572 @@ export function isSuppressedByRejection(candidate, rejections) {
   return false;
 }
 
+// --- strict provisional-plan constants (Option 2 text-only) ------------------
+
+/** Max raw ACPX stdout chars accepted for the synthesis payload. */
+export const SYNTHESIS_STDOUT_MAX_CHARS = 20000;
+/** Max provisional plans accepted per run (bounded payload). */
+export const SYNTHESIS_MAX_PLANS = 16;
+/** Max chars for one provisional intent. */
+export const PROVISIONAL_INTENT_MAX_CHARS = 500;
+/** Safe plan label: no slashes, no traversal, bounded. */
+export const SAFE_PLAN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/** Whitelisted provisional plan keys (text-only stdout contract). */
+export const ALLOWED_PLAN_KEYS = ["id", "kind", "clusterId", "provisionalIntent", "provisionalSources", "provisionalCount"];
+/** Authoritative final fields that must never appear on provisional plans. */
+export const AUTHORITATIVE_PLAN_FIELDS = ["record", "evidence", "title", "body", "counterevidence", "compilerImplication", "stagedArtifact", "diff", "rationale", "instructions"];
+/** Filesystem/path fields that must never appear (no model-controlled target). */
+export const PATH_LIKE_PLAN_FIELDS = ["file", "path", "workspace", "workspaceRoot", "cwd", "sources", "target", "dir", "directory"];
+
+function isPathLike(value) {
+  const s = String(value || "");
+  return !s.trim() ? true : s.includes("/") || s.includes("\\") || s.includes("..") || s.startsWith("~") || /^[A-Za-z]:/.test(s);
+}
+
 /**
- * Default acpx invoke for synthesis: persisted prompt via `--file`, ACPX
- * text-output (`--format quiet`, never JSON-RPC) on stdout. Synthesis is a
- * native edit turn: after an exit-0 ACPX invocation, the measured private
- * workspace diff is authoritative; stdout is retained only as raw diagnostic
- * text. Same executable protocol as analyze
- * acpx (analyze.js): the `acpx` binary, Pi executor, extra args from
- * CA_IMPROVE_ACPX_ARGS, role model sol with ACPX --timeout 300s
+ * Strict fail-closed validation of the raw ACPX stdout payload against the
+ * eligible ledger. Rejects: malformed (missing/non-array plans,
+ * candidates/edits keys), unknown/ineligible clusters, <2 distinct known
+ * sources, authoritative final fields, path-like or unexpected fields,
+ * duplicate or unsafe ids. Returns { ok, plans, errors } where plans are
+ * normalized narrow plans only.
+ */
+export function validateProvisionalPlans(raw, { ledger, floor = 2 } = {}) {
+  const errors = [];
+  const f = Number(floor);
+  const minSources = Number.isInteger(f) && f >= 2 ? f : 2;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, plans: [], errors: ["synthesis payload must be an object with a plans array"] };
+  }
+  if (raw.candidates !== undefined || raw.edits !== undefined) {
+    return { ok: false, plans: [], errors: ["synthesis payload must use {plans:[...]} only (candidates/edits rejected)"] };
+  }
+  const rootKeys = Object.keys(raw);
+  if (rootKeys.length !== 1 || rootKeys[0] !== "plans") {
+    return { ok: false, plans: [], errors: ["synthesis payload must use {plans:[...]} only (no extra top-level fields)"] };
+  }
+  if (!Array.isArray(raw.plans)) {
+    return { ok: false, plans: [], errors: ["synthesis payload must carry plans array"] };
+  }
+  if (raw.plans.length > SYNTHESIS_MAX_PLANS) {
+    return { ok: false, plans: [], errors: [`synthesis payload exceeds ${SYNTHESIS_MAX_PLANS} plans (got ${raw.plans.length})`] };
+  }
+  const eligibleById = new Map((ledger?.clusters || []).filter((c) => c?.eligible).map((c) => [String(c.id), c]));
+  const seenIds = new Set();
+  const plans = [];
+  raw.plans.forEach((plan, i) => {
+    const tag = `plans[${i}]`;
+    if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+      errors.push(`${tag} is malformed (object required)`);
+      return;
+    }
+    for (const key of Object.keys(plan)) {
+      if (!ALLOWED_PLAN_KEYS.includes(key)) {
+        if (AUTHORITATIVE_PLAN_FIELDS.includes(key)) errors.push(`${tag} carries authoritative field ${key} (annotation owns it)`);
+        else if (PATH_LIKE_PLAN_FIELDS.includes(key)) errors.push(`${tag} carries filesystem field ${key} (no model-controlled path target)`);
+        else errors.push(`${tag} carries unexpected field ${JSON.stringify(key)}`);
+      }
+    }
+    if (plan.kind !== undefined && plan.kind !== "add") errors.push(`${tag} kind must be "add"`);
+    const cid = String(plan.clusterId || "").trim();
+    if (!cid) {
+      errors.push(`${tag} clusterId is required`);
+      return;
+    }
+    if (isPathLike(cid)) {
+      errors.push(`${tag} clusterId is path-like`);
+      return;
+    }
+    const cluster = eligibleById.get(cid);
+    if (!cluster) {
+      const known = (ledger?.clusters || []).some((c) => String(c?.id) === cid);
+      errors.push(known ? `${tag} cluster ${JSON.stringify(cid)} is not eligible` : `${tag} unknown cluster ${JSON.stringify(cid)}`);
+      return;
+    }
+    const intentRaw = plan.provisionalIntent ?? plan.intent;
+    const intent = String(intentRaw || "").trim();
+    if (!intent) {
+      errors.push(`${tag} provisionalIntent is required`);
+      return;
+    }
+    if (intent.length > PROVISIONAL_INTENT_MAX_CHARS) {
+      errors.push(`${tag} provisionalIntent exceeds ${PROVISIONAL_INTENT_MAX_CHARS} chars`);
+      return;
+    }
+    const srcRaw = plan.provisionalSources;
+    if (!Array.isArray(srcRaw)) {
+      errors.push(`${tag} provisionalSources array is required`);
+      return;
+    }
+    const distinct = [...new Set(srcRaw.map((s) => String(s).trim()).filter(Boolean))];
+    if (distinct.length < minSources) {
+      errors.push(`${tag} provisionalSources needs >=${minSources} distinct sessions`);
+      return;
+    }
+    const clusterSources = new Set((cluster.sources || []).map(String));
+    for (const s of distinct) {
+      if (isPathLike(s)) {
+        errors.push(`${tag} provisional source is path-like (${JSON.stringify(s)})`);
+        return;
+      }
+      if (!clusterSources.has(String(s))) {
+        errors.push(`${tag} provisional source ${JSON.stringify(s)} is not evidence from cluster ${cluster.id}`);
+        return;
+      }
+    }
+    if (plan.provisionalCount !== undefined && Number(plan.provisionalCount) !== distinct.length) {
+      errors.push(`${tag} provisionalCount must equal distinct source count`);
+      return;
+    }
+    let pid = plan.id !== undefined ? String(plan.id).trim() : `e${plans.length + 1}`;
+    if (!SAFE_PLAN_ID_PATTERN.test(pid) || pid.includes("..")) {
+      errors.push(`${tag} id is not a safe label (got ${JSON.stringify(plan.id)})`);
+      return;
+    }
+    const safeFile = pid.replace(/[^a-zA-Z0-9._-]/g, "_");
+    if (seenIds.has(safeFile)) {
+      errors.push(`${tag} duplicate plan id ${JSON.stringify(pid)}`);
+      return;
+    }
+    seenIds.add(safeFile);
+    plans.push({
+      id: pid,
+      kind: "add",
+      clusterId: String(cluster.id),
+      provisionalIntent: intent.slice(0, PROVISIONAL_INTENT_MAX_CHARS),
+      provisionalSources: distinct,
+      provisionalCount: distinct.length,
+    });
+  });
+  if (errors.length) return { ok: false, plans: [], errors };
+  return { ok: true, plans, errors: [] };
+}
+
+function assertNotSymlink(p, label) {
+  let st = null;
+  try {
+    st = fs.lstatSync(String(p));
+  } catch {
+    return;
+  }
+  if (st && typeof st.isSymbolicLink === "function" && st.isSymbolicLink()) {
+    throw new Error(`materialize refused: ${label} is a symlink (${JSON.stringify(String(p))})`);
+  }
+}
+
+function assertNoSymlinkComponents(base, root) {
+  assertNotSymlink(base, "stateDir/synthesis-workspace root");
+  if (root === base) return;
+  const rel = path.relative(base, root);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return;
+  let cur = base;
+  for (const part of rel.split(path.sep).filter(Boolean)) {
+    cur = path.join(cur, part);
+    assertNotSymlink(cur, "synthesis-workspace component");
+  }
+}
+
+function requiredFdPrimitives() {
+  const O = fs.constants || {};
+  if (process.platform !== "linux") return "platform is not linux (descriptor-relative traversal requires Linux)";
+  if (typeof O.O_NOFOLLOW !== "number") return "O_NOFOLLOW unavailable";
+  if (typeof O.O_DIRECTORY !== "number") return "O_DIRECTORY unavailable";
+  try {
+    const st = fs.statSync("/proc/self/fd");
+    if (typeof st.isDirectory === "function" && !st.isDirectory()) return "/proc/self/fd unavailable";
+  } catch {
+    return "/proc/self/fd unavailable";
+  }
+  return null;
+}
+
+function closeQuiet(fd) {
+  try {
+    if (typeof fd === "number" && fd >= 0) fs.closeSync(fd);
+  } catch {}
+}
+
+function procChildFdPath(parentFd, name) {
+  return `/proc/self/fd/${Number(parentFd)}/${String(name)}`;
+}
+
+function throwSymlink(label, p) {
+  throw new Error(`materialize refused: ${label} is a symlink (${JSON.stringify(String(p))})`);
+}
+
+// Open an existing child directory relative to a held directory fd.
+// Uses O_DIRECTORY|O_NOFOLLOW so a symlinked child never resolves through
+// the link. A symlink-to-directory surfaces as ENOTDIR under O_DIRECTORY,
+// so disambiguate with a no-DIRECTORY probe: ELOOP there means symlink,
+// success means a non-directory exists.
+function openChildDirFd(parentFd, comp, displayPath, label) {
+  const O = fs.constants;
+  const childPath = procChildFdPath(parentFd, comp);
+  try {
+    return fs.openSync(childPath, O.O_RDONLY | O.O_DIRECTORY | O.O_NOFOLLOW);
+  } catch (err) {
+    if (err?.code === "ELOOP") throwSymlink(label, displayPath);
+    if (err?.code === "ENOTDIR") {
+      try {
+        const probe = fs.openSync(childPath, O.O_RDONLY | O.O_NOFOLLOW);
+        closeQuiet(probe);
+        throw new Error(`materialize refused: ${label} is not a directory (${JSON.stringify(String(displayPath))})`);
+      } catch (probeErr) {
+        if (probeErr?.code === "ELOOP" || /is a symlink/.test(probeErr?.message || "")) {
+          throwSymlink(label, displayPath);
+        }
+        if (probeErr?.message?.startsWith("materialize refused")) throw probeErr;
+        throw new Error(`materialize refused: cannot open ${label} (${JSON.stringify(String(displayPath))}; ${probeErr?.message || probeErr})`);
+      }
+    }
+    throw err;
+  }
+}
+
+function mkdirChildFd(parentFd, comp, displayPath, label) {
+  const childPath = procChildFdPath(parentFd, comp);
+  try {
+    fs.mkdirSync(childPath, { mode: 0o755 });
+  } catch (err) {
+    // EEXIST is a racy create (possibly a symlink planted between the
+    // failed open and the mkdir): the caller re-opens with NOFOLLOW checks.
+    if (err?.code === "EEXIST") return;
+    throw new Error(`materialize refused: cannot create ${label} (${JSON.stringify(String(displayPath))}; ${err?.message || err})`);
+  }
+}
+
+// Traverse/create a directory chain relative to a held directory fd.
+// Never resolves a full pathname: every component is opened/created via
+// the parent directory descriptor (/proc/self/fd). Does not close startFd;
+// closes each intermediate as it descends; the caller owns the leaf fd.
+function walkDirChainFd(startFd, startPath, endPath, label) {
+  const O = fs.constants;
+  const rel = path.relative(String(startPath), String(endPath));
+  if (!rel) {
+    // Independent fd for the same directory so ownership stays simple.
+    // The trailing "/." matters: opening /proc/self/fd/N directly with
+    // O_DIRECTORY|O_NOFOLLOW rejects the magic symlink itself (ENOTDIR);
+    // "/." resolves to the pinned directory.
+    try {
+      return fs.openSync(`/proc/self/fd/${Number(startFd)}/.`, O.O_RDONLY | O.O_DIRECTORY | O.O_NOFOLLOW);
+    } catch (err) {
+      if (err?.code === "ELOOP") throwSymlink(label, String(startPath));
+      throw new Error(`materialize refused: cannot open ${label} (${JSON.stringify(String(startPath))}; ${err?.message || err})`);
+    }
+  }
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`materialize refused: target outside stateDir/synthesis-workspace (${JSON.stringify(String(endPath))})`);
+  }
+  let cur = startFd;
+  let ownsCur = false;
+  let curPath = String(startPath);
+  try {
+    for (const part of rel.split(path.sep).filter(Boolean)) {
+      if (part === "." || part === ".." || part.includes("\0")) {
+        throw new Error(`materialize refused: unsafe path component (${JSON.stringify(part)})`);
+      }
+      curPath = path.join(curPath, part);
+      let next = null;
+      try {
+        next = openChildDirFd(cur, part, curPath, label);
+      } catch (err) {
+        if (err?.code !== "ENOENT") throw err;
+        mkdirChildFd(cur, part, curPath, label);
+        next = openChildDirFd(cur, part, curPath, label);
+      }
+      if (ownsCur) closeQuiet(cur);
+      cur = next;
+      ownsCur = true;
+    }
+    const leaf = cur;
+    cur = null;
+    ownsCur = false;
+    return leaf;
+  } finally {
+    if (cur !== null && ownsCur) closeQuiet(cur);
+  }
+}
+
+// Open/create the final markdown relative to the held workspace directory
+// fd with O_NOFOLLOW: a pre-planted symlink fails with ELOOP and the
+// outside target is never created or truncated. The full pathname is used
+// only for messages and a post-write lstat tripwire, never for the open.
+function writeFileViaDirFd(dirFd, name, body, rootDisplay) {
+  const O = fs.constants;
+  const fname = String(name);
+  if (!fname || fname.includes("/") || fname.includes("\\") || fname.includes("\0") || fname !== path.basename(fname)) {
+    throw new Error(`materialize refused: unsafe file name (${JSON.stringify(fname)})`);
+  }
+  const display = path.join(String(rootDisplay), fname);
+  assertNotSymlink(display, "synthesis target");
+  const childPath = procChildFdPath(dirFd, fname);
+  let fd = -1;
+  try {
+    fd = fs.openSync(childPath, O.O_WRONLY | O.O_CREAT | O.O_TRUNC | O.O_NOFOLLOW, 0o644);
+  } catch (err) {
+    throw new Error(`materialize refused: symlink or unsafe target (${JSON.stringify(display)}; code=${err?.code || "unknown"}; ${err?.message || err})`, { cause: err });
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (typeof st.isFile === "function" && !st.isFile()) {
+      throw new Error(`materialize refused: symlink or unsafe target (${JSON.stringify(display)}; not a regular file)`);
+    }
+    fs.writeSync(fd, String(body), null, "utf8");
+  } finally {
+    closeQuiet(fd);
+  }
+  assertNotSymlink(display, "synthesis target");
+}
+
+/**
+ * Deterministic materialization of text-only ACPX synthesis plans: write
+ * only validated narrow plans as Markdown under the existing
+ * stateDir/synthesis-workspace root. Filenames derive solely from
+ * validated safe ids (no model-controlled path target); content is the
+ * two-key provenance frontmatter plus heading/prose. Returns the written
+ * files. Containment-guarded; throws fail-closed on escape or on any
+ * symlink in the workspace root, intermediate components, or target.
+ *
+ * TOCTOU design: after the string containment checks, every directory
+ * component is traversed/created relative to a held Linux directory
+ * descriptor (O_DIRECTORY|O_NOFOLLOW via /proc/self/fd) anchored on the
+ * trusted stateDir, and each final markdown is opened/created relative to
+ * the held workspace directory fd with O_NOFOLLOW. No unchecked full path
+ * is ever resolved for an open/mkdir after validation. Fails closed when
+ * the platform primitives (Linux, O_NOFOLLOW, O_DIRECTORY, /proc/self/fd)
+ * are unavailable. All descriptors close on success and on errors.
+ *
+ * Test seam (narrow, test-only): pass `_beforeFinalOpen` with
+ * NODE_ENV === 'test' to run a synchronous hook after the workspace
+ * directories are pinned but before the final opens. Used by the fd-race
+ * regression test to swap a checked intermediate for a symlink and assert
+ * rejection with no outside create/truncate. The hook receives only minimal
+ * pathname data ({ root }) — never a file descriptor. Supplying the seam
+ * outside NODE_ENV === 'test' is rejected fail-closed.
+ */
+export function materializeValidatedPlans(plans, { stateDir, workspaceRoot = null, ledger = null, floor = 2, _beforeFinalOpen = null } = {}) {
+  if (!stateDir) throw new Error("materializeValidatedPlans requires stateDir");
+  const anchor = path.resolve(String(stateDir));
+  // Ancestry symlink guard: reject when any existing prefix of stateDir
+  // resolves through a symlink (e.g. /tmp/link-parent/state where
+  // link-parent -> real-parent). Compares the realpath of the nearest
+  // existing ancestor to its lexical absolute form; any difference means
+  // a symlink in the chain. Runs before any mkdir so nothing is created
+  // via the link target. Direct stateDir/target checks below are retained.
+  {
+    let existing = anchor;
+    while (true) {
+      try {
+        fs.lstatSync(existing);
+        break;
+      } catch (err) {
+        if (err?.code !== "ENOENT") throw err;
+        const parent = path.dirname(existing);
+        if (parent === existing) break;
+        existing = parent;
+      }
+    }
+    try {
+      const real = fs.realpathSync(existing);
+      if (real !== existing) {
+        throw new Error(`materialize refused: stateDir ancestry resolves through a symlink (${JSON.stringify(anchor)} resolves via ${JSON.stringify(real)})`);
+      }
+    } catch (err) {
+      if (err?.message?.includes("stateDir ancestry resolves through a symlink")) throw err;
+    }
+  }
+  let anchorSt = null;
+  try {
+    anchorSt = fs.lstatSync(anchor);
+  } catch {
+    anchorSt = null;
+  }
+  if (!anchorSt) {
+    throw new Error(`materialize refused: stateDir does not exist (${JSON.stringify(anchor)})`);
+  }
+  if (typeof anchorSt.isSymbolicLink === "function" && anchorSt.isSymbolicLink()) {
+    throw new Error(`materialize refused: stateDir is a symlink (${JSON.stringify(anchor)})`);
+  }
+  if (typeof anchorSt.isDirectory === "function" && !anchorSt.isDirectory()) {
+    throw new Error(`materialize refused: stateDir is not a directory (${JSON.stringify(anchor)})`);
+  }
+  const base = path.join(anchor, SYNTHESIS_WORKSPACE_DIRNAME);
+  const root = workspaceRoot ? path.resolve(String(workspaceRoot)) : base;
+  if (!(root === base || root.startsWith(`${base}${path.sep}`))) {
+    throw new Error(`materialize refused: target outside stateDir/synthesis-workspace (${JSON.stringify(root)})`);
+  }
+  assertNoSymlinkComponents(base, root);
+  assertContainedSynthesisWorkspace(root, stateDir);
+  if (!Array.isArray(plans)) {
+    throw new Error("materialize refused: plans array is required (unvalidated payload)");
+  }
+  const missingPrimitive = requiredFdPrimitives();
+  if (missingPrimitive) {
+    throw new Error(`materialize refused: descriptor-relative traversal unavailable (${missingPrimitive})`);
+  }
+  const eligibleById = ledger
+    ? new Map((ledger?.clusters || []).filter((c) => c?.eligible).map((c) => [String(c.id), c]))
+    : null;
+  const f = Number(floor);
+  const minSources = Number.isInteger(f) && f >= 2 ? f : 2;
+  const entries = [];
+  const seen = new Set();
+  for (const plan of plans || []) {
+    if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+      throw new Error("materialize refused: plan object is required (unvalidated payload)");
+    }
+    if (plan.kind !== undefined && plan.kind !== "add") {
+      throw new Error(`materialize refused: kind must be "add" (got ${JSON.stringify(plan.kind)})`);
+    }
+    for (const key of AUTHORITATIVE_PLAN_FIELDS) {
+      if (plan[key] !== undefined) {
+        throw new Error(`materialize refused: authoritative field ${key} (unvalidated payload; annotation owns it)`);
+      }
+    }
+    for (const key of PATH_LIKE_PLAN_FIELDS) {
+      if (plan[key] !== undefined) {
+        throw new Error(`materialize refused: filesystem field ${key} (unvalidated payload; no model-controlled path target)`);
+      }
+    }
+    const cid = String(plan.clusterId || "").trim();
+    if (!cid || isPathLike(cid)) {
+      throw new Error(`materialize refused: unsafe or missing clusterId ${JSON.stringify(plan.clusterId)}`);
+    }
+    if (eligibleById && !eligibleById.has(cid)) {
+      throw new Error(`materialize refused: cluster ${JSON.stringify(cid)} is not eligible (unvalidated payload)`);
+    }
+    const intent = String(plan.provisionalIntent || "").trim();
+    if (!intent || intent.length > PROVISIONAL_INTENT_MAX_CHARS) {
+      throw new Error("materialize refused: provisionalIntent is required and bounded (unvalidated payload)");
+    }
+    const srcRaw = plan.provisionalSources;
+    if (!Array.isArray(srcRaw)) {
+      throw new Error("materialize refused: provisionalSources array is required (unvalidated payload)");
+    }
+    const distinct = [...new Set(srcRaw.map((s) => String(s).trim()).filter(Boolean))];
+    if (distinct.length < minSources) {
+      throw new Error(`materialize refused: provisionalSources needs >=${minSources} distinct sessions (unvalidated payload)`);
+    }
+    for (const s of distinct) {
+      if (isPathLike(s)) {
+        throw new Error(`materialize refused: provisional source is path-like (${JSON.stringify(s)})`);
+      }
+    }
+    if (eligibleById) {
+      const clusterSources = new Set((eligibleById.get(cid)?.sources || []).map(String));
+      for (const s of distinct) {
+        if (!clusterSources.has(String(s))) {
+          throw new Error(`materialize refused: provisional source ${JSON.stringify(s)} is not evidence from cluster ${cid}`);
+        }
+      }
+    }
+    if (plan.provisionalCount !== undefined && Number(plan.provisionalCount) !== distinct.length) {
+      throw new Error("materialize refused: provisionalCount must equal distinct source count (unvalidated payload)");
+    }
+    const pid = safePlanFileId(plan?.id);
+    if (!SAFE_PLAN_ID_PATTERN.test(pid) || seen.has(pid)) {
+      throw new Error(`materialize refused: duplicate or unsafe plan id ${JSON.stringify(plan?.id)}`);
+    }
+    seen.add(pid);
+    const file = `${pid}.md`;
+    const target = path.join(root, file);
+    assertSynthesisWorkspaceOnly(target, root);
+    const title = String(plan?.provisionalIntent || "untitled").slice(0, PROVISIONAL_INTENT_MAX_CHARS);
+    const clusterId = String(plan?.clusterId || "unknown");
+    const sources = [...(plan?.provisionalSources || []).map(String)];
+    const sourceLines = sources.map((s) => `  - ${s}`).join("\n");
+    const body = `---\nclusterId: ${clusterId}\nprovisionalSources:\n${sourceLines}\n---\n# ${title}\n\nRecurring gap (${clusterId}): ${title}\n\nSources: ${sources.join(", ")}\n`;
+    entries.push({ file, body });
+  }
+  // Descriptor-relative traversal: anchor stateDir, then walk to the
+  // workspace root using only held directory descriptors. No mkdir/open
+  // resolves an unchecked full path from here on.
+  const O = fs.constants;
+  let anchorFd = -1;
+  let baseFd = -1;
+  let rootFd = -1;
+  try {
+    try {
+      anchorFd = fs.openSync(anchor, O.O_RDONLY | O.O_DIRECTORY | O.O_NOFOLLOW);
+    } catch (err) {
+      if (err?.code === "ELOOP") {
+        throw new Error(`materialize refused: stateDir is a symlink (${JSON.stringify(anchor)})`);
+      }
+      throw new Error(`materialize refused: cannot anchor stateDir (${JSON.stringify(anchor)}; ${err?.message || err})`);
+    }
+    baseFd = walkDirChainFd(anchorFd, anchor, base, "stateDir/synthesis-workspace root");
+    rootFd = walkDirChainFd(baseFd, base, root, "synthesis-workspace component");
+    // Narrow test-only seam: run the deterministic race hook (if any) while
+    // the workspace directories are pinned by held descriptors.
+    if (typeof _beforeFinalOpen === "function" && process.env.NODE_ENV !== "test") {
+      throw new Error("materialize refused: _beforeFinalOpen test seam requires NODE_ENV=test");
+    }
+    if (typeof _beforeFinalOpen === "function") {
+      _beforeFinalOpen({ root });
+    }
+    // Post-hook re-verification: the pathname must still resolve to the
+    // pinned directory. A swapped intermediate (symlink) changes what the
+    // pathname resolves to, so stat/dev/ino diverge from the held fd.
+    assertNoSymlinkComponents(base, root);
+    let pinned = false;
+    try {
+      const pathStat = fs.statSync(root);
+      const fdStat = fs.fstatSync(rootFd);
+      pinned =
+        pathStat.dev === fdStat.dev &&
+        pathStat.ino === fdStat.ino &&
+        (typeof pathStat.isDirectory !== "function" || pathStat.isDirectory());
+    } catch {
+      pinned = false;
+    }
+    if (!pinned) {
+      throw new Error(`materialize refused: synthesis-workspace component is a symlink (${JSON.stringify(root)})`);
+    }
+    const written = [];
+    for (const entry of entries) {
+      assertSynthesisWorkspaceOnly(path.join(root, entry.file), root);
+      writeFileViaDirFd(rootFd, entry.file, entry.body, root);
+      written.push(entry.file);
+    }
+    return { root, written };
+  } finally {
+    closeQuiet(rootFd);
+    closeQuiet(baseFd);
+    closeQuiet(anchorFd);
+  }
+}
+
+/**
+ * Strict bounded-synthesis stdout parser (synthesis only; re-exported from
+ * the shared lowest-level synthesis-parser module so acpx-text and
+ * synthesize share one implementation without a circular dependency).
+ * Stdout must be exactly one JSON object with exactly `{plans:[...]}` —
+ * no prose, no fenced wrapping, no substring extraction. Other ACPX roles
+ * keep their own framing behavior via extractAcpxFinalJson; synthesis does
+ * not use it. Returns the parsed object or null.
+ */
+export { parseStrictBoundedSynthesisStdout };
+
+/**
+ * Default acpx invoke for synthesis (text-only): persisted prompt via
+ * `--file`, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout.
+ * No workspace/cwd is passed: the model is a text-only proposer and never
+ * executes with a filesystem cwd. Stdout must hold exactly one final JSON
+ * object `{"plans": [...]}` within the bounded payload; it is parsed
+ * strictly here and returned unvalidated (validation happens in
+ * synthesizeWithAcpx against the eligible ledger). Same executable protocol
+ * as analyze acpx (analyze.js): the `acpx` binary, Pi executor, extra args
+ * from CA_IMPROVE_ACPX_ARGS, role model sol with ACPX --timeout 300s
  * (mandatory, before the agent).
  */
 export function acpxSynthesisInvoke(options = {}) {
   if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
     throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
-  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null, workspace = null, workspaceRoot = null, cwd = null } = options;
-  const workspaceCwd = workspace || workspaceRoot || cwd || null;
+  if (options && (Object.prototype.hasOwnProperty.call(options, "workspace") || Object.prototype.hasOwnProperty.call(options, "workspaceRoot") || Object.prototype.hasOwnProperty.call(options, "cwd"))) {
+    throw new Error("synthesis invoke is text-only: workspace/cwd must not be passed");
+  }
+  const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
   void prompt;
   void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
@@ -484,12 +1057,31 @@ export function acpxSynthesisInvoke(options = {}) {
     timeoutSec: timeoutSec ?? 300,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
-    ...(workspaceCwd ? { workspace: workspaceCwd, cwd: workspaceCwd } : {}),
   });
   if (out.status !== "ok") {
     return { status: "failed", error: out.error };
   }
-  return { status: "ok", result: out.result };
+  const stdout = typeof out.stdout === "string" ? out.stdout : "";
+  if (stdout.length > SYNTHESIS_STDOUT_MAX_CHARS) {
+    return { status: "failed", error: `acpx synthesis stdout exceeds ${SYNTHESIS_STDOUT_MAX_CHARS} chars` };
+  }
+  // Consume the helper-validated result directly (already strictly parsed
+  // via the shared synthesis-parser at the runAcpxPromptFile boundary);
+  // no loose reparse here — a non-object result is malformed.
+  const parsed = out.result;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.plans)) {
+    return { status: "failed", error: "acpx synthesis returned malformed payload (expected {plans:[...]})" };
+  }
+  if (parsed.candidates !== undefined || parsed.edits !== undefined) {
+    return { status: "failed", error: "acpx synthesis returned forbidden candidates/edits key (expected {plans:[...]} only)" };
+  }
+  if (Object.keys(parsed).length !== 1 || !Object.prototype.hasOwnProperty.call(parsed, "plans")) {
+    return { status: "failed", error: "acpx synthesis returned extra top-level fields (expected {plans:[...]} only)" };
+  }
+  if (parsed.plans.length > SYNTHESIS_MAX_PLANS) {
+    return { status: "failed", error: `acpx synthesis returned ${parsed.plans.length} plans (max ${SYNTHESIS_MAX_PLANS})` };
+  }
+  return { status: "ok", plans: parsed.plans };
 }
 
 /** Render the production synthesis prompt (sentinel FIRST via the loader). */
@@ -504,7 +1096,7 @@ export function buildSynthesisPrompt(
     throw new Error("buildSynthesisPrompt requires the stable SOUL sha256 (fail-closed without the baseline)");
   }
   const count = transcriptCount ?? evidenceIndex.size ?? 0;
-  const base = renderPrompt(
+  return renderPrompt(
     "synthesis",
     {
       EVIDENCE: renderEvidenceForSynthesis(ledger, evidenceIndex),
@@ -517,21 +1109,6 @@ export function buildSynthesisPrompt(
     },
     { promptsDir },
   );
-  // Production synthesis is an EDIT turn on the private workspace only: the
-  // model must inspect and edit ONLY the private synthesis-workspace working
-  // directory (workspace cwd). It must not return a JSON plan contract as the
-  // durable output; durable records come only from measured workspace diffs
-  // observed after the edit turn. A JSON-only response with no workspace file
-  // changes fail-closes to zero candidate edits downstream.
-  const editOnly = [
-    "",
-    "EDIT TURN (production): inspect and edit ONLY the private workspace",
-    "working directory provided as the invocation cwd. Do not treat a JSON",
-    "plan contract as the output; author/edit markdown records directly in",
-    "ONLY the private workspace. Any JSON plans without corresponding",
-    "workspace file changes are discarded fail-closed.",
-  ].join("\n");
-  return `${base}${editOnly}`;
 }
 
 /**
@@ -543,6 +1120,9 @@ export function buildSynthesisPrompt(
  */
 export function parseAcpxSynthesisResult(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (raw.candidates !== undefined || raw.edits !== undefined) return null;
+  const keys = Object.keys(raw);
+  if (keys.length !== 1 || keys[0] !== "plans") return null;
   if (!Array.isArray(raw.plans)) return null;
   return raw.plans;
 }
@@ -555,7 +1135,13 @@ export function parseAcpxSynthesisResult(raw) {
  */
 
 /**
- * Production synthesis: acpx-only, narrow plans, fail-closed.
+ * Production synthesis: acpx-only text-only proposer, fail-closed.
+ * The model returns a strict bounded stdout payload `{"plans": [...]}`;
+ * no workspace/cwd is passed to the invocation and no ACPX filesystem
+ * change is authoritative. Validated plans are materialized
+ * deterministically by code under existing
+ * stateDir/synthesis-workspace (no model-controlled path target); the
+ * existing measure->annotate->proposal chain then observes those files.
  * Persists the rendered prompt privately with run/stage metadata.
  * Returns {edits: plans, note?, failed?, promptFile?}; failure yields no
  * plans plus a visible note for the proposal. Plans are NEVER final
@@ -578,16 +1164,13 @@ export function synthesizeWithAcpx(
     transcriptCount = null,
     harnessSummary = "unknown",
     runNote = "",
-    workspace = null,
+    minGapEvidence = null,
     workspaceRoot = null,
-    cwd = null,
   } = {},
 ) {
   let snapshotText = String(soulSnapshot || soulBaseline || "");
   let snapshotHash = String(soulSha256 || "");
   if (!snapshotText.trim() || !snapshotHash.trim()) {
-    // Canonical default resolves from the repo root (never CWD); an
-    // unavailable default fails closed here.
     try {
       const snap = readSoulSnapshot(null);
       if (!snapshotText.trim()) snapshotText = snap.text;
@@ -609,14 +1192,10 @@ export function synthesizeWithAcpx(
       promptFile: null,
     };
   }
-  const workspaceCwd = workspace || workspaceRoot || cwd || (stateDir ? `${stateDir}/${SYNTHESIS_WORKSPACE_DIRNAME}` : null);
-  const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
-  // Containment at the synthesis invocation boundary: ACPX executes an
-  // external process, so reject a workspace outside the expected
-  // stateDir/synthesis-workspace private root before invoking. The
-  // invocation below carries only this workspace cwd.
+  let floor = 2;
   try {
-    if (workspaceCwd) assertContainedSynthesisWorkspace(workspaceCwd, stateDir);
+    const rawFloor = minGapEvidence ?? ledger?.minGapEvidence ?? 2;
+    floor = assertMinGapEvidence(rawFloor, "minGapEvidence");
   } catch (err) {
     return {
       edits: [],
@@ -625,6 +1204,7 @@ export function synthesizeWithAcpx(
       promptFile: null,
     };
   }
+  const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   const prompt = buildSynthesisPrompt(ledger, {
     evidenceIndex,
     rejections,
@@ -647,26 +1227,18 @@ export function synthesizeWithAcpx(
         stage: "synthesis",
       });
     } catch (err) {
-      // Persistence failure is visible, never silent: synthesis still
-      // proceeds, but the proposal/run note carries the warning.
       persistNote = `synthesis prompt persistence failed (${err?.message || String(err)}); prompt not archived for this run`;
     }
   }
   let outcome;
   try {
-    outcome = invoke({ prompt, promptFile, ledger, evidenceIndex, rejections, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd });
+    outcome = invoke({ prompt, promptFile, ledger, evidenceIndex, rejections });
+    if (outcome && (outcome.workspace !== undefined || outcome.workspaceRoot !== undefined || outcome.cwd !== undefined)) {
+      throw new Error("synthesis invoke is text-only: workspace/cwd must not be passed");
+    }
   } catch (err) {
     outcome = { status: "failed", error: err?.message || String(err) };
   }
-  // EDIT-ONLY production synthesis: the durable output is the actual
-  // workspace file edits observed after the edit turn, never JSON output.
-  // JSON output is never accepted as a candidate source: durable narrow
-  // plans are derived solely from measured workspace .md files and their
-  // structured frontmatter, so workspace edits with no JSON still proceed
-  // while JSON-only output with no workspace changes fails closed to zero
-  // edits. Production invents nothing: invalid measured files are dropped
-  // individually and clusters are never auto-assigned.
-  void outcome;
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
   if (!outcome || outcome.status !== "ok") {
     return withPersist({
@@ -676,90 +1248,70 @@ export function synthesizeWithAcpx(
       promptFile,
     });
   }
-  // Independently measure the edit-turn workspace files (durable source).
-  let measuredFiles = [];
-  try {
-    if (workspaceCwd && fs.existsSync(workspaceCwd)) {
-      measuredFiles = fs.readdirSync(workspaceCwd).filter((n) => n.endsWith(".md")).sort();
+  if (outcome.candidates !== undefined || outcome.edits !== undefined) {
+    return withPersist({
+      edits: [],
+      failed: "forbidden candidates/edits key",
+      note: "synthesis returned forbidden candidates/edits key (expected {plans:[...]} only); fail-closed with no candidate edits for this run",
+      promptFile,
+    });
+  }
+  const rawPayload = Array.isArray(outcome.plans) ? { plans: outcome.plans } : (outcome.result && typeof outcome.result === "object" ? outcome.result : null);
+  if (!rawPayload) {
+    return withPersist({
+      edits: [],
+      failed: "malformed synthesis payload",
+      note: "synthesis returned no plans payload; fail-closed with no candidate edits for this run",
+      promptFile,
+    });
+  }
+  const check = validateProvisionalPlans(rawPayload, { ledger, floor });
+  if (!check.ok) {
+    return withPersist({
+      edits: [],
+      failed: (check.errors || []).join("; ") || "invalid synthesis plans",
+      note: `synthesis plans invalid (${(check.errors || []).join("; ") || "validation failed"}); fail-closed with no candidate edits for this run`,
+      promptFile,
+    });
+  }
+  if (!check.plans.length) {
+    return withPersist({
+      edits: [],
+      promptFile,
+      note: "synthesis returned zero plans; no provisional record warranted for this run",
+    });
+  }
+  for (const plan of check.plans) {
+    const staged = validateChangePlan(plan, { ledger });
+    if (!staged.ok) {
+      return withPersist({
+        edits: [],
+        failed: (staged.errors || []).join("; "),
+        note: `synthesis plans invalid (${(staged.errors || []).join("; ")}); fail-closed with no candidate edits for this run`,
+        promptFile,
+      });
     }
-  } catch {
-    measuredFiles = [];
   }
-  if (!measuredFiles.length) {
-    return withPersist({
-      edits: [],
-      failed: "no workspace file changes",
-      note: "synthesis edit turn produced no workspace file changes; JSON-only plans discarded fail-closed with zero candidate edits for this run",
-      promptFile,
-    });
-  }
-  const eligible = (ledger?.clusters || []).filter((c) => c?.eligible);
-  if (!eligible.length) {
-    return withPersist({
-      edits: [],
-      failed: "no eligible clusters",
-      note: "synthesis measured workspace changes but no eligible clusters can anchor them; fail-closed with no candidate edits for this run",
-      promptFile,
-    });
-  }
-  const fileIntentAndProvenance = (file) => {
+  if (stateDir) {
     try {
-      const text = fs.readFileSync(path.join(String(workspaceCwd), file), "utf8");
-      const head = text.split("\n").find((l) => l.startsWith("# "));
-      const intent = head ? head.replace(/^#+\s*/, "").trim().slice(0, 200) : "";
-      const fm = parseWorkspaceFileProvenance(text);
-      return { intent, clusterId: fm.clusterId, sources: fm.sources };
-    } catch {
-      return { intent: "", clusterId: null, sources: null };
+      const { written } = materializeValidatedPlans(check.plans, { stateDir, ...(workspaceRoot ? { workspaceRoot } : {}) });
+      return withPersist({
+        edits: check.plans,
+        promptFile,
+        note: `synthesis text-only proposer validated ${check.plans.length} plan(s); deterministic code materialized ${written.length} markdown file(s) under synthesis-workspace`,
+      });
+    } catch (err) {
+      return withPersist({
+        edits: [],
+        failed: err?.message || String(err),
+        note: `synthesis materialization refused (${err?.message || err}); fail-closed with no candidate edits for this run`,
+        promptFile,
+      });
     }
-  };
-  const edits = [];
-  for (const file of measuredFiles) {
-    const fileId = file.slice(0, -3);
-    // Provenance comes ONLY from the actual changed workspace file.
-    // No JSON acceptance, no cyclic/default fallback, never auto-assigned:
-    // files with missing/invalid frontmatter are dropped individually.
-    const { intent: fileTitle, clusterId: fileClusterId, sources: fileSources } = fileIntentAndProvenance(file);
-    if (!fileClusterId || !Array.isArray(fileSources)) continue;
-    const distinct = [...new Set(fileSources.map((s) => String(s)))].filter(Boolean);
-    if (distinct.length < 2) continue;
-    const cluster = (ledger?.clusters || []).find((c) => String(c?.id) === String(fileClusterId) && c?.eligible) || null;
-    if (!cluster) continue;
-    const clusterSources = new Set((cluster?.sources || []).map(String));
-    if (!distinct.every((s) => clusterSources.has(String(s)))) continue;
-    const intent = String(fileTitle || cluster?.proposedInstruction || "").trim();
-    if (!intent) continue;
-    const plan = {
-      id: fileId,
-      kind: "add",
-      clusterId: String(cluster?.id || ""),
-      provisionalIntent: intent,
-      provisionalSources: distinct,
-      provisionalCount: distinct.length,
-    };
-    const check = validateChangePlan(plan, { ledger });
-    if (!check.ok) continue;
-    edits.push({
-      id: fileId,
-      kind: "add",
-      clusterId: String(plan.clusterId),
-      provisionalIntent: String(plan.provisionalIntent),
-      provisionalSources: [...plan.provisionalSources].map(String),
-      provisionalCount: Number(plan.provisionalCount || plan.provisionalSources.length),
-      ...(cluster?.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
-    });
-  }
-  if (!edits.length) {
-    return withPersist({
-      edits: [],
-      failed: "no valid measured workspace plans",
-      note: "synthesis measured workspace changes but none carry valid file frontmatter anchored to eligible clusters; fail-closed with no candidate edits for this run",
-      promptFile,
-    });
   }
   return withPersist({
-    edits,
+    edits: check.plans,
     promptFile,
-    note: `synthesis edit turn measured ${measuredFiles.length} workspace file(s); durable candidates come solely from actual workspace file edits`,
+    note: `synthesis text-only proposer validated ${check.plans.length} plan(s) (no stateDir materialization)`,
   });
 }

@@ -16,7 +16,7 @@ import { synthesizeCandidates, synthesizeWithAcpx, measuredIdsForPlan } from "./
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
-import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson } from "./state.js";
+import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson, assertMinGapEvidence } from "./state.js";
 import { readSoulSnapshot } from "./soul.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
 import { readOpencodeExportAsync } from "./opencode-export.js";
@@ -197,6 +197,7 @@ export async function runPipeline({
   jobs = Number(process.env.CA_IMPROVE_JOBS || 4),
 } = {}) {
   const emit = (event, data = {}) => progress?.(event, data);
+  const floor = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   emit("discover:start", { harnesses: harnesses || ["hermes", "pi", "claude", "codex", "opencode"] });
@@ -283,11 +284,12 @@ export async function runPipeline({
   const rejections = readRejections(stateDir);
   const harnessSummary = harnessSummaryOf(discovery.transcripts);
   const runNote = consolidation.note || "";
-  // Private writable synthesis workspace inside stateDir. Synthesis executes
-  // only there (explicit cwd=workspace for ACPX) and may author/edit markdown
-  // records; apply remains the only durable experience writer. No synthetic
-  // seed records are ever created here: the workspace starts empty and only
-  // real synthesis-authored changes are measured.
+  // Private writable synthesis workspace inside stateDir. ACPX synthesis is
+  // text-only (no workspace cwd); validated narrow plans are materialized
+  // deterministically by code under synthesis-workspace. Apply remains the
+  // only durable experience writer. No synthetic seed records are ever
+  // created here: the workspace starts empty and only materialized
+  // validated plans are measured.
   let workspace = null;
   try {
     workspace = prepareExperienceWorkspace({
@@ -324,18 +326,18 @@ export async function runPipeline({
       transcriptCount: discovery.transcripts.length,
       harnessSummary,
       runNote,
-      workspace: workspaceCwd,
+      minGapEvidence: floor,
       workspaceRoot: workspaceCwd,
-      cwd: workspaceCwd,
     });
     edits = out.edits;
     synthesisFailed = Boolean(out.failed);
     synthesisNote = out.note || "";
   }
   // Synthesis output is the ONLY author of workspace changes: the mock
-  // synthesis authored the workspace before measurement (above) and the
-  // production ACPX external process authors it via its workspace cwd run
-  // exactly with workspace as CWD. Here the pipeline only measures the
+  // synthesis authored the workspace before measurement (above) and
+  // production deterministic code materialized validated text-only plans
+  // under synthesis-workspace (no ACPX filesystem write). Here the pipeline
+  // only measures the
   // actual resulting created/modified/deleted files with stable anchored
   // diffs (never synthetic plan deltas). Production never derives durable
   // records/diffs from a JSON plan: plans without corresponding measured
@@ -353,74 +355,24 @@ export async function runPipeline({
     measuredChanges = [];
   }
   if (analyzer !== "mock") {
-    // Production gate: measured workspace changes independently drive
-    // annotation by measured IDs. JSON plan output never creates durable
-    // candidates/diffs: without workspace changes, even a JSON plan yields
-    // zero edits; with changes, bound plans are kept, and when no JSON plan
-    // binds (including no JSON at all), narrow plans are derived from the
-    // measured changes themselves so actual workspace edits proceed.
+    // Production gate (Option 2 text-only): deterministic code already
+    // materialized only validated plans under synthesis-workspace.
+    // Measured files independently confirm them by measured IDs. No
+    // synthetic derivation: unbound plans fail closed to zero edits.
     const incoming = [...(edits || [])];
     if (!measuredChanges.length) {
       if (incoming.length) {
-        synthesisNote = [synthesisNote, "no workspace file changes measured; JSON-only plans discarded fail-closed with zero candidate edits"].filter(Boolean).join("\n");
+        synthesisNote = [synthesisNote, "no workspace file changes measured; validated plans discarded fail-closed with zero candidate edits"].filter(Boolean).join("\n");
       }
       edits = [];
       synthesisFailed = true;
     } else {
       const bound = incoming.filter((plan) => measuredIdsForPlan(plan?.id, measuredChanges).length > 0);
-      if (bound.length) {
-        if (bound.length < incoming.length) {
-          synthesisNote = [synthesisNote, "JSON-only plans without measured workspace changes discarded; measured IDs drive annotation"].filter(Boolean).join("\n");
-        }
-        edits = bound;
-      } else {
-        // No JSON binding: narrow plans derive solely from measured file
-        // provenance (never round-robin/cyclic fallback, never auto-assign).
-        const eligibleById = new Map((ledger?.clusters || []).filter((c) => c?.eligible).map((c) => [String(c.id), c]));
-        const real = [...measuredChanges];
-        const derived = [];
-        for (const m of real) {
-          const rid = String(m?.recordId || m?.file || m?.path || "").replace(/\.md$/, "");
-          if (!rid) continue;
-          const mClusterId = String(m?.clusterId || "").trim();
-          const mSourcesRaw = m?.provisionalSources || m?.eligibleSources || m?.sources || null;
-          if (!mClusterId || !Array.isArray(mSourcesRaw)) continue;
-          const distinct = [...new Set(mSourcesRaw.map((s) => String(s)).filter(Boolean))];
-          if (distinct.length < 2) continue;
-          const cluster = eligibleById.get(mClusterId) || null;
-          if (!cluster) continue;
-          const clusterSources = new Set((cluster?.sources || []).map(String));
-          if (!distinct.every((s) => clusterSources.has(String(s)))) continue;
-          let intent = "";
-          try {
-            const body = String(m?.text || "");
-            const head = body.split("\n").find((l) => l.startsWith("# "));
-            if (head) intent = head.replace(/^#+\s*/, "").trim().slice(0, 200);
-          } catch {}
-          if (!intent) intent = String(cluster?.proposedInstruction || rid).trim();
-          if (!intent) continue;
-          derived.push({
-            id: rid,
-            kind: "add",
-            clusterId: String(cluster.id),
-            provisionalIntent: intent,
-            provisionalSources: distinct,
-            provisionalCount: distinct.length,
-            ...(cluster?.corroboratedOpenGap ? { corroboratedOpenGap: true } : {}),
-          });
-        }
-        if (derived.length) {
-          edits = derived;
-          synthesisFailed = false;
-          synthesisNote = [synthesisNote, `measured workspace changes independently drive ${derived.length} candidate(s) by measured IDs; JSON plan output never creates durable candidates`].filter(Boolean).join("\n");
-        } else {
-          if (incoming.length) {
-            synthesisNote = [synthesisNote, "no plans bound to measured workspace changes; fail-closed with zero candidate edits"].filter(Boolean).join("\n");
-          }
-          edits = [];
-          synthesisFailed = true;
-        }
+      if (bound.length < incoming.length) {
+        synthesisNote = [synthesisNote, "plans without measured workspace changes discarded; measured IDs drive annotation"].filter(Boolean).join("\n");
       }
+      if (!bound.length) synthesisFailed = true;
+      edits = bound;
     }
   }
   const notes = [runNote, synthesisNote].filter(Boolean);

@@ -5,6 +5,8 @@
 
 import { createHash } from "node:crypto";
 
+import { assertMinGapEvidence } from "./state.js";
+
 function normalizeQuote(text) {
   return String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
 }
@@ -19,6 +21,7 @@ function shortHash(text) {
  * @returns folded ledger {clusters: [{id, proposedInstruction, representativeQuote, sources, count, eligible, perSource}]}
  */
 export function foldEvidence(evidenceRecords, { minGapEvidence = 2 } = {}) {
+  minGapEvidence = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   const usable = (evidenceRecords || []).filter((r) => r && r.status === "ok");
   const groups = new Map();
   for (const record of usable) {

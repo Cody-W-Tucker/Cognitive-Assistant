@@ -65,3 +65,17 @@ export function readEvidenceRecords(stateDir) {
     return [];
   }
 }
+
+/**
+ * Central minGapEvidence floor validation (single source of truth).
+ * Both the JS CLI and the direct runPipeline/synthesize API boundaries
+ * call this so run and synthesize match. Throws fail-closed on
+ * non-integer or <2.
+ */
+export function assertMinGapEvidence(value, label = 'minGapEvidence') {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 2) {
+    throw new Error(label + ' must be an integer >= 2 (got ' + JSON.stringify(value) + ')');
+  }
+  return n;
+}

@@ -23,6 +23,7 @@ Common flags:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -286,7 +287,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return langfuse_review.run(dry_run=args.dry_run)
 
     if args.command == "improve-run":
-        import json
         import os
 
         from core import improve as improve_runtime
@@ -375,8 +375,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "improve-synthesize":
-        import json
-
         from core import improve as improve_runtime
 
         proposal = improve_runtime.synthesize_resume(

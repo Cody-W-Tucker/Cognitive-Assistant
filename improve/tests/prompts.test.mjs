@@ -126,29 +126,31 @@ describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
     );
   });
 
-  it("synthesis.md requires literal clusterId + provisionalSources with a copyable ONLY-those-keys YAML scaffold", () => {
+  it("synthesis.md requires literal clusterId + provisionalSources + provisionalIntent with a copyable JSON plans scaffold", () => {
     const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
-    assert.ok(text.includes("clusterId"), "synthesis prompt must name the exact literal frontmatter key clusterId");
-    assert.ok(text.includes("provisionalSources"), "synthesis prompt must name the exact literal frontmatter key provisionalSources");
-    const fence = [...text.matchAll(/```(?:yaml|yml)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
-    assert.ok(fence.length >= 1, "synthesis prompt must include a copyable YAML frontmatter scaffold in a fenced code block");
+    assert.ok(text.includes("clusterId"), "synthesis prompt must name the exact literal key clusterId");
+    assert.ok(text.includes("provisionalSources"), "synthesis prompt must name the exact literal key provisionalSources");
+    assert.ok(text.includes("provisionalIntent"), "synthesis prompt must name provisionalIntent");
+    assert.ok(/text-only/i.test(text), "synthesis prompt must declare text-only proposer");
+    assert.ok(!/edit-only|edit turn/i.test(text), "synthesis prompt must not describe an edit turn");
+    const fence = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
+    assert.ok(fence.length >= 1, "synthesis prompt must include a copyable JSON plans scaffold in a fenced code block");
     const scaffold = fence.join("\n");
+    assert.ok(scaffold.includes("plans"), "scaffold must show plans");
     assert.ok(scaffold.includes("clusterId"), "scaffold must show clusterId");
     assert.ok(scaffold.includes("provisionalSources"), "scaffold must show provisionalSources");
-    assert.ok(/---\s*\n[\s\S]*?clusterId[\s\S]*?provisionalSources[\s\S]*?---/.test(scaffold) || /---\s*\n[\s\S]*?clusterId[\s\S]*?---/.test(text), "scaffold must be a --- fenced frontmatter block");
-    const keys = [...scaffold.matchAll(/^\s*([A-Za-z0-9_]+)\s*:/gm)].map((m) => m[1]).filter((k) => k !== "provisionalSources" || true);
-    const topKeys = [...new Set(keys)].filter((k) => ["clusterId", "provisionalSources"].includes(k) || true);
-    assert.ok(topKeys.includes("clusterId") && topKeys.includes("provisionalSources"), "scaffold must carry ONLY clusterId + provisionalSources keys");
-    for (const forbidden of ["record:", "title:", "body:", "sources:", "evidence:", "counterevidence", "compilerImplication"]) {
-      assert.ok(!scaffold.includes(forbidden), "scaffold must carry ONLY clusterId/provisionalSources (found " + forbidden + ")");
+    for (const forbidden of ["record", "counterevidence", "compilerImplication", "stagedArtifact"]) {
+      assert.ok(!scaffold.includes(`"${forbidden}"`), "scaffold must not carry final field " + forbidden);
     }
-    assert.ok(/-\s*s1|-\s*<|\[\s*"s1"|-\s*\S+/.test(scaffold), "scaffold must show provisionalSources as a YAML sequence of session ids");
+    for (const forbidden of ['"file"', '"path"', '"workspace"', '"cwd"']) {
+      assert.ok(!scaffold.includes(forbidden), "scaffold must not carry filesystem target " + forbidden);
+    }
   });
 
-  it("synthesis.md skeleton uses the exact user-requested frontmatter shape", () => {
+  it("synthesis.md skeleton uses the exact text-only plans shape", () => {
     const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
-    assert.match(text, /clusterId:\s*\S+/);
-    assert.match(text, /provisionalSources:\s*\n/);
+    assert.match(text, /"plans"/);
+    assert.match(text, /provisionalSources/);
   });
 
   it("preserves literal placeholder-shaped text injected through values", () => {

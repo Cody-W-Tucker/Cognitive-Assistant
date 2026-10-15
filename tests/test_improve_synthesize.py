@@ -188,7 +188,8 @@ class ImproveSynthesizeStateTests(unittest.TestCase):
             self.assertTrue((state_dir / "ledger.json").exists())
             self.assertGreaterEqual(len(list((state_dir / "evidence").glob("*.json"))), 1)
             # Resume via injected production doubles: the fake ACPX synthesis
-            # process is the only workspace author; annotation supplies finals.
+            # returns stdout-only provisional plans; deterministic code
+            # materializes the workspace and annotation supplies finals.
             probe = root / "resume-probe.mjs"
             resume_url = (REPO_ROOT / "improve" / "src" / "synthesize-resume.js").as_uri()
             annotate_url = (REPO_ROOT / "improve" / "src" / "annotate.js").as_uri()
@@ -206,11 +207,9 @@ class ImproveSynthesizeStateTests(unittest.TestCase):
                 "    const led = args?.ledger;\n"
                 "    const cluster = (led?.clusters || []).find((c) => c.eligible);\n"
                 "    if (!cluster) return { status: 'failed', error: 'no eligible' };\n"
-                "    const cwd = args?.cwd || args?.workspace;\n"
-                "    const file = `${cluster.id}.md`;\n"
-                "    const body = `---\\nclusterId: ${cluster.id}\\nprovisionalSources:\\n${cluster.sources.map((s) => `  - ${s}`).join('\\n')}\\n---\\n# ${cluster.proposedInstruction}\\n\\nRecurring gap: ${cluster.proposedInstruction}\\n`;\n"
-                "    fs.writeFileSync(path.join(String(cwd), file), body, 'utf8');\n"
-                "    return { status: 'ok', result: 'resume-edit-turn' };\n"
+                "    const sources = [...new Set((cluster.sources || []).map(String))].slice(0, 2);\n"
+                "    const plan = { clusterId: cluster.id, provisionalIntent: String(cluster.proposedInstruction || 'improve').slice(0, 500), provisionalSources: sources };\n"
+                "    return { status: 'ok', plans: [plan] };\n"
                 "  },\n"
                 "  annotateInvoke: (args) => {\n"
                 "    if (args?.stage === 'annotate-preface') return { status: 'ok', ready: true };\n"

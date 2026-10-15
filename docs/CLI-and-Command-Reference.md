@@ -130,7 +130,7 @@ export, no per-trace analyze. It consolidates only if required (the same
 `<2 gaps` skip / mock-free production path as `improve-run`), checks the
 eligibility/evidence floors (`>=min-gap-evidence` distinct sessions per
 eligible cluster), then runs fixed raw-stdout production synthesis
-(`synthesizeWithAcpx` with explicit `synthesis-workspace` cwd) ->
+(`synthesizeWithAcpx` text-only, no workspace/cwd passed; deterministic code materializes validated plans under `synthesis-workspace`) ->
 workspace measure (`measured-changes.json`) -> fresh
 `annotate-preface` then `annotate` -> fresh reviewable `proposal.json`
 (`reviewed: false`, `appliedAt: null`). Absent/incomplete/corrupt state
@@ -178,23 +178,36 @@ deterministic lexical current result with a visible proposal/run note
 
 Adapted from the Backpass operational sources (`src/prompts/synthesis.md` +
 `src/prompts/annotate.md` at commit 0268201; see `improve/LICENSE.NOTICE`)
-but CA-native: the model proposes narrow private staged change plans only
+but CA-native (Option 2 text-only): the model is a text-only proposer returning
+exactly `{"plans": [...]}` on stdout with narrow provisional plans only
 (`clusterId` + untrusted `provisionalIntent` + `provisionalSources` with
 `>=2` distinct eligible sessions), never final `title`/`body`/`evidence`/
-quote mappings/`counterevidence`/`compilerImplication`/staged artifact/diff.
+quote mappings/`counterevidence`/`compilerImplication`/staged artifact/diff
+and never filesystem targets (`file`/`path`/`workspace`/`cwd`). The prompt
+never asks to inspect or edit a workspace and never describes an edit turn.
 Annotation is the sole full-record author; staged plans carry no
-record/evidence. The prompt states explicitly: change only the plan -- never live
+record/evidence. The prompt states explicitly: propose only plans -- never live
 files, tracked files, SOUL, posture, skills, or Hermes -- and the plan is
 not authoritative pre-apply (the terminal review/apply gate consumes only
 annotated finals). Production runs are acpx-only with ACPX text-output
 (`--format quiet`, never JSON-RPC) plus the strict single-object extractor
-(`improve/src/acpx-text.js`) and strict plan validation
-(eligible folded cluster; `>=2` distinct eligible sessions; any final field
-present is invalid and dropped). The mock path is deterministic
-`synthesizePlans` with no real calls, still reviewable. Production failure
+(`improve/src/acpx-text.js`), a bounded stdout payload (max 20000 chars, max
+16 plans, max 500 intent chars), and strict provenance validation against the
+eligible ledger (reject malformed, unknown/ineligible clusters, <2 distinct
+known sources, authoritative final fields, path-like or unexpected fields,
+duplicate/unsafe ids). No workspace/cwd is passed to the production
+invocation and no ACPX filesystem change is authoritative: deterministic code
+writes only validated plans as Markdown under existing
+`stateDir/synthesis-workspace` (no model-controlled path target), then the
+existing measure -> annotate -> proposal chain observes those files. The mock path is deterministic
+`synthesizePlans` with no real calls, still reviewable, with no synthetic
+provenance or fallback candidate. Production failure
 (acpx error or zero valid plans) fails closed: no plans plus a visible
 proposal note (`proposal.notes` +
-`proposal.synthesis.note`). Prior rejections (`state/rejections.jsonl`) render
+`proposal.synthesis.note`). `minGapEvidence` (integer >= 2) is validated
+centrally (`assertMinGapEvidence`) at the JS CLI and at the direct
+`runPipeline`/`runSynthesizeResume`/`synthesizeWithAcpx` boundaries so run
+and synthesize match. Prior rejections (`state/rejections.jsonl`) render
 into `{{REJECTIONS}}`; synthesis itself does not suppress -- suppression
 applies downstream on annotated finals unless the final carries higher
 evidence (more distinct sessions) or genuinely new evidence (an unseen session

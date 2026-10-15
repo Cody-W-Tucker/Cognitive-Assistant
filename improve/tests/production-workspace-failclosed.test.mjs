@@ -74,18 +74,17 @@ test("mock synthesis author creates no seed files", async () => {
   assert.ok(fs.existsSync(path.join(root, "e1.md")), "mock author still authors the plan record");
 });
 
-test("fake production ACPX synthesis writes workspace markdown and measurement drives annotation", () => {
+test("text-only production ACPX synthesis materializes markdown and measurement drives annotation", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-state-"));
   const ws = prepareExperienceWorkspace({ stateDir, records: [] });
   const root = ws?.root || path.join(stateDir, "synthesis-workspace");
   let captured = null;
   const invoke = (args) => {
     captured = args;
-    // Fake actual production ACPX process: writes a real markdown record
-    // into the workspace cwd (not JSON-only).
-    const cwd = args?.cwd || args?.workspace;
-    assert.ok(cwd, "invoke must receive workspace cwd");
-    fs.writeFileSync(path.join(String(cwd), "e1.md"), "---\nclusterId: c1\nprovisionalSources:\n  - s1\n  - s2\n---\n# Do X\n\nRecurring gap (c1): Do X\n", "utf8");
+    // TEXT-ONLY: the production proposer returns stdout plans only and must
+    // not receive any workspace/cwd; deterministic code materializes.
+    assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
+    assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
     return {
       status: "ok",
       plans: [{ clusterId: "c1", provisionalIntent: "Do X", provisionalSources: ["s1", "s2"] }],
@@ -95,14 +94,11 @@ test("fake production ACPX synthesis writes workspace markdown and measurement d
     evidenceIndex: makeEvidenceIndex(),
     stateDir,
     runId: "run-test",
-    workspace: root,
-    workspaceRoot: root,
-    cwd: root,
     invoke,
   });
   assert.ok(captured, "invoke must have been called");
-  assert.equal(path.resolve(String(captured.cwd)), path.resolve(root), "ACPX synthesis must run exactly with workspace as CWD");
-  assert.equal(path.resolve(String(captured.workspace)), path.resolve(root), "workspace param must equal workspace root");
+  assert.equal(captured.cwd, undefined, "text-only invoke carries no cwd");
+  assert.equal(captured.workspace, undefined, "text-only invoke carries no workspace");
   const measured = measureExperienceWorkspace(ws);
   assert.ok(measured.length > 0, "measurement must observe the written markdown");
   // Measurement drives annotation: plan binds by measured IDs.
@@ -110,10 +106,8 @@ test("fake production ACPX synthesis writes workspace markdown and measurement d
   assert.ok(ids.length > 0, `measured IDs must bind to plan id (measured=${JSON.stringify(measured)})`);
 });
 
-test("production prompt is EDIT-only workspace turn, not JSON plan contract", () => {
+test("production prompt is text-only proposer, never an edit turn", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-state-"));
-  const ws = prepareExperienceWorkspace({ stateDir, records: [] });
-  const root = ws?.root || path.join(stateDir, "synthesis-workspace");
   let seenPrompt = "";
   const invoke = (args) => {
     seenPrompt = String(args?.prompt || "");
@@ -126,18 +120,15 @@ test("production prompt is EDIT-only workspace turn, not JSON plan contract", ()
     evidenceIndex: makeEvidenceIndex(),
     stateDir,
     runId: "run-test",
-    workspace: root,
-    workspaceRoot: root,
-    cwd: root,
     invoke,
   });
-  // Also check persisted prompt file if written.
   const lowered = seenPrompt.toLowerCase();
-  assert.ok(lowered.includes("edit"), "prompt must describe an EDIT turn");
-  assert.ok(lowered.includes("only") && lowered.includes("workspace"), "prompt must say inspect/edit ONLY private workspace");
+  assert.ok(lowered.includes("text-only"), "prompt must declare text-only proposer");
+  assert.ok(!lowered.includes("edit turn"), "prompt must never describe an edit turn");
+  assert.ok(!lowered.includes("inspect and edit only"), "prompt must never ask to inspect/edit workspace");
 });
 
-test("JSON-only/no-file-change production synthesis yields zero candidate edits (fail-closed)", async () => {
+test("invalid synthesis plans fail closed with zero candidate edits", async () => {
   // Dynamic import so pipeline edits are picked up after implementation.
   const { runPipeline } = await import("../src/pipeline.js");
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "ca-home-"));
@@ -169,13 +160,13 @@ test("JSON-only/no-file-change production synthesis yields zero candidate edits 
     analyzeInvoke: async () => ({ status: "skipped", reason: "tdd empty" }),
     consolidateInvoke: () => ({ status: "ok", ledger: ledgerForTest }),
     synthesizeInvoke: (args) => {
-      // JSON-only: return valid-looking plans but touch no files.
-      const cwd = args?.cwd || args?.workspace;
-      assert.ok(cwd, "production invoke must still receive workspace cwd");
-      assert.ok(!fs.existsSync(path.join(String(cwd), "e1.md")), "precondition: no workspace file yet");
+      // TEXT-ONLY: return valid plans with no filesystem access; deterministic
+      // code materializes. Invalid cluster would fail closed instead.
+      assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
+      assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
       return {
         status: "ok",
-        plans: [{ clusterId: "c1", provisionalIntent: "Do X", provisionalSources: ["s1", "s2"] }],
+        plans: [{ clusterId: "c-ghost", provisionalIntent: "Do X", provisionalSources: ["s1", "s2"] }],
       };
     },
     annotateInvoke: (args) => {
@@ -210,7 +201,7 @@ test("JSON-only/no-file-change production synthesis yields zero candidate edits 
       };
     },
   });
-  assert.equal(proposal.edits.length, 0, `JSON-only with no workspace changes must yield zero edits (got ${JSON.stringify(proposal.edits)})`);
+  assert.equal(proposal.edits.length, 0, `invalid plans must yield zero edits (got ${JSON.stringify(proposal.edits)})`);
   const stagingNote = String(proposal?.staging?.note || "") + String(proposal?.synthesis?.note || "");
   void stagingNote;
 });

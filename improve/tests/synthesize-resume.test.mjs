@@ -67,11 +67,9 @@ describe("improve-synthesize resume-only pipeline", () => {
         const ledger = args?.ledger;
         const cluster = (ledger?.clusters || []).find((c) => c.eligible);
         assert.ok(cluster);
-        const cwd = args?.cwd || args?.workspace;
-        assert.ok(cwd);
-        const body = `---\nclusterId: ${cluster.id}\nprovisionalSources:\n${cluster.sources.map((s) => `  - ${s}`).join("\n")}\n---\n# ${cluster.proposedInstruction}\n\nRecurring gap: ${cluster.proposedInstruction}\n`;
-        fs.writeFileSync(path.join(String(cwd), `${cluster.id}.md`), body, "utf8");
-        return { status: "ok", result: "edit-turn" };
+        assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
+        assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
+        return { status: "ok", plans: [{ clusterId: cluster.id, provisionalIntent: cluster.proposedInstruction, provisionalSources: [...cluster.sources] }] };
       },
       annotateInvoke: (args) => {
         if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
@@ -108,13 +106,9 @@ describe("improve-synthesize resume-only pipeline", () => {
       },
       synthesizeInvoke: (args) => {
         const cluster = (args?.ledger?.clusters || []).find((c) => c.eligible);
-        const cwd = args?.cwd || args?.workspace;
-        fs.writeFileSync(
-          path.join(String(cwd), `${cluster.id}.md`),
-          `---\nclusterId: ${cluster.id}\nprovisionalSources:\n${cluster.sources.map((s) => `  - ${s}`).join("\n")}\n---\n# ${cluster.proposedInstruction}\n\nx\n`,
-          "utf8",
-        );
-        return { status: "ok", result: "ok" };
+        assert.equal(args?.cwd, undefined);
+        assert.equal(args?.workspace, undefined);
+        return { status: "ok", plans: [{ clusterId: cluster.id, provisionalIntent: cluster.proposedInstruction, provisionalSources: [...cluster.sources] }] };
       },
       annotateInvoke: (args) => {
         if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
@@ -252,10 +246,9 @@ describe("improve-synthesize resume-only pipeline", () => {
       stateDir,
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
       synthesizeInvoke: (args) => {
-        const cwd = args.cwd || args.workspace;
-        assert.ok(cwd);
-        fs.writeFileSync(path.join(String(cwd), cluster.id + ".md"), workspaceBody, "utf8");
-        return { status: "ok", result: "edit-turn" };
+        assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
+        assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
+        return { status: "ok", plans: [{ clusterId: cluster.id, provisionalIntent: cluster.proposedInstruction, provisionalSources: [...cluster.sources] }] };
       },
       annotateInvoke: (args) => {
         if (args && args.stage === "annotate-preface") return { status: "ok", ready: true };

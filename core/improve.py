@@ -32,6 +32,47 @@ REJECT_REASONS = (
 )
 
 
+class _StateLock:
+    """Simple state lock around improvement mutation (compatible no-op fallback).
+
+    Uses fcntl.flock on a state-local ``.apply.lock`` file when available;
+    otherwise proceeds without locking (never fails the gate).
+    """
+
+    def __init__(self, state_dir: Path) -> None:
+        self._path = Path(state_dir) / ".apply.lock"
+        self._handle = None
+
+    def __enter__(self) -> "_StateLock":
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            handle = open(self._path, "a+", encoding="utf-8")
+            try:
+                import fcntl as _fcntl
+
+                _fcntl.flock(handle.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+            except Exception:
+                pass
+            self._handle = handle
+        except Exception:
+            self._handle = None
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        try:
+            if self._handle is not None:
+                try:
+                    import fcntl as _fcntl
+
+                    _fcntl.flock(self._handle.fileno(), _fcntl.LOCK_UN)
+                except Exception:
+                    pass
+                self._handle.close()
+        except Exception:
+            pass
+        return False
+
+
 def node_bin() -> str:
     """Return the Node binary, or raise with the Nix dev-shell hint."""
     found = shutil.which("node")
@@ -407,63 +448,73 @@ def apply(
                     )
     written: List[str] = []
     if not dry_run:
-        for edit in edits:
-            if resolved[edit["id"]] == "accepted":
-                record = edit["record"]
-                authored_target = experience.authored_dir(root) / f"{record['id']}.md"
-                staged_target = experience.staged_dir(root) / f"{record['id']}.md"
-                authored_backup = (
-                    authored_target.read_bytes() if authored_target.exists() else None
-                )
-                staged_backup = (
-                    staged_target.read_bytes() if staged_target.exists() else None
-                )
-                try:
-                    authored_path = experience.write_authored_source(
-                        root, record, edit, proposal.get("id", "?")
-                    )
-                    staged_path = experience.write_staged_artifact(
-                        root, record["id"], edit["stagedArtifact"]
-                    )
-                except BaseException:
-                    if authored_backup is not None:
-                        authored_target.parent.mkdir(parents=True, exist_ok=True)
-                        authored_target.write_bytes(authored_backup)
-                    else:
+        with _StateLock(resolved_state):
+            backups: Dict[Path, Optional[bytes]] = {}
+
+            def _backup(path: Path) -> None:
+                if path not in backups:
+                    backups[path] = path.read_bytes() if path.exists() else None
+
+            def _restore() -> None:
+                for path, data in backups.items():
+                    try:
+                        if data is not None:
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(data)
+                        else:
+                            try:
+                                path.unlink()
+                            except OSError:
+                                pass
+                    except OSError:
+                        pass
+
+            pending_rejections: List[str] = []
+            try:
+                for edit in edits:
+                    if resolved[edit["id"]] == "accepted":
+                        record = edit["record"]
+                        authored_target = experience.authored_dir(root) / f"{record['id']}.md"
+                        staged_target = experience.staged_dir(root) / f"{record['id']}.md"
+                        _backup(authored_target)
+                        _backup(staged_target)
                         try:
-                            authored_target.unlink()
-                        except OSError:
-                            pass
-                    if staged_backup is not None:
-                        staged_target.parent.mkdir(parents=True, exist_ok=True)
-                        staged_target.write_bytes(staged_backup)
-                    else:
-                        try:
-                            staged_target.unlink()
-                        except OSError:
-                            pass
-                    raise
-                written.extend([str(authored_path), str(staged_path)])
-            elif resolved[edit["id"]] == "rejected":
-                record = edit.get("record", {}) or {}
-                rejection = {
-                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    "proposal": proposal.get("id", "?"),
-                    "edit": edit["id"],
-                    "reason": reasons.get(edit["id"], "other"),
-                    "title": record.get("title") or edit.get("title", ""),
-                    "clusterId": record.get("clusterId", ""),
-                    "recordId": record.get("id", ""),
-                    "sources": list(record.get("sources", []) or []),
-                }
-                rejections_path = resolved_state / "rejections.jsonl"
-                rejections_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(rejections_path, "a", encoding="utf-8") as handle:
-                    handle.write(json.dumps(rejection) + "\n")
-        proposal["reviewed"] = True
-        proposal["appliedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        proposal["decisions"] = resolved
-        tmp_path = resolved_state / "proposal.json.tmp"
-        tmp_path.write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
-        os.replace(tmp_path, resolved_state / "proposal.json")
+                            authored_path = experience.write_authored_source(
+                                root, record, edit, proposal.get("id", "?")
+                            )
+                            staged_path = experience.write_staged_artifact(
+                                root, record["id"], edit["stagedArtifact"]
+                            )
+                        except BaseException:
+                            raise
+                        written.extend([str(authored_path), str(staged_path)])
+                    elif resolved[edit["id"]] == "rejected":
+                        record = edit.get("record", {}) or {}
+                        rejection = {
+                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                            "proposal": proposal.get("id", "?"),
+                            "edit": edit["id"],
+                            "reason": reasons.get(edit["id"], "other"),
+                            "title": record.get("title") or edit.get("title", ""),
+                            "clusterId": record.get("clusterId", ""),
+                            "recordId": record.get("id", ""),
+                            "sources": list(record.get("sources", []) or []),
+                        }
+                        pending_rejections.append(json.dumps(rejection) + "\n")
+                if pending_rejections:
+                    rejections_path = resolved_state / "rejections.jsonl"
+                    rejections_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(rejections_path, "a", encoding="utf-8") as handle:
+                        for line in pending_rejections:
+                            handle.write(line)
+                proposal["reviewed"] = True
+                proposal["appliedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                proposal["decisions"] = resolved
+                tmp_path = resolved_state / "proposal.json.tmp"
+                tmp_path.write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
+                os.replace(tmp_path, resolved_state / "proposal.json")
+            except BaseException:
+                _restore()
+                written = []
+                raise
     return {"accepted": accepted, "rejected": rejected, "written": written, "dry_run": dry_run}

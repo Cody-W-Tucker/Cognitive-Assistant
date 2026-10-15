@@ -4,7 +4,7 @@
 import { discoverTranscripts } from "../src/discovery.js";
 import { runPipeline } from "../src/pipeline.js";
 import { runSynthesizeResume } from "../src/synthesize-resume.js";
-import { defaultStateDir } from "../src/state.js";
+import { defaultStateDir, assertMinGapEvidence } from "../src/state.js";
 import { defaultSoulPath } from "../src/soul.js";
 import { startTuiProcess } from "../src/tui.js";
 
@@ -54,7 +54,13 @@ async function main() {
     const analyzer = flagValue(rest, "--analyzer") || "acpx";
     const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
     const posturePath = flagValue(rest, "--posture-path") || null;
-    const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
+    let minGapEvidence;
+    try {
+      minGapEvidence = assertMinGapEvidence(flagValue(rest, "--min-gap-evidence") || 2, 'ca-improve run: --min-gap-evidence');
+    } catch (err) {
+      process.stderr.write(`${err?.message || err}\n`);
+      return 2;
+    }
     const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
     const tui = tuiRequested ? startTuiProcess({ since, analyzer }) : null;
     return runPipeline({
@@ -82,7 +88,13 @@ async function main() {
   }
   if (command === "synthesize") {
     const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
-    const minGapEvidence = Number(flagValue(rest, "--min-gap-evidence") || 2);
+    let minGapEvidence;
+    try {
+      minGapEvidence = assertMinGapEvidence(flagValue(rest, "--min-gap-evidence") || 2, 'ca-improve synthesize: --min-gap-evidence');
+    } catch (err) {
+      process.stderr.write(`${err?.message || err}\n`);
+      return 2;
+    }
     const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
     const runId = flagValue(rest, "--run-id") || null;
     return runSynthesizeResume({

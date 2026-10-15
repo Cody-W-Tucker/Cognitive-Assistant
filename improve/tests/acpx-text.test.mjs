@@ -540,12 +540,12 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
     await assertNoStdinInputInSources();
   });
 
-  it("synthesis real call uses persisted --file + --timeout 300/sol before pi, returns raw output without JSON extraction", async () => {
+  it("synthesis real call uses persisted --file + --timeout 300/sol before pi, strictly parses bounded plans payload", async () => {
     const { acpxSynthesisInvoke } = await import("../src/synthesize.js");
     const argFile = path.join(tmp, "args2.txt");
     const promptFile = path.join(tmp, "synthesis-prompt.md");
     fs.writeFileSync(promptFile, "P", "utf8");
-    const raw = `{"jsonrpc": "2.0", "id": 1, "result": {"plans": []}}\n`;
+    const raw = `{"plans": [{"id": "e1", "kind": "add", "clusterId": "g-1", "provisionalIntent": "do x", "provisionalSources": ["s1", "s2"]}]}\n`;
     process.env.CA_IMPROVE_ACPX_BIN = fakeBin({
       stdout: raw,
       recordArgs: argFile,
@@ -554,8 +554,8 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
     const out = acpxSynthesisInvoke({ prompt: "P", promptFile });
     assert.equal(out.status, "ok");
     assert.ok(
-      JSON.stringify(out).includes("jsonrpc"),
-      `synthesis exit 0 must return raw output without JSON extraction (got ${JSON.stringify(out)})`,
+      Array.isArray(out.plans) && out.plans.length === 1,
+      `synthesis exit 0 must strictly parse bounded plans payload (got ${JSON.stringify(out)})`,
     );
     const argv = recordedArgs(argFile);
     assertFileArgv(argv, { promptFile, timeoutSec: 300, model: SYNTHESIS_MODEL });
@@ -653,9 +653,16 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
 
     const synthFile = path.join(tmp, "helper-synth.md");
     fs.writeFileSync(synthFile, "S", "utf8");
+    const synthSpawnFn = (bin, args, opts) => {
+      seenArgs = args;
+      seenOpts = opts;
+      assert.ok(!("input" in (opts || {})), "spawn options must not carry stdin input");
+      return { status: 0, stdout: `{"plans":[]}\n` };
+    };
     withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () => {
-      const out = runAcpxPromptFile({ role: "synthesis", promptFile: synthFile, spawnFn });
+      const out = runAcpxPromptFile({ role: "synthesis", promptFile: synthFile, spawnFn: synthSpawnFn });
       assert.equal(out.status, "ok");
+      assert.deepEqual(out.result, { plans: [] });
     });
     assertFileArgv(seenArgs, { promptFile: synthFile, timeoutSec: 300, model: SYNTHESIS_MODEL });
     assert.ok(seenOpts.timeout > 300 * 1000, "synthesis spawn timeout must exceed ACPX --timeout");
@@ -764,7 +771,7 @@ describe("real ACPX calls use text-output + strict extraction (no direct client/
   });
 });
 
-describe("synthesis raw-text regression (TDD phase 1, expected failures)", () => {
+describe("synthesis strict text-only regression (Option 2)", () => {
   const RAW_SYNTHESIS_STDOUT = "Synthesis draft:\n\nThis is prose with no JSON object.\n";
 
   function makePromptFile() {
@@ -774,24 +781,120 @@ describe("synthesis raw-text regression (TDD phase 1, expected failures)", () =>
     return { dir, promptFile };
   }
 
-  it("runAcpxPromptFile role=synthesis treats exit 0 raw non-JSON stdout as successful raw output", () => {
+  it("sync synthesis blocks workspace before spawn", () => {
+    const { dir, promptFile } = makePromptFile();
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-ws-"));
+    try {
+      let called = false;
+      const spawnFn = () => {
+        called = true;
+        return { status: 0, stdout: `{"plans":[]}` };
+      };
+      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+        runAcpxPromptFile({ role: "synthesis", promptFile, workspace: wsDir, spawnFn }),
+      );
+      assert.equal(out.status, "failed");
+      assert.ok(/text-only/.test(out.error));
+      assert.equal(called, false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(wsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("sync synthesis blocks cwd before spawn", () => {
+    const { dir, promptFile } = makePromptFile();
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-ws-"));
+    try {
+      let called = false;
+      const spawnFn = () => {
+        called = true;
+        return { status: 0, stdout: `{"plans":[]}` };
+      };
+      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+        runAcpxPromptFile({ role: "synthesis", promptFile, cwd: wsDir, spawnFn }),
+      );
+      assert.equal(out.status, "failed");
+      assert.ok(/text-only/.test(out.error));
+      assert.equal(called, false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(wsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("async synthesis blocks workspace before spawn", async () => {
+    const { runAcpxPromptFileAsync } = await import("../src/acpx-text.js");
+    const { dir, promptFile } = makePromptFile();
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-ws-"));
+    const prevArgs = process.env.CA_IMPROVE_ACPX_ARGS;
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+    try {
+      let called = false;
+      const spawnFn = () => {
+        called = true;
+        throw new Error("must not spawn");
+      };
+      const out = await runAcpxPromptFileAsync({ role: "synthesis", promptFile, workspace: wsDir, spawnFn });
+      assert.equal(out.status, "failed");
+      assert.ok(/text-only/.test(out.error));
+      assert.equal(called, false);
+    } finally {
+      if (prevArgs === undefined) delete process.env.CA_IMPROVE_ACPX_ARGS;
+      else process.env.CA_IMPROVE_ACPX_ARGS = prevArgs;
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(wsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("async synthesis blocks cwd before spawn", async () => {
+    const { runAcpxPromptFileAsync } = await import("../src/acpx-text.js");
+    const { dir, promptFile } = makePromptFile();
+    const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-ws-"));
+    const prevArgs = process.env.CA_IMPROVE_ACPX_ARGS;
+    process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+    try {
+      let called = false;
+      const spawnFn = () => {
+        called = true;
+        throw new Error("must not spawn");
+      };
+      const out = await runAcpxPromptFileAsync({ role: "synthesis", promptFile, cwd: wsDir, spawnFn });
+      assert.equal(out.status, "failed");
+      assert.ok(/text-only/.test(out.error));
+      assert.equal(called, false);
+    } finally {
+      if (prevArgs === undefined) delete process.env.CA_IMPROVE_ACPX_ARGS;
+      else process.env.CA_IMPROVE_ACPX_ARGS = prevArgs;
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(wsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("sync synthesis rejects prose/fenced/trailing", () => {
     const { dir, promptFile } = makePromptFile();
     try {
-      const spawnFn = () => ({ status: 0, stdout: RAW_SYNTHESIS_STDOUT });
-      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
-        runAcpxPromptFile({ role: "synthesis", promptFile, spawnFn }),
-      );
-      assert.equal(out.status, "ok");
-      assert.ok(
-        JSON.stringify(out).includes("Synthesis draft"),
-        `synthesis raw stdout must be preserved (got ${JSON.stringify(out)})`,
-      );
+      const cases = [
+        RAW_SYNTHESIS_STDOUT,
+        "```json\n{\"plans\":[]}\n```\n",
+        "[acpx] tokens: input=1 output=2\n{\"plans\":[]}\n",
+        `{"plans":[]} trailing prose`,
+        `Here is your result: {"plans":[]} hope this helps`,
+        JSON.stringify({ plans: [], extra: 1 }),
+      ];
+      for (const stdout of cases) {
+        const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+          runAcpxPromptFile({ role: "synthesis", promptFile, spawnFn: () => ({ status: 0, stdout }) }),
+        );
+        assert.equal(out.status, "failed", `must reject ${JSON.stringify(stdout.slice(0, 40))}`);
+        assert.ok(/malformed/.test(out.error));
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("runAcpxPromptFileAsync role=synthesis treats exit 0 raw non-JSON stdout as successful raw output", async () => {
+  it("async synthesis rejects prose/fenced/trailing", async () => {
     const { runAcpxPromptFileAsync } = await import("../src/acpx-text.js");
     const { dir, promptFile } = makePromptFile();
     const prevArgs = process.env.CA_IMPROVE_ACPX_ARGS;
@@ -799,21 +902,21 @@ describe("synthesis raw-text regression (TDD phase 1, expected failures)", () =>
     try {
       const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-raw-bin-"));
       try {
-        fs.writeFileSync(path.join(binDir, "out.txt"), RAW_SYNTHESIS_STDOUT);
         const bin = path.join(binDir, "fake-acpx");
-        fs.writeFileSync(
-          bin,
-          `#!/bin/sh\ncat ${JSON.stringify(path.join(binDir, "out.txt"))}\n`,
-          { mode: 0o755 },
-        );
+        fs.writeFileSync(bin, `#!/bin/sh\ncat ${JSON.stringify(path.join(binDir, "out.txt"))}\n`, { mode: 0o755 });
         fs.chmodSync(bin, 0o755);
-        process.env.CA_IMPROVE_ACPX_BIN = bin;
-        const out = await runAcpxPromptFileAsync({ role: "synthesis", promptFile, bin });
-        assert.equal(out.status, "ok");
-        assert.ok(
-          JSON.stringify(out).includes("Synthesis draft"),
-          `async synthesis raw stdout must be preserved (got ${JSON.stringify(out)})`,
-        );
+        const cases = [
+          RAW_SYNTHESIS_STDOUT,
+          "```json\n{\"plans\":[]}\n```\n",
+          `{"plans":[]} trailing prose`,
+          JSON.stringify({ plans: [], extra: 1 }),
+        ];
+        for (const stdout of cases) {
+          fs.writeFileSync(path.join(binDir, "out.txt"), stdout);
+          const out = await runAcpxPromptFileAsync({ role: "synthesis", promptFile, bin });
+          assert.equal(out.status, "failed", `must reject ${JSON.stringify(stdout.slice(0, 40))}`);
+          assert.ok(/malformed/.test(out.error));
+        }
       } finally {
         fs.rmSync(binDir, { recursive: true, force: true });
       }
@@ -823,6 +926,48 @@ describe("synthesis raw-text regression (TDD phase 1, expected failures)", () =>
       delete process.env.CA_IMPROVE_ACPX_BIN;
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("sync/async synthesis accept exact plans JSON", async () => {
+    const { runAcpxPromptFileAsync } = await import("../src/acpx-text.js");
+    const { dir, promptFile } = makePromptFile();
+    try {
+      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+        runAcpxPromptFile({
+          role: "synthesis",
+          promptFile,
+          spawnFn: () => ({ status: 0, stdout: `  {"plans":[]}  \n` }),
+        }),
+      );
+      assert.equal(out.status, "ok");
+      assert.deepEqual(out.result, { plans: [] });
+      const prevArgs = process.env.CA_IMPROVE_ACPX_ARGS;
+      process.env.CA_IMPROVE_ACPX_ARGS = "pi exec";
+      try {
+        const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-exact-bin-"));
+        try {
+          fs.writeFileSync(path.join(binDir, "out.txt"), `  {"plans":[]}  \n`);
+          const bin = path.join(binDir, "fake-acpx");
+          fs.writeFileSync(bin, `#!/bin/sh\ncat ${JSON.stringify(path.join(binDir, "out.txt"))}\n`, { mode: 0o755 });
+          fs.chmodSync(bin, 0o755);
+          const aout = await runAcpxPromptFileAsync({ role: "synthesis", promptFile, bin });
+          assert.equal(aout.status, "ok");
+          assert.deepEqual(aout.result, { plans: [] });
+        } finally {
+          fs.rmSync(binDir, { recursive: true, force: true });
+        }
+      } finally {
+        if (prevArgs === undefined) delete process.env.CA_IMPROVE_ACPX_ARGS;
+        else process.env.CA_IMPROVE_ACPX_ARGS = prevArgs;
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("non-synthesis extractor framing unchanged", () => {
+    assert.deepEqual(extractAcpxFinalJson(`[acpx] tokens: input=10 output=47\n{"ok":true}\n[acpx] done\n`), { ok: true });
+    assert.deepEqual(extractAcpxFinalJson(`Here is your result: {"ok":true} hope this helps`), { ok: true });
   });
 
   it("analysis/consolidate/annotate still fail strict JSON extraction on synthesis raw stdout", () => {
@@ -844,27 +989,32 @@ describe("synthesis raw-text regression (TDD phase 1, expected failures)", () =>
     }
   });
 
-  it("acpxSynthesisInvoke calls shared runner with role=synthesis and workspace cwd", async () => {
+  it("acpxSynthesisInvoke is text-only: rejects workspace/cwd and parses bounded plans", async () => {
     const { acpxSynthesisInvoke } = await import("../src/synthesize.js");
     const { dir, promptFile } = makePromptFile();
     const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-ws-"));
     try {
       let seenArgs;
-      let seenOpts;
+      const plansStdout = JSON.stringify({ plans: [{ id: "e1", kind: "add", clusterId: "g-1", provisionalIntent: "do x", provisionalSources: ["s1", "s2"] }] });
       const spawnFn = (bin, args, opts) => {
         seenArgs = args;
-        seenOpts = opts;
-        return { status: 0, stdout: RAW_SYNTHESIS_STDOUT };
+        assert.equal(opts?.cwd, undefined, "text-only invoke must not forward cwd to spawn");
+        return { status: 0, stdout: plansStdout };
       };
-      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+      assert.throws(() => withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
         acpxSynthesisInvoke({ prompt: "P", promptFile, workspace: wsDir, spawnFn }),
+      ), /text-only/);
+      assert.throws(() => withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+        acpxSynthesisInvoke({ prompt: "P", promptFile, cwd: wsDir, spawnFn }),
+      ), /text-only/);
+      const out = withEnv({ CA_IMPROVE_ACPX_ARGS: "pi exec" }, () =>
+        acpxSynthesisInvoke({ prompt: "P", promptFile, spawnFn }),
       );
       assert.ok(seenArgs.includes("pi") && seenArgs.includes("exec"), "must run via shared pi exec argv");
       assert.equal(seenArgs[seenArgs.indexOf("--timeout") + 1], "300");
       assert.equal(seenArgs[seenArgs.indexOf("--model") + 1], SYNTHESIS_MODEL);
-      assert.equal(seenOpts?.cwd, wsDir, "must forward workspace cwd to shared runner spawn");
       assert.equal(out.status, "ok");
-      assert.ok(JSON.stringify(out).includes("Synthesis draft"));
+      assert.ok(Array.isArray(out.plans) && out.plans.length === 1);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
       fs.rmSync(wsDir, { recursive: true, force: true });

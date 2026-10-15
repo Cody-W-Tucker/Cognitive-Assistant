@@ -11,6 +11,7 @@ import { renderPrompt } from "./prompts.js";
 import { persistPrompt, resolveAcpxBin } from "./analyze.js";
 import { runAcpxPromptFile } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
+import { assertMinGapEvidence } from "./state.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
 export const OPEN_GAPS_FILENAME = "open-gaps.json";
@@ -60,6 +61,7 @@ export function saveOpenGaps(stateDir, gaps) {
  * re-checks the floor.
  */
 export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = {}) {
+  minGapEvidence = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   const clusters = Array.isArray(ledger?.clusters) ? ledger.clusters.map((c) => ({ ...c, sources: [...(c.sources || []).map(String)] })) : [];
   const open = Array.isArray(persisted?.gaps) ? persisted.gaps : [];
   const byId = new Map(open.map((g) => [String(g.id), g]));
@@ -266,6 +268,7 @@ export function parseConsolidateResult(parsed, ledger) {
  * the evidence floor.
  */
 export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
+  minGapEvidence = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   const byId = new Map((ledger?.clusters || []).map((c) => [String(c.id), c]));
   const absorbed = new Set();
   const mergedClusters = [];
@@ -381,6 +384,7 @@ export function consolidateLedger(
   ledger,
   { invoke = acpxConsolidateInvoke, promptsDir, stateDir = null, runId = null, minGapEvidence = 2, analyzer = "acpx", persist = true, archivePrompt = null } = {},
 ) {
+  minGapEvidence = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   // Prompt for deferred persistence (resume validates eligibility before any
   // state mutation). Populated below when the judged call is needed.

@@ -12,8 +12,9 @@ and is expected to FAIL until the implementation lands:
    from measured workspace changes, not annotation invented artifacts.
 4. synthesis cannot durably write repo/SOUL/skills/Hermes, and apply is sole
    durable writer.
-5. ACPX synthesis invocation gets explicit workspace cwd without breaking
-   relevant existing invocation behavior.
+5. ACPX synthesis is text-only deterministic materialization under
+   stateDir/synthesis-workspace (no synthesis workspace cwd); generic ACPX
+   invocation behavior preserved.
 """
 
 from __future__ import annotations
@@ -287,15 +288,18 @@ class SynthesisContainmentTests(unittest.TestCase):
 
 
 class AcpxWorkspaceCwdTests(unittest.TestCase):
-    def test_acpx_synthesis_gets_explicit_workspace_cwd(self) -> None:
-        """ACPX path must receive the workspace cwd without breaking callers."""
+    def test_acpx_synthesis_is_text_only_deterministic_materialization(self) -> None:
+        """ACPX synthesis is text-only; deterministic code materializes validated plans."""
         acpx_src = (REPO_ROOT / "improve" / "src" / "acpx-text.js").read_text(encoding="utf-8")
         synth_src = (REPO_ROOT / "improve" / "src" / "synthesize.js").read_text(encoding="utf-8")
-        pipe_src = (REPO_ROOT / "improve" / "src" / "pipeline.js").read_text(encoding="utf-8")
-        # Explicit workspace cwd threading through synthesis -> ACPX.
-        self.assertIn("workspace", synth_src.lower(), "synthesize must accept a workspace cwd")
-        self.assertIn("workspace", acpx_src.lower(), "acpx-text must accept a workspace cwd")
-        self.assertIn("workspace", pipe_src.lower(), "pipeline must thread the workspace cwd")
+        # Text-only deterministic materialization: synthesis never passes a
+        # workspace cwd; validated plans materialize by code under
+        # stateDir/synthesis-workspace.
+        self.assertIn("text-only", synth_src.lower(), "synthesize must declare text-only proposer")
+        self.assertIn("materializevalidatedplans", synth_src.lower(), "deterministic code must materialize validated plans")
+        # Generic ACPX invocation behavior preserved (non-synthesis callers may
+        # still use an explicit workspace cwd).
+        self.assertIn("workspace", acpx_src.lower(), "acpx-text must retain generic workspace cwd support")
         # Existing invocation behavior preserved: analyzer/mock entry still works.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

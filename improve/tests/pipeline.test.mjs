@@ -136,10 +136,10 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
       synthesizeInvoke: (args) => {
         const ledger = args?.ledger;
         const plans = [planForLedger(ledger)];
-        // Fake production ACPX process: it is the only workspace author —
-        // write a real markdown record into the workspace cwd (not JSON-only).
-        const cwd = args?.cwd || args?.workspace;
-        if (cwd) fs.writeFileSync(path.join(String(cwd), "e1.md"), `---\nclusterId: ${plans[0].clusterId}\nprovisionalSources:\n${plans[0].provisionalSources.map((s) => `  - ${s}`).join("\n")}\n---\n# ${plans[0].provisionalIntent}\n\nRecurring gap: ${plans[0].provisionalIntent}\n`);
+        // TEXT-ONLY: return stdout plans only with no filesystem access;
+        // deterministic code materializes under synthesis-workspace.
+        assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
+        assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
         return { status: "ok", result: { plans } };
       },
       annotateInvoke: (args) => {
@@ -288,7 +288,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     assert.ok(/persistence failed/i.test(cons.note || ""));
   });
 
-  it("production synthesis output is the only workspace author: pipeline never fabricates plan/seed edits", async () => {
+  it("deterministic code materializes validated text-only plans: pipeline never fabricates seed edits", async () => {
     const home = homeWithTranscripts(2);
     const stateDir = tmpDir();
     const proposal = await runPipeline({
@@ -298,8 +298,8 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
       runId: "run-NOFAB1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      // Injected production synthesis returns plans but touches no files:
-      // the external ACPX process would be the only author via its cwd.
+      // TEXT-ONLY: injected production synthesis returns stdout plans with no
+      // filesystem access; deterministic code materializes validated plans.
       synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
       annotateInvoke: (args) => {
         if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
@@ -329,12 +329,11 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
         };
       },
     });
-    assert.deepEqual(proposal.edits, [], "JSON-only production synthesis with no workspace changes must fail closed with zero candidates");
+    assert.ok(proposal.edits.length >= 1, "validated text-only plans materialize to candidate edits");
     const measured = JSON.parse(fs.readFileSync(path.join(stateDir, "measured-changes.json"), "utf8"));
     const changes = measured.changes || measured;
-    assert.deepEqual(changes, [], "pipeline must measure actual (empty) workspace changes, not fabricate plan/seed edits");
-    // No plan-derived files may appear without a synthesis author; synthetic seeds do not exist.
-    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")));
+    assert.ok(changes.length >= 1, "pipeline measures deterministically materialized workspace changes");
+    assert.ok(fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")));
     assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-keep.md")), "synthetic seed records do not exist");
     assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-remove.md")), "synthetic seed records do not exist");
   });

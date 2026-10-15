@@ -371,3 +371,39 @@ describe("consolidateLedger orchestration (acpx-only, fail-soft)", () => {
     assert.ok(Array.isArray(out.ledger.clusters));
   });
 });
+
+describe("minGapEvidence floor guards (direct APIs fail closed)", () => {
+  it("corroborateOpenGaps rejects 1, 0, negative, decimals, NaN, non-number", async () => {
+    const { corroborateOpenGaps } = await import("../src/consolidate.js");
+    const ledger = { version: 1, clusters: [] };
+    for (const bad of [1, 0, -1, 1.5, NaN, "x", null]) {
+      assert.throws(() => corroborateOpenGaps(ledger, { gaps: [] }, { minGapEvidence: bad }), /integer >= 2/);
+    }
+    assert.equal(corroborateOpenGaps(ledger, { gaps: [] }, {}).clusters.length, 0);
+    assert.equal(corroborateOpenGaps(ledger, { gaps: [] }, { minGapEvidence: 2 }).clusters.length, 0);
+  });
+  it("mergeClusters rejects 1, 0, negative, decimals, NaN, non-number", () => {
+    const led = { version: 1, clusters: [] };
+    for (const bad of [1, 0, -2, 2.5, NaN, "x", null]) {
+      assert.throws(() => mergeClusters(led, [], { minGapEvidence: bad }), /integer >= 2/);
+    }
+    assert.deepEqual(mergeClusters(led, [], {}).clusters, []);
+  });
+  it("consolidateLedger rejects 1, 0, negative, decimals, NaN, non-number", () => {
+    const led = { version: 1, clusters: [] };
+    for (const bad of [1, 0, -1, 1.5, NaN, "x", null]) {
+      assert.throws(
+        () => consolidateLedger(led, { analyzer: "mock", stateDir: null, persist: false, minGapEvidence: bad }),
+        /integer >= 2/,
+      );
+    }
+  });
+  it("foldEvidence rejects 1, 0, negative, decimals, NaN, non-number (default 2 kept)", async () => {
+    const { foldEvidence } = await import("../src/fold.js");
+    for (const bad of [1, 0, -1, 1.5, NaN, "x", null]) {
+      assert.throws(() => foldEvidence([], { minGapEvidence: bad }), /integer >= 2/);
+    }
+    assert.equal(foldEvidence([], {}).minGapEvidence, 2);
+    assert.equal(foldEvidence([], { minGapEvidence: 2 }).minGapEvidence, 2);
+  });
+});

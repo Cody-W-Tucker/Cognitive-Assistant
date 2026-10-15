@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 
 import { modelForRole } from "./models.js";
+import { parseStrictBoundedSynthesisStdout } from "./synthesis-parser.js";
 // SPDX: MIT — CA-native ACPX text-output boundary.
 // Every production model call goes through the `acpx` binary with ACPX
 // text-output requested (`--format quiet`, the upstream Backpass text mode
@@ -185,8 +186,11 @@ export function timeoutForRole(role) {
  * (analysis, consolidation, synthesis, annotate-preface, annotate).
  * Prompts travel via a persisted `--file` (never stdin); ACPX `--timeout`
  * is mandatory and ordered before the agent; the node spawn timeout stays
- * above the ACPX timeout. Stdout is extracted strictly (exactly one final
- * JSON object, no JSON-RPC, no prose).
+ * above the ACPX timeout. Non-synthesis roles extract stdout strictly via
+ * extractAcpxFinalJson (exactly one final JSON object, no JSON-RPC, no
+ * prose). Role 'synthesis' rejects any workspace/cwd before spawn and
+ * strictly validates stdout via the shared synthesis-parser (exactly one
+ * JSON object with exactly a plans array); malformed output fails here.
  *
  * @param {{ role: string, promptFile: string, model?: string | null, timeoutSec?: number | null, timeoutMs?: number | null, bin?: string | null, spawnFn?: Function | null }} [options]
  * @returns {{ status: "ok", result: Record<string, unknown>, argv: string[] } | { status: "failed", error: string, argv?: string[] }}
@@ -196,8 +200,11 @@ export function runAcpxPromptFile(options = {}) {
     throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
   }
   const { role, promptFile, model = null, timeoutSec = null, timeoutMs = null, bin = null, spawnFn = null, workspace = null, cwd = null } = options;
-  const workspaceCwd = workspace || cwd || null;
   const roleKey = String(role || "");
+  if (roleKey === "synthesis" && (workspace || cwd)) {
+    return { status: "failed", error: "synthesis invoke is text-only: workspace/cwd must not be passed" };
+  }
+  const workspaceCwd = roleKey === "synthesis" ? null : (workspace || cwd || null);
   let secs = timeoutSec;
   if (secs === null || secs === undefined) {
     secs = ROLE_TIMEOUT_SEC[roleKey];
@@ -239,10 +246,16 @@ export function runAcpxPromptFile(options = {}) {
     return { status: "failed", error: result?.error?.message || `acpx exit ${result?.status}`, argv };
   }
   const stdout = result?.stdout ?? "";
-  // Synthesis is a native edit turn. Its authoritative result is the
-  // subsequently measured private-workspace diff, never its stdout.
   if (roleKey === "synthesis") {
-    return { status: "ok", result: stdout, stdout, raw: stdout, argv };
+    // Synthesis is strict at this helper boundary: stdout must be exactly
+    // one JSON object with exactly {plans:[...]} (shared parser). Malformed
+    // prose/fenced/trailing/extra-key output fails here, never ok/raw.
+    const raw = String(stdout ?? "");
+    const parsed = parseStrictBoundedSynthesisStdout(raw);
+    if (!parsed) {
+      return { status: "failed", error: "acpx synthesis returned malformed payload (expected {plans:[...]})", argv };
+    }
+    return { status: "ok", stdout: raw, result: parsed, argv };
   }
   const parsed = extractAcpxFinalJson(stdout);
   if (!parsed) {
@@ -253,8 +266,11 @@ export function runAcpxPromptFile(options = {}) {
 
 /** Non-blocking ACPX boundary for parallel trace analysis. */
 export async function runAcpxPromptFileAsync({ role, promptFile, model = null, timeoutSec = null, bin = null, workspace = null, cwd = null, spawnFn = null } = {}) {
-  const workspaceCwd = workspace || cwd || null;
   const roleKey = String(role || "");
+  if (roleKey === "synthesis" && (workspace || cwd)) {
+    return { status: "failed", error: "synthesis invoke is text-only: workspace/cwd must not be passed" };
+  }
+  const workspaceCwd = roleKey === "synthesis" ? null : (workspace || cwd || null);
   const secs = timeoutSec ?? ROLE_TIMEOUT_SEC[roleKey];
   if (!secs) return { status: "failed", error: `acpx timeout is required (unknown role ${JSON.stringify(roleKey)})` };
   try { if (!promptFile || !fs.statSync(promptFile).isFile()) return { status: "failed", error: "acpx prompt file not found" }; } catch { return { status: "failed", error: "acpx prompt file not found" }; }
@@ -269,7 +285,7 @@ export async function runAcpxPromptFileAsync({ role, promptFile, model = null, t
     const timer = setTimeout(() => { expired = true; child.kill("SIGTERM"); }, Number(secs) * 1000 + ACPX_SPAWN_TIMEOUT_BUFFER_MS);
     child.stdout.on("data", (part) => { stdout += part; }); child.stderr.on("data", (part) => { stderr += part; });
     child.on("error", (err) => { clearTimeout(timer); resolve({ status: "failed", error: err.message, argv }); });
-    child.on("close", (code) => { clearTimeout(timer); if (expired || code !== 0) { resolve({ status: "failed", error: expired ? "acpx timed out" : (stderr.trim() || `acpx exit ${code}`), argv }); return; } if (roleKey === "synthesis") { resolve({ status: "ok", result: stdout, stdout, raw: stdout, argv }); return; } const parsed = extractAcpxFinalJson(stdout); resolve(parsed ? { status: "ok", result: parsed, argv } : { status: "failed", error: "acpx returned unparseable output", argv }); });
+    child.on("close", (code) => { clearTimeout(timer); if (expired || code !== 0) { resolve({ status: "failed", error: expired ? "acpx timed out" : (stderr.trim() || `acpx exit ${code}`), argv }); return; } if (roleKey === "synthesis") { const raw = String(stdout ?? ""); const parsed = parseStrictBoundedSynthesisStdout(raw); if (!parsed) { resolve({ status: "failed", error: "acpx synthesis returned malformed payload (expected {plans:[...]})", argv }); return; } resolve({ status: "ok", stdout: raw, result: parsed, argv }); return; } const parsed = extractAcpxFinalJson(stdout); resolve(parsed ? { status: "ok", result: parsed, argv } : { status: "failed", error: "acpx returned unparseable output", argv }); });
   });
 }
 
