@@ -83,13 +83,13 @@
         { pkgs }:
         let
           acpx = pkgs.callPackage ./packages/acpx/package.nix { };
-          caPython = pkgs.python312.withPackages (python-pkgs: [ python-pkgs.python-dotenv ]);
+          caPython = pkgs.python314.withPackages (python-pkgs: [ python-pkgs.python-dotenv ]);
         in
         {
           inherit acpx;
           langfuse-review-queue = pkgs.writeShellApplication {
             name = "langfuse-review-queue";
-            runtimeInputs = [ pkgs.python312 ];
+            runtimeInputs = [ pkgs.python314 ];
             text = ''
               export PYTHONPATH=${self}
               exec python -m core.langfuse_review "$@"
@@ -228,7 +228,7 @@
         {
           default = pkgs.mkShell {
             packages = [
-              (pkgs.python312.withPackages (
+              (pkgs.python314.withPackages (
                 python-pkgs: with python-pkgs; [
                   python-dotenv
                   pydantic

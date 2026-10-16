@@ -73,6 +73,43 @@ class _StateLock:
         return False
 
 
+def _journal_note(state_dir: Path, event_type: str, payload: Dict) -> None:
+    """Best-effort journal append; never breaks the improvement runtime."""
+    try:
+        from core import journal as _journal
+
+        safe: Dict = {}
+        for key, value in payload.items():
+            if isinstance(value, list):
+                safe[key] = _journal.sanitize_sources(value) if key in ("sources", "source_refs") else [v for v in value if isinstance(v, (str, int, float, bool))][:60]
+            elif isinstance(value, (str, int, float, bool)):
+                text = str(value) if isinstance(value, str) else value
+                safe[key] = (text[:200] if isinstance(text, str) else text)
+            elif isinstance(value, dict):
+                safe[key] = {}
+        _journal.append_event(state_dir, event_type, safe)
+    except Exception:
+        pass
+
+
+def _journal_run_events(state_dir: Path, proposal: Dict, analyzer: str = "", resume: bool = False) -> None:
+    """Record actual run/proposal lifecycle into the private lineage journal."""
+    try:
+        proposal_id = str(proposal.get("id", "?"))[:200]
+        stats = proposal.get("stats", {}) if isinstance(proposal.get("stats"), dict) else {}
+        transcripts = stats.get("transcripts", 0) if isinstance(stats, dict) else 0
+        edits = proposal.get("edits", []) if isinstance(proposal.get("edits"), list) else []
+        payload_run: Dict = {"run_id": proposal_id, "transcript_count": int(transcripts or 0)}
+        if analyzer:
+            payload_run["analyzer"] = str(analyzer)[:40]
+        if resume:
+            payload_run["resume"] = True
+        _journal_note(state_dir, "run_completed", payload_run)
+        _journal_note(state_dir, "proposal_created", {"proposal_id": proposal_id, "edit_count": len(edits)})
+    except Exception:
+        pass
+
+
 def node_bin() -> str:
     """Return the Node binary, or raise with the Nix dev-shell hint."""
     found = shutil.which("node")
@@ -173,7 +210,9 @@ def run_headless(
     )
     if proc.returncode != 0:
         raise RuntimeError(f"ca-improve run failed: {proc.stderr.strip()}")
-    return json.loads(proc.stdout)
+    proposal = json.loads(proc.stdout)
+    _journal_run_events(resolved_state, proposal, analyzer=analyzer)
+    return proposal
 
 
 def run_tui(
@@ -200,7 +239,9 @@ def run_tui(
     proc = subprocess.run(cmd, cwd=str(cwd), stdout=subprocess.PIPE, text=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError("ca-improve TUI run failed")
-    return json.loads(proc.stdout)
+    proposal = json.loads(proc.stdout)
+    _journal_run_events(resolved_state, proposal, analyzer=analyzer)
+    return proposal
 
 
 def synthesize_resume(
@@ -245,7 +286,9 @@ def synthesize_resume(
         raise RuntimeError(
             f"ca-improve synthesize failed: {proc.stderr.strip() or proc.stdout.strip()}"
         )
-    return json.loads(proc.stdout)
+    proposal = json.loads(proc.stdout)
+    _journal_run_events(resolved_state, proposal, resume=True)
+    return proposal
 
 
 def read_proposal(state_dir: Path) -> Dict:
@@ -513,6 +556,40 @@ def apply(
                 tmp_path = resolved_state / "proposal.json.tmp"
                 tmp_path.write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
                 os.replace(tmp_path, resolved_state / "proposal.json")
+                for edit in edits:
+                    record = edit.get("record", {}) if isinstance(edit.get("record"), dict) else {}
+                    if resolved[edit["id"]] == "accepted":
+                        from core import journal as _journal
+
+                        _journal_note(
+                            resolved_state,
+                            "experience_accepted",
+                            {
+                                "proposal_id": str(proposal.get("id", "?"))[:200],
+                                "edit_id": str(edit["id"])[:200],
+                                "record_id": str(record.get("id", ""))[:200],
+                                "sources": _journal.sanitize_sources(record.get("sources", [])),
+                            },
+                        )
+                        _journal_note(
+                            resolved_state,
+                            "artifact_compiled",
+                            {
+                                "proposal_id": str(proposal.get("id", "?"))[:200],
+                                "edit_id": str(edit["id"])[:200],
+                                "record_id": str(record.get("id", ""))[:200],
+                            },
+                        )
+                    elif resolved[edit["id"]] == "rejected":
+                        _journal_note(
+                            resolved_state,
+                            "proposal_rejected",
+                            {
+                                "proposal_id": str(proposal.get("id", "?"))[:200],
+                                "edit_id": str(edit["id"])[:200],
+                                "reason": str(reasons.get(edit["id"], "other"))[:40],
+                            },
+                        )
             except BaseException:
                 _restore()
                 written = []

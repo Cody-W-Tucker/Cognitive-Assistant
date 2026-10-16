@@ -241,6 +241,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Read-only SOUL baseline for synthesis context (default: workspaces/alignment/artifacts/SOUL.md).",
     )
 
+    journal_compact_parser = subparsers.add_parser(
+        "journal-compact",
+        help="Regenerate journal views (current.json/bootstrap.md) from events.jsonl; tolerates missing/malformed lines.",
+    )
+    journal_compact_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        help="Private state dir holding journal/ (default: XDG).",
+    )
+
     return parser
 
 
@@ -395,6 +405,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         print(_decisions_hint(proposal), file=sys.stderr)
+        return 0
+
+    if args.command == "journal-compact":
+        from core import improve as improve_runtime
+        from core import journal as journal_runtime
+
+        state = args.state_dir or improve_runtime.default_state_dir()
+        summary = journal_runtime.compact(state)
+        print(f"journal compact: {summary['event_count']} event(s) -> current.json/bootstrap.md")
+        for name in sorted(summary.get("by_type", {})):
+            print(f"  {name}: {summary['by_type'][name]}")
         return 0
 
     # update command handles profile resolution internally (supports "all profiles" mode)

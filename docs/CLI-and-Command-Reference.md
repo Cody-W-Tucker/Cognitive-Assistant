@@ -16,6 +16,7 @@ The pipeline is invoked with `python -m core`.
 | `improve-run --headless` | global | Headless improvement pass: discover/collect/distill/analyze/fold/synthesize into an XDG-state proposal; stdout is exactly one JSON object, no progress (status on stderr). |
 | `improve-synthesize` | global | Resume-only synthesis over persisted evidence/ledger: consolidate only if required, check floors, then fixed raw-stdout production synthesis -> workspace measure -> annotation -> fresh proposal JSON; never discovers/analyzes; absent/incomplete/corrupt state fails closed. |
 | `improve-apply` | global | Review gate for a proposal: the sole writer of experience records. |
+| `journal-compact` | global | Regenerate journal views (`current.json`/`bootstrap.md`) from append-only `events.jsonl`; tolerates missing/malformed lines. |
 
 There is no `ingest-substrate` or `verify-alignment` command.
 
