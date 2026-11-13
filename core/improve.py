@@ -33,10 +33,11 @@ REJECT_REASONS = (
 
 
 class _StateLock:
-    """Simple state lock around improvement mutation (compatible no-op fallback).
+    """Exclusive state lock around improvement mutation.
 
-    Uses fcntl.flock on a state-local ``.apply.lock`` file when available;
-    otherwise proceeds without locking (never fails the gate).
+    Uses fcntl.flock on a state-local ``.apply.lock`` file. A concurrent
+    holder makes the second apply fail instead of writing twice. Platforms
+    without fcntl proceed unlocked.
     """
 
     def __init__(self, state_dir: Path) -> None:
@@ -47,15 +48,22 @@ class _StateLock:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             handle = open(self._path, "a+", encoding="utf-8")
-            try:
-                import fcntl as _fcntl
-
-                _fcntl.flock(handle.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
-            except Exception:
-                pass
-            self._handle = handle
-        except Exception:
+        except OSError:
             self._handle = None
+            return self
+        try:
+            import fcntl as _fcntl
+        except ImportError:
+            self._handle = handle
+            return self
+        try:
+            _fcntl.flock(handle.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            raise RuntimeError(
+                f"another improve-apply holds {self._path}; retry when it finishes"
+            ) from exc
+        self._handle = handle
         return self
 
     def __exit__(self, *exc: object) -> bool:
@@ -123,7 +131,7 @@ def node_bin() -> str:
 
 def default_soul_path() -> Path:
     """Canonical read-only SOUL baseline, independent of CWD."""
-    return REPO_ROOT / "workspaces" / "alignment" / "artifacts" / "SOUL.md"
+    return experience.workspace_root() / "workspaces" / "alignment" / "artifacts" / "SOUL.md"
 
 
 def default_state_dir() -> Path:
@@ -132,9 +140,25 @@ def default_state_dir() -> Path:
     return Path(base) / "cognitive-assistant" / "improve"
 
 
+def _home_args(home: Optional[Path]) -> List[str]:
+    """Scope discovery under ``home`` only when explicitly requested.
+
+    Omitting --home keeps ambient HERMES_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME,
+    which is how a deployed Hermes store outside ``~/.hermes`` is found.
+    """
+    return ["--home", str(home)] if home is not None else []
+
+
+def _harness_args(harnesses: Optional[List[str]]) -> List[str]:
+    args: List[str] = []
+    for harness in harnesses or []:
+        args.extend(["--harness", harness])
+    return args
+
+
 def discover_transcripts(
     *,
-    home: Path,
+    home: Optional[Path],
     cwd: Path,
     state_dir: Path,
     since: str = "30d",
@@ -145,15 +169,13 @@ def discover_transcripts(
         node_bin(),
         str(RUNTIME_BIN),
         "discover",
-        "--home",
-        str(home),
+        *_home_args(home),
         "--state-dir",
         str(state_dir),
         "--since",
         since,
+        *_harness_args(harnesses),
     ]
-    for harness in harnesses or []:
-        cmd.extend(["--harness", harness])
     proc = subprocess.run(
         cmd,
         cwd=str(cwd),
@@ -168,13 +190,14 @@ def discover_transcripts(
 
 def run_headless(
     *,
-    home: Path,
+    home: Optional[Path],
     cwd: Path,
     state_dir: Optional[Path] = None,
     since: str = "30d",
     analyzer: str = "acpx",
     soul_path: Optional[Path] = None,
     min_gap_evidence: int = 2,
+    harnesses: Optional[List[str]] = None,
 ) -> Dict:
     """Run the headless improvement pass; returns the proposal dict.
 
@@ -188,8 +211,7 @@ def run_headless(
         str(RUNTIME_BIN),
         "run",
         "--headless",
-        "--home",
-        str(home),
+        *_home_args(home),
         "--state-dir",
         str(resolved_state),
         "--since",
@@ -200,6 +222,7 @@ def run_headless(
         str(min_gap_evidence),
         "--soul-path",
         str(resolved_soul),
+        *_harness_args(harnesses),
     ]
     proc = subprocess.run(
         cmd,
@@ -217,22 +240,24 @@ def run_headless(
 
 def run_tui(
     *,
-    home: Path,
+    home: Optional[Path],
     cwd: Path,
     state_dir: Optional[Path] = None,
     since: str = "30d",
     analyzer: str = "acpx",
     soul_path: Optional[Path] = None,
     min_gap_evidence: int = 2,
+    harnesses: Optional[List[str]] = None,
 ) -> Dict:
     """Run live stderr progress while preserving stdout's one JSON proposal."""
     resolved_state = state_dir or default_state_dir()
     resolved_soul = soul_path or default_soul_path()
     cmd = [
-        node_bin(), str(RUNTIME_BIN), "run", "--tui", "--home", str(home),
+        node_bin(), str(RUNTIME_BIN), "run", "--tui", *_home_args(home),
         "--state-dir", str(resolved_state), "--since", since, "--analyzer", analyzer,
         "--min-gap-evidence", str(min_gap_evidence),
         "--soul-path", str(resolved_soul),
+        *_harness_args(harnesses),
     ]
     # Inherit stderr: the Node view must paint the actual terminal. stdout is
     # captured solely for the proposal handoff to the Python review route.
@@ -410,6 +435,7 @@ def apply(
     decisions: Optional[Dict[str, str]] = None,
     reject_reasons: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
+    expected_proposal_id: Optional[str] = None,
 ) -> Dict:
     """Apply gate: the sole writer of accepted experience records.
 
@@ -420,6 +446,11 @@ def apply(
     """
     resolved_state = state_dir or default_state_dir()
     proposal = read_proposal(resolved_state)
+    if expected_proposal_id is not None and proposal.get("id") != expected_proposal_id:
+        raise RuntimeError(
+            f"proposal on disk is {proposal.get('id', '?')}, not {expected_proposal_id};"
+            " a newer run replaced the one you reviewed. Review the current proposal."
+        )
     if proposal.get("appliedAt"):
         raise RuntimeError(
             f"proposal {proposal.get('id', '?')} was already applied"
@@ -492,6 +523,12 @@ def apply(
     written: List[str] = []
     if not dry_run:
         with _StateLock(resolved_state):
+            current = read_proposal(resolved_state)
+            if current.get("id") != proposal.get("id") or current.get("appliedAt"):
+                raise RuntimeError(
+                    f"proposal {proposal.get('id', '?')} changed or was applied while"
+                    " waiting; review the current proposal"
+                )
             backups: Dict[Path, Optional[bytes]] = {}
 
             def _backup(path: Path) -> None:
@@ -547,6 +584,7 @@ def apply(
                 if pending_rejections:
                     rejections_path = resolved_state / "rejections.jsonl"
                     rejections_path.parent.mkdir(parents=True, exist_ok=True)
+                    _backup(rejections_path)
                     with open(rejections_path, "a", encoding="utf-8") as handle:
                         for line in pending_rejections:
                             handle.write(line)

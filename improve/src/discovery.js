@@ -428,7 +428,12 @@ function discoverSqlite(options) {
  * Pi remains a valid ACPX agent option for production model invocations;
  * it is excluded only from discovery scope.
  */
-export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null } = {}) {
+/**
+ * `strict` makes an unreadable or missing store for any selected harness an
+ * error instead of a silent empty result. Callers set it when the operator
+ * named the harness, so a misconfigured store path cannot pass as "no work".
+ */
+export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false } = {}) {
   const isolated = home !== undefined && home !== null;
   const root = resolveHome(home);
   const selected = harnesses || SUPPORTED_HARNESSES;
@@ -470,6 +475,12 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
     }
     perHarness[harness] = found.stats;
     transcripts.push(...found.transcripts);
+  }
+  if (strict) {
+    const broken = selected.filter((harness) => perHarness[harness]?.error);
+    if (broken.length) {
+      throw new Error(broken.map((harness) => `${harness}: ${perHarness[harness].error}`).join("; "));
+    }
   }
   transcripts.sort((a, b) => String(a.id).localeCompare(String(b.id)));
   return { transcripts, perHarness, excluded: { ...EXCLUDED_HARNESSES } };

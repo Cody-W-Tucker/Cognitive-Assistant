@@ -27,6 +27,7 @@ import {
   readEvidenceRecords,
   readJson,
   writeJson,
+  writeProposal,
   assertMinGapEvidence,
 } from "./state.js";
 import {
@@ -406,7 +407,7 @@ export async function runSynthesizeResume({
       eligible: eligible.length,
     },
   };
-  writeJson(path.join(resolvedState, "proposal.json"), proposal);
+  writeProposal(resolvedState, proposal);
   emit("synthesize:done", {
     staged: staged.length,
     annotated: annOut.annotated ? annOut.annotated.length : 0,

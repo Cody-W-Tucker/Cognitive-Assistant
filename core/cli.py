@@ -42,7 +42,8 @@ def _decisions_hint(proposal: dict) -> str:
     if not ids:
         return "next: nothing to review (no candidate edits); re-run, then review with `improve-apply --decisions \"<edit>=accepted ...\"`"
     vector = " ".join(f"{edit_id}=accepted" for edit_id in ids)
-    return f"next: review with `improve-apply --decisions \"{vector}\"`"
+    proposal_id = proposal.get("id", "?")
+    return f"next: review with `improve-apply --proposal {proposal_id} --decisions \"{vector}\"`"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -198,6 +199,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Read-only SOUL baseline for synthesis context (default: workspaces/alignment/artifacts/SOUL.md).",
     )
+    improve_run_parser.add_argument(
+        "--harness",
+        action="append",
+        default=None,
+        help="Only scan this harness (repeatable). A named harness whose store is missing fails the run.",
+    )
 
     improve_apply_parser = subparsers.add_parser(
         "improve-apply",
@@ -208,6 +215,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         help='Decisions vector, e.g. --decisions "e1=accepted e2=rejected:too-narrow". Repeatable.',
+    )
+    improve_apply_parser.add_argument(
+        "--proposal",
+        help="Id of the proposal these decisions review (required with --decisions).",
     )
     improve_apply_parser.add_argument(
         "--state-dir",
@@ -301,7 +312,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         from core import improve as improve_runtime
 
-        home = Path(os.environ.get("CA_IMPROVE_HOME", Path.home().expanduser()))
+        home_override = os.environ.get("CA_IMPROVE_HOME")
+        home = Path(home_override).expanduser() if home_override else None
         if args.headless:
             proposal = improve_runtime.run_headless(
                 home=home,
@@ -311,6 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 analyzer=args.analyzer,
                 soul_path=args.soul_path,
                 min_gap_evidence=args.min_gap_evidence,
+                harnesses=args.harness,
             )
             print(json.dumps(proposal))
             print(
@@ -341,6 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             analyzer=args.analyzer,
             soul_path=args.soul_path,
             min_gap_evidence=args.min_gap_evidence,
+            harnesses=args.harness,
         )
         print(
             f"proposal {proposal.get('id', '?')}: "
@@ -357,10 +371,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         state = args.state_dir or improve_runtime.default_state_dir()
         decisions: dict[str, str] | None = None
         if args.decisions:
-            edit_ids = [
-                edit["id"]
-                for edit in improve_runtime.read_proposal(state).get("edits", [])
-            ]
+            on_disk = improve_runtime.read_proposal(state)
+            if not args.proposal:
+                print(
+                    "improve-apply: --decisions must name the proposal they review;"
+                    f" pass --proposal {on_disk.get('id', '?')} after reading it",
+                    file=sys.stderr,
+                )
+                return 2
+            edit_ids = [edit["id"] for edit in on_disk.get("edits", [])]
             parsed, reasons = improve_runtime.parse_decisions(args.decisions, edit_ids)
             decisions = {
                 edit_id: f"{verdict}:{reasons[edit_id]}"
@@ -372,6 +391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             state_dir=args.state_dir,
             decisions=decisions,
             dry_run=args.dry_run,
+            expected_proposal_id=args.proposal,
         )
         prefix = "[dry-run] " if args.dry_run else ""
         print(

@@ -19,8 +19,13 @@ export const SOUL_RELATIVE_PATH = path.join(
   "SOUL.md",
 );
 
-/** Repo root resolved relative to the runtime, never CWD. */
+/**
+ * Live CA checkout holding SOUL and experience records. CA_WORKSPACE_ROOT
+ * points a packaged runtime (code in the read-only Nix store) at a mutable
+ * checkout; otherwise resolved relative to the runtime, never CWD.
+ */
 export function defaultRepoRoot() {
+  if (process.env.CA_WORKSPACE_ROOT) return path.resolve(process.env.CA_WORKSPACE_ROOT);
   return path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",

@@ -29,6 +29,7 @@ async function main() {
         stateDir,
         since,
         harnesses: harnessFlags.length ? harnessFlags : null,
+        strict: harnessFlags.length > 0,
       });
       console.log(JSON.stringify(result));
       return 0;
@@ -68,6 +69,7 @@ async function main() {
       stateDir,
       since,
       harnesses: harnessFlags.length ? harnessFlags : null,
+      strictHarnesses: harnessFlags.length > 0,
       analyzer,
       soulPath,
       posturePath,

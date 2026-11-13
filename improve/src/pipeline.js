@@ -16,7 +16,7 @@ import { synthesizeCandidates, synthesizeWithAcpx, measuredIdsForPlan } from "./
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
-import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson, assertMinGapEvidence } from "./state.js";
+import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson, writeProposal, assertMinGapEvidence } from "./state.js";
 import { readSoulSnapshot } from "./soul.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
 import { readOpencodeExportAsync } from "./opencode-export.js";
@@ -182,6 +182,7 @@ export async function runPipeline({
   stateDir,
   since = "30d",
   harnesses = null,
+  strictHarnesses = false,
   analyzer = "acpx",
   soulPath = null,
   posturePath = null,
@@ -201,7 +202,7 @@ export async function runPipeline({
   initStateDir(stateDir);
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
   emit("discover:start", { harnesses: harnesses || ["hermes", "pi", "claude", "codex", "opencode"] });
-  const discovery = discoverTranscripts({ home, stateDir, since, harnesses });
+  const discovery = discoverTranscripts({ home, stateDir, since, harnesses, strict: strictHarnesses });
   // Current OpenCode legacy stores expose only session headers through SQLite.
   // Exporting every header serially is minutes of opaque work, so process a
   // bounded newest-first batch. Successful and trivial sessions checkpoint;
@@ -498,7 +499,7 @@ export async function runPipeline({
       eligible: ledger.clusters.filter((c) => c.eligible).length,
     },
   };
-  writeJson(path.join(stateDir, "proposal.json"), proposal);
+  writeProposal(stateDir, proposal);
   emit("synthesize:done", {
     staged: staged.length,
     annotated: annOut.annotated ? annOut.annotated.length : 0,

@@ -22,9 +22,19 @@ from typing import Dict, List, Optional
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def experience_root(repo_root: Path = REPO_ROOT) -> Path:
+def workspace_root() -> Path:
+    """Return the live CA checkout that holds SOUL and experience records.
+
+    ``CA_WORKSPACE_ROOT`` points a packaged runtime (whose code sits in the
+    read-only Nix store) at a mutable checkout; otherwise the code's own repo.
+    """
+    override = os.environ.get("CA_WORKSPACE_ROOT")
+    return Path(override).expanduser().resolve() if override else REPO_ROOT
+
+
+def experience_root(repo_root: Optional[Path] = None) -> Path:
     """Return the experience store root (defaults to workspaces/experience)."""
-    return repo_root / "workspaces" / "experience"
+    return (repo_root or workspace_root()) / "workspaces" / "experience"
 
 
 def authored_dir(root: Optional[Path] = None) -> Path:

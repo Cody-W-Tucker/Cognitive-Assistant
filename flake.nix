@@ -188,6 +188,23 @@
                 Persistent = true;
               };
             };
+            harnesses = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              example = [ "hermes" ];
+              description = "Harnesses to scan. Named harnesses fail the run when their store is missing; empty scans all, fail-soft.";
+            };
+            hermesHome = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              example = "/home/codyt/.local/share/hermes";
+              description = "HERMES_HOME holding state.db. User units do not inherit login-shell session variables, so set it here.";
+            };
+            workspaceRoot = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Live CA checkout (CA_WORKSPACE_ROOT) for SOUL and accepted experience records. Null reads the packaged store copy, frozen at build time.";
+            };
           };
           config = lib.mkIf cfg.enable {
             # User-scoped units: the pass runs headless as proposal-only and
@@ -196,9 +213,21 @@
             systemd.user.services.ca-improve = {
               description = "CA headless improvement pass (proposal only, no deploy)";
               serviceConfig = {
-                ExecStart = "${cfg.package}/bin/ca-improve --headless";
+                ExecStart = lib.escapeShellArgs (
+                  [
+                    "${cfg.package}/bin/ca-improve"
+                    "--headless"
+                  ]
+                  ++ lib.concatMap (harness: [
+                    "--harness"
+                    harness
+                  ]) cfg.harnesses
+                );
                 Type = "oneshot";
               };
+              environment =
+                lib.optionalAttrs (cfg.hermesHome != null) { HERMES_HOME = cfg.hermesHome; }
+                // lib.optionalAttrs (cfg.workspaceRoot != null) { CA_WORKSPACE_ROOT = cfg.workspaceRoot; };
             };
             systemd.user.timers.ca-improve = {
               wantedBy = [ "timers.target" ];

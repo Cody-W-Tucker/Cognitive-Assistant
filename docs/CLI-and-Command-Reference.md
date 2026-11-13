@@ -66,7 +66,7 @@ never land in git state or the repo -- only the distilled trace travels
 inside the rendered prompt in private state. Both `improve-run` routes use the
 
 Supported adapters (global stores, CWD-independent): Hermes
-(`~/.hermes/state.db`, read-only), Claude
+(`$HERMES_HOME/state.db`, default `~/.hermes/state.db`, read-only), Claude
 Code (`~/.claude/projects`), Codex (`~/.codex/sessions`), OpenCode
 (`~/.local/share/opencode/opencode.db`, read-only). Explicitly excluded
 in this slice: Pi, Grok and Cursor (CLI and IDE) -- their stores are never
@@ -74,6 +74,17 @@ read; requesting them is an error. Pi sessions are machine/automation work
 and must not be analyzed. The runtime's own sessions (sentinel
 `<!-- ca-improve:self-session -->`, or sessions rooted under its state
 dir) are self-excluded before analysis.
+
+Store selection: ambient `HERMES_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
+are honored unless `CA_IMPROVE_HOME` scopes every store under one home (used
+for hermetic runs). `improve-run --harness hermes` (repeatable) scans only the
+named harnesses and fails the run when a named store is missing or unreadable;
+without `--harness` every adapter is scanned and missing stores are skipped.
+
+Live workspace: SOUL and accepted experience records are read from (and
+`improve-apply` writes to) the CA checkout the code runs from. A packaged
+runtime lives in the read-only Nix store, so set `CA_WORKSPACE_ROOT` to a
+mutable checkout; otherwise it sees the SOUL and records frozen at build time.
 
 Production model invocations use ACPX with Pi. Syntax only, literal shape:
 
@@ -97,7 +108,11 @@ proposal object on stdout with no progress; status goes to stderr only.
 `improve-apply` is the sole gate. It refuses a missing proposal
 (`improve-run` first) or an unreviewed one (every edit needs an explicit
 `accepted` / `rejected[:reason]` decision, via `--decisions` or the
-minimal terminal review). Acceptance atomically writes only the approved
+minimal terminal review). `--decisions` must be paired with
+`--proposal <id>` naming the proposal that was read; if a later run replaced
+it, apply refuses. A run that replaces an unapplied proposal first archives it
+to `proposals/<id>.json`. Concurrent applies are refused by an exclusive
+state lock. Acceptance atomically writes only the approved
 experience authored source (`workspaces/experience/authored/<id>.md`) and
 the staged generated artifact (`workspaces/experience/staged/<id>.md`);
 rejections are recorded in state. It never deploys to Hermes and never

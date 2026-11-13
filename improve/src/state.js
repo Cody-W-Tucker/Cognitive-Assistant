@@ -23,6 +23,20 @@ export function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+/**
+ * Replace stateDir/proposal.json. An unapplied predecessor is kept under
+ * proposals/<id>.json so a review in progress is never silently lost;
+ * improve-apply additionally refuses decisions bound to a replaced id.
+ */
+export function writeProposal(stateDir, proposal) {
+  const file = path.join(stateDir, "proposal.json");
+  const previous = readJson(file);
+  if (previous && !previous.appliedAt && previous.id && previous.id !== proposal.id) {
+    writeJson(path.join(stateDir, "proposals", `${String(previous.id).replace(/[^A-Za-z0-9._-]/g, "_")}.json`), previous);
+  }
+  writeJson(file, proposal);
+}
+
 export function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
