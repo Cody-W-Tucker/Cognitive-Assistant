@@ -132,6 +132,20 @@ Reject the draft, even reworded, if it operates by any of these:
 - No required heading structure.
 - Return only the finished SOUL.md.
 
+## Lineage
+
+`<lineage>` holds behavior changes made while this assistant was in use, each
+with the session evidence that motivated it. Adopted records were kept;
+withdrawn records were tried and reverted. Weigh them against the profile
+sources:
+
+- Fold an adopted record into the SOUL when it states a durable way of working
+  that fits the sources. Say it in the SOUL's own voice, not as an appended rule.
+- Leave out an adopted record that is narrow to one tool, task, or setting.
+- Do not reintroduce what a withdrawn record asked for.
+- Where a record and the sources conflict, prefer whichever rests on more
+  specific evidence about how this user actually works.
+
 <interaction_posture>
 
 {interaction_posture}
@@ -143,3 +157,9 @@ Reject the draft, even reworded, if it operates by any of these:
 {profile_sources}
 
 </profile_sources>
+
+<lineage>
+
+{lineage}
+
+</lineage>

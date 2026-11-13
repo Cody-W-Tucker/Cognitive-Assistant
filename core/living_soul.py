@@ -134,6 +134,46 @@ def active_records(experience_root: Path, bootstrap: Path) -> List[Dict[str, str
     return records
 
 
+def lineage_for_bootstrap(experience_root: Optional[Path] = None) -> Dict:
+    """Every record ever adopted or withdrawn, for a rebootstrap from source data.
+
+    A rebootstrap does not inherit the previous SOUL, so it sees all accepted
+    records (including ones an earlier bootstrap absorbed) with their evidence,
+    plus withdrawn records as changes that were tried and reverted.
+    """
+    from core import experience
+
+    root = experience_root or experience.experience_root()
+    authored = root / "authored"
+    withdrawn = reverted_ids(root)
+    adopted_blocks: List[str] = []
+    withdrawn_blocks: List[str] = []
+    adopted_ids: List[str] = []
+    paths = sorted(authored.glob("*.md")) if authored.is_dir() else []
+    for path in paths:
+        text = path.read_text(encoding="utf-8").strip()
+        record_id = parse_authored_source(text).get("id") or path.stem
+        if record_id in withdrawn:
+            withdrawn_blocks.append(f'<record id="{record_id}" status="withdrawn">\n{text}\n</record>')
+        else:
+            adopted_ids.append(record_id)
+            adopted_blocks.append(f'<record id="{record_id}" status="adopted">\n{text}\n</record>')
+    if not adopted_blocks and not withdrawn_blocks:
+        return {"text": "(no lineage: nothing has been adopted in use yet)", "records": []}
+    return {"text": "\n\n".join(adopted_blocks + withdrawn_blocks), "records": adopted_ids}
+
+
+def write_absorbed(bootstrap: Path, record_ids: List[str]) -> Path:
+    """Declare which lineage records this bootstrap took into account."""
+    path = bootstrap.parent / ABSORBED_FILENAME
+    payload = {
+        "records": sorted(record_ids),
+        "note": "Lineage records this bootstrap SOUL was built with; the living SOUL leaves them out.",
+    }
+    _atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def read_compose_config() -> Dict[str, Optional[str]]:
     path = soul_dir() / "compose.json"
     if not path.exists():

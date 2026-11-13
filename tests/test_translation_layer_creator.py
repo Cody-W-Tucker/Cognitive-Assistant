@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.translation_layer_creator import (
     TranslationLayerCreator,
@@ -133,7 +133,9 @@ class GenerateTranslationLayerTests(unittest.TestCase):
                 posture_path,
             )
         )
-        for p in self._patches[-2:]:
+        # Lineage is read from CA home; isolate it from the real state dir.
+        self._patches.append(patch.dict("os.environ", {"CA_HOME": str(tmpdir / "ca")}))
+        for p in self._patches[-3:]:
             p.start()
         return soul_path, posture_path
 
@@ -171,7 +173,11 @@ class GenerateTranslationLayerTests(unittest.TestCase):
 
                 self.assertEqual(result, (soul_path, posture_path))
                 mock_posture.assert_awaited_once_with(fake_profile)
-                mock_soul.assert_awaited_once_with(fake_profile, fake_posture)
+                mock_soul.assert_awaited_once_with(
+                    fake_profile,
+                    fake_posture,
+                    "(no lineage: nothing has been adopted in use yet)",
+                )
 
                 self.assertTrue(posture_path.exists())
                 self.assertTrue(soul_path.exists())
@@ -195,7 +201,7 @@ class GenerateTranslationLayerTests(unittest.TestCase):
 
             captured_posture_arg: dict[str, str] = {}
 
-            async def fake_generate_soul(profile_sources: str, interaction_posture: str) -> str:
+            async def fake_generate_soul(profile_sources: str, interaction_posture: str, lineage: str = "") -> str:
                 captured_posture_arg["value"] = interaction_posture
                 return "soul content"
 
@@ -315,6 +321,56 @@ class GenerateTranslationLayerTests(unittest.TestCase):
             # The implementation writes the posture first then raises on the
             # soul - verify the soul is not written.
             self.assertFalse(soul_path.exists())
+
+
+class LineageBootstrapTests(unittest.TestCase):
+    def test_bootstrap_sees_all_lineage_and_writes_absorbed(self) -> None:
+        import json
+        import tempfile
+
+        from core import living_soul
+        from core.translation_layer_creator import TranslationLayerCreator
+
+        record = (
+            "---\nid: {id}\ntitle: {id}\ncreated: 2026-11-01T00:00:00+00:00\n---\n\n"
+            "# {id}\n\nDo {id}.\n\n## Evidence\n\n- (s1) seen\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            authored = tmpdir / "ca" / "experience" / "authored"
+            authored.mkdir(parents=True)
+            for record_id in ("exp-kept", "exp-old-absorbed", "exp-dropped"):
+                (authored / f"{record_id}.md").write_text(record.format(id=record_id), encoding="utf-8")
+            (tmpdir / "ca" / "experience" / "reverted.jsonl").write_text(
+                json.dumps({"record": "exp-dropped"}) + "\n", encoding="utf-8"
+            )
+            soul_path = tmpdir / "SOUL.md"
+            (tmpdir / "absorbed.json").write_text(json.dumps({"records": ["exp-old-absorbed"]}), encoding="utf-8")
+            prompts: list[str] = []
+
+            async def fake_generate(handle, *, user_prompt, **kwargs):  # type: ignore[no-untyped-def]
+                prompts.append(user_prompt)
+                return "POSTURE" if len(prompts) == 1 else "SOUL"
+
+            with (
+                patch("core.translation_layer_creator.SOUL_OUTPUT_FILE", soul_path),
+                patch("core.translation_layer_creator.POSTURE_OUTPUT_FILE", tmpdir / "POSTURE.md"),
+                patch.dict("os.environ", {"CA_HOME": str(tmpdir / "ca")}),
+                patch("core.translation_layer_creator.load_profile_sources", return_value="profiles"),
+                patch("core.translation_layer_creator.generate_text_async", new=fake_generate),
+                patch("core.translation_layer_creator.create_client", return_value=MagicMock()),
+                patch("core.translation_layer_creator.APIConfig", return_value=MagicMock()),
+            ):
+                creator = TranslationLayerCreator()
+                asyncio.run(creator.generate_translation_layer())
+
+            soul_prompt = prompts[1]
+            self.assertIn('<record id="exp-kept" status="adopted">', soul_prompt)
+            self.assertIn('<record id="exp-old-absorbed" status="adopted">', soul_prompt)
+            self.assertIn('<record id="exp-dropped" status="withdrawn">', soul_prompt)
+            absorbed = json.loads((tmpdir / "absorbed.json").read_text(encoding="utf-8"))
+            self.assertEqual(absorbed["records"], ["exp-kept", "exp-old-absorbed"])
+            self.assertEqual(living_soul.absorbed_ids(soul_path), {"exp-kept", "exp-old-absorbed"})
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from core import living_soul
 from core.config import EXISTENTIAL_PROFILE, OPERATIONAL_PROFILE, ROOT_DIR
 from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
 from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
@@ -190,14 +191,17 @@ class TranslationLayerCreator:
         invalid output is never persisted.
         """
         profile_sources = load_profile_sources()
+        lineage = living_soul.lineage_for_bootstrap()
 
         posture = await self._generate_interaction_posture(profile_sources)
         _write_artifact(POSTURE_OUTPUT_FILE, posture)
         print(f"Info: Wrote interaction posture to {POSTURE_OUTPUT_FILE}")
 
-        soul = await self._generate_soul(profile_sources, posture)
+        soul = await self._generate_soul(profile_sources, posture, lineage["text"])
         _write_artifact(SOUL_OUTPUT_FILE, soul)
         print(f"Info: Wrote translation layer soul to {SOUL_OUTPUT_FILE}")
+        absorbed = living_soul.write_absorbed(SOUL_OUTPUT_FILE, lineage["records"])
+        print(f"Info: Bootstrap absorbed {len(lineage['records'])} lineage record(s); wrote {absorbed}")
 
         return SOUL_OUTPUT_FILE, POSTURE_OUTPUT_FILE
 
@@ -213,10 +217,14 @@ class TranslationLayerCreator:
         stripped = _strip_code_fences(response)
         return _validate_generated_content(stripped, artifact_label="interaction posture")
 
-    async def _generate_soul(self, profile_sources: str, interaction_posture: str) -> str:
+    async def _generate_soul(
+        self, profile_sources: str, interaction_posture: str, lineage: str = ""
+    ) -> str:
         soul_seed = _load_text_file(SOUL_SEED_PATH, "Translation soul seed")
         prompt = soul_seed.format(
-            profile_sources=profile_sources, interaction_posture=interaction_posture
+            profile_sources=profile_sources,
+            interaction_posture=interaction_posture,
+            lineage=lineage or "(no lineage: nothing has been adopted in use yet)",
         )
         response = await generate_text_async(
             self.handle,

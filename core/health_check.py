@@ -111,7 +111,7 @@ def check_required_paths(config: Config) -> List[str]:
 # so health checks cover the restored translation-layer seeds.
 _ALIGNMENT_PROMPT_FIXTURES = {
     "interaction_posture_seed.md": ["profile_sources"],
-    "soul_seed.md": ["profile_sources", "interaction_posture"],
+    "soul_seed.md": ["profile_sources", "interaction_posture", "lineage"],
     "seed.md": ["skills_content"],
 }
 
