@@ -60,10 +60,9 @@ async function mapPool(items, jobs, fn) {
 }
 
 /**
- * OpenCode's legacy store exposes only session headers, so every session is
- * read through `opencode export`: minutes of opaque work for a large store.
- * Take a newest-first batch; processed sessions checkpoint and the next run
- * advances to the rest.
+ * Header-only OpenCode stores need an `opencode export` per session, which
+ * can take minutes for a large store. Bound that work with a newest-first
+ * batch; checkpoints let later runs advance to the rest.
  */
 function capOpencode(transcripts, max) {
   const opencode = transcripts.filter((t) => t.harness === "opencode").sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));

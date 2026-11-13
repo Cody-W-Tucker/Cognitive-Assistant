@@ -50,11 +50,13 @@ read-only, and nothing in the repo or in Hermes is modified.
   one-line tool shapes and drops boilerplate.
 - **Analyze.** Audits each distilled session against the running SOUL, the
   interaction posture and the active records from `experience-context.md`
-  (each context is cut to 6000 characters). The reply is strict JSON:
-  `positive`, `negative` (each tagged `non-compliance` with current guidance or
-  `harm` caused by it), `gaps` and `changed_context`, every observation backed
-  by a verbatim quote. A failure is recorded for that session and retried on a
-  later run; earlier good evidence is never overwritten by a failure.
+  (each context is cut to 6000 characters). The prompt requests `positive`,
+  `negative` (tagged `non-compliance` with current guidance or `harm` caused
+  by it), `gaps` and `changed_context`, with verbatim quotes. The runtime
+  checks and persists the first three arrays, not `changed_context`; it does
+  not verify analysis quotes against the transcript. A failure is recorded
+  for that session and retried on a later run; earlier good evidence is never
+  overwritten by a failure.
 - **Fold.** Clusters near-duplicate gaps across sessions; a cluster is
   eligible once `--min-gap-evidence` distinct sessions support it.
 - **Consolidate.** One call groups paraphrases of the same gap; the merge
@@ -68,9 +70,10 @@ read-only, and nothing in the repo or in Hermes is modified.
   `revert`. A `keep` must author the complete record, which is validated
   against the ledger: id `exp-<slug>-<12-char hash>`, title, body of at most
   2000 characters, at least two distinct sessions from that cluster, every
-  evidence item an exact quote from its own session, counterevidence (or
-  `none observed`) and a compiler implication. Any invalid kept record fails
-  the whole annotation, leaving the proposal with no edits and a note.
+  evidence item an exact match to an analysis quote attributed to its own
+  session, counterevidence (or `none observed`) and a compiler implication.
+  Any invalid kept record fails the whole annotation, leaving the proposal
+  with no edits and a note.
 - **Propose.** Drops records whose cluster or title was rejected before
   unless they now cite more sessions or a session the rejection did not, then
   writes `proposal.json`. An unapplied proposal it replaces is archived to
@@ -94,7 +97,7 @@ endpoint.
 | `hermes` | `$HERMES_HOME/state.db` (default `~/.hermes/state.db`) |
 | `claude` | `~/.claude/projects`, plus `$CLAUDE_CONFIG_DIR/projects` |
 | `codex` | `$CODEX_HOME/sessions` (default `~/.codex/sessions`); rollout JSONL whose lines are wrapped as `{type, payload}` |
-| `opencode` | `~/.local/share/opencode/opencode.db`, sessions read via `opencode export` |
+| `opencode` | `~/.local/share/opencode/opencode.db`; reads stored messages first, falling back to `opencode export` when none are available |
 
 Each adapter in `src/harnesses.js` both lists sessions and reads one. Without
 `--harness` every store is scanned and missing ones are skipped; a harness
@@ -111,8 +114,10 @@ Tuning: `CA_IMPROVE_JOBS` (parallel sessions, default 4),
 
 Every model call is one tool-free, OpenAI-compatible chat completion made in
 process by `src/model.js`. The model gets no tools, workspace or shell; its
-reply is parsed only as one JSON object and validated by the stage that asked
-for it, and code decides every path and field that is written.
+reply is parsed as JSON data and validated by the stage that asked for it,
+and code decides every path and field that is written. Synthesis requires
+an exact JSON object (including cached replies); other roles can recover an
+object from a code fence or surrounding prose.
 
 | Variable | Meaning |
 | --- | --- |

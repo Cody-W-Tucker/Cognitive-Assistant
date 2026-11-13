@@ -7,7 +7,7 @@ Everything is in `flake.nix`.
 | Package | What it is |
 | --- | --- |
 | `ca` | The CLI (`python -m core`) with Python and Node.js on its path, so `ca improve-run` can launch the improvement runtime. Carries the repo, including the bootstrap SOUL |
-| `langfuse-review-queue` | `python -m core.langfuse_review`; also `default` |
+| `langfuse-review-queue` | `python -m core review-queue`; also `default` |
 | `ai-data-extractor` | Re-export of `github:Cody-W-Tucker/ai-data-extraction`, used by `profiles/operational/scripts/extract_ai_data.sh` |
 
 The `ca` package's Python has only `python-dotenv`: enough for the improvement
@@ -53,6 +53,6 @@ from `translationLayer`, once the module is enabled.
 
 ## Dev shell
 
-`nix develop` provides Python 3.14 with `anthropic`, `openai`, `pandas`,
-`pydantic` and `python-dotenv`; QMD from `llm-agents.nix` (Vulkan and CUDA
+`nix develop` provides Python 3.14 with `anthropic`, `openai`, `pandas`
+and `python-dotenv`; QMD from `llm-agents.nix` (Vulkan and CUDA
 disabled); Node.js; and `ai-data-extractor`.

@@ -27,10 +27,10 @@ compatibility: opencode        # required, literally "opencode"
 ---
 ```
 
-The body must contain `## When To Use` and `## Do Not Use` and be at least 200
-characters. Generated skills are validated against this before they are
-written; `name`, `source_group`, `source_profile` and `compatibility` are
-forced from the profile's `SkillSpec`, whatever the model returned.
+The document must be at least 200 characters, and its body must contain
+`## When To Use` and `## Do Not Use`. Generated skills are validated before
+they are written; `name`, `source_group`, `source_profile` and `compatibility`
+are forced from the profile's `SkillSpec`, whatever the model returned.
 
 ## Generated skills (`build-skills`)
 

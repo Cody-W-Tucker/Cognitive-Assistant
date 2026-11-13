@@ -2,7 +2,8 @@
 
 The repo is the bootstrap: it collects source data and builds the bootstrap
 SOUL (`workspaces/alignment/artifacts/SOUL.md`). What Hermes runs is the
-*living* SOUL, which lives under CA home and never flows back into the repo.
+*living* SOUL, which lives under CA home. Only a deliberate rebootstrap
+brings runtime lineage back into the repo (see [Alignment Artifacts](Alignment-Artifacts.md)).
 Code: `core/living_soul.py` (generations), `core/experience.py` (records),
 `core/outcome.py` (verdicts), `core/improve.py` (`auto_cycle`).
 
@@ -69,8 +70,9 @@ model as the sessions before it. A generation from a new bootstrap is kept
 untested; rebootstrapping is the person's decision.
 
 What the metric does not control for: the mix of work changes from week to
-week, and the judge is an LLM. Quote binding keeps each miss traceable to a
-verbatim line of the session, and `ca soul status` shows every verdict.
+week, and the judge is an LLM. Quote validation is limited to the analysis
+output, as described in [Improvement Loop](Improvement-Loop.md#stages-of-improve-run);
+`ca soul status` shows every verdict.
 
 ## Rebootstrap
 

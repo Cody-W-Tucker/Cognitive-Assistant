@@ -6,10 +6,8 @@
 nix develop
 ```
 
-The shell provides Python 3.14 with `anthropic`, `openai`, `pandas`,
-`pydantic` and `python-dotenv`; Node.js (for the improvement runtime); QMD
-(from `llm-agents.nix`, Vulkan and CUDA disabled); and `ai-data-extractor`.
-Run every command below from the repo root inside this shell.
+Run every command below from the repo root inside this shell. For its
+packages and dependencies, see [Nix Packaging](Nix-Packaging-and-Distribution.md#dev-shell).
 
 ## Model configuration (bootstrap stages)
 

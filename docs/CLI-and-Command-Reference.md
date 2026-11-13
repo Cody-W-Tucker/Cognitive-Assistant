@@ -55,10 +55,11 @@ are no `--output` or `--seed-dir` flags.
 
 ## Improvement loop and living SOUL
 
-All of these read and write only under CA home (`$CA_HOME`, default
-`$XDG_DATA_HOME/cognitive-assistant`). There are no `--state-dir` or
-`--soul-path` flags. Details: [Improvement Loop](Improvement-Loop.md) and
-[Living SOUL](Living-SOUL.md).
+Runtime state lives under CA home (`$CA_HOME`, default
+`$XDG_DATA_HOME/cognitive-assistant`); commands also read bootstrap artifacts
+and session stores, and `soul link` writes the Hermes SOUL symlink. There are
+no `--state-dir` or `--soul-path` flags. Details:
+[Improvement Loop](Improvement-Loop.md) and [Living SOUL](Living-SOUL.md).
 
 `improve-run` flags:
 
