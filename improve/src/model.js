@@ -154,9 +154,11 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
   const body = buildChatRequest({ role, model: config.model, prompt });
   const key = createHash("sha256").update(JSON.stringify({ url: config.baseUrl, body })).digest("hex");
   const cacheFile = cacheDir ? path.join(cacheDir, `${key}.txt`) : null;
-  if (cacheFile && fs.existsSync(cacheFile)) {
-    const hit = parseStageReply(role, fs.readFileSync(cacheFile, "utf8"));
-    if (hit) return hit;
+  if (cacheFile) {
+    try {
+      const hit = parseStageReply(role, fs.readFileSync(cacheFile, "utf8"));
+      if (hit) return hit;
+    } catch {}
   }
   const headers = { "content-type": "application/json" };
   if (config.apiKeyFile) headers.authorization = `Bearer ${fs.readFileSync(config.apiKeyFile, "utf8").trim()}`;

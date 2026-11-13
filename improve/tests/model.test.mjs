@@ -116,6 +116,34 @@ test("synthesis accepts and caches only exact JSON objects", async () => {
   });
 });
 
+test("an unreadable or vanished cached reply triggers a fresh completion for every role", async (t) => {
+  await withServer(ok('{"result": "fresh"}'), async (requests) => {
+    const read = fs.readFileSync;
+    let blocked;
+    let code;
+    t.mock.method(fs, "readFileSync", (file, ...args) => {
+      if (file === blocked) throw Object.assign(new Error(code), { code });
+      return read(file, ...args);
+    });
+    for (const role of ["analysis", "consolidate", "synthesis", "annotate"]) {
+      const cacheDir = path.join(tmpDir(), "model-cache");
+      const expected = { result: "fresh" };
+      assert.deepEqual(await invokeStage(role, "cache read failure", { cacheDir }), expected);
+      const [file] = fs.readdirSync(cacheDir);
+      blocked = path.join(cacheDir, file);
+      for (code of ["EACCES", "ENOENT"]) {
+        const before = requests.length;
+        assert.deepEqual(await invokeStage(role, "cache read failure", { cacheDir }), expected);
+        assert.equal(requests.length, before + 1);
+      }
+      blocked = null;
+      const before = requests.length;
+      assert.deepEqual(await invokeStage(role, "cache read failure", { cacheDir }), expected);
+      assert.equal(requests.length, before, "readable cached replies still avoid a request");
+    }
+  });
+});
+
 test("HTTP errors and unparseable replies fail without leaking the key or caching", async () => {
   await withServer(() => ({ status: 401, payload: { error: "bad key" } }), async () => {
     const keyFile = path.join(tmpDir(), "key");

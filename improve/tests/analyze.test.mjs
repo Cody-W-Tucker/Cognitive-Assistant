@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { analyzeTraces, buildAnalysisPrompt, loadContexts } from "../src/analyze.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
+import { readSoulSnapshot } from "../src/soul.js";
 import { tmpDir, writeSoul } from "./helpers.mjs";
 
 const ACTIVE = { userTurns: 1, assistantTurns: 1, toolCalls: 0 };
@@ -32,6 +33,37 @@ describe("analysis contexts", () => {
     assert.equal(contexts.soulBaseline, "soul text");
     assert.equal(contexts.interactionPosture, "posture text");
     assert.match(contexts.experienceRecords, /<record id="exp-a">\naccepted record body/);
+  });
+
+  it("unreadable optional contexts degrade locally while the required SOUL fails closed", (t) => {
+    const dir = tmpDir();
+    const files = {
+      soulPath: writeSoul(dir, "soul text"),
+      posturePath: path.join(dir, "posture.md"),
+      experiencePath: path.join(dir, "experience.md"),
+    };
+    fs.writeFileSync(files.posturePath, "posture text");
+    fs.writeFileSync(files.experiencePath, "experience text");
+    const read = fs.readFileSync;
+    let blocked;
+    t.mock.method(fs, "readFileSync", (file, ...args) => {
+      if (file === blocked) throw Object.assign(new Error("access denied"), { code: "EACCES" });
+      return read(file, ...args);
+    });
+    for (const [input, output, label] of [
+      ["soulPath", "soulBaseline", "SOUL baseline"],
+      ["posturePath", "interactionPosture", "interaction posture"],
+      ["experiencePath", "experienceRecords", "accepted experience records"],
+    ]) {
+      blocked = files[input];
+      const contexts = loadContexts(files);
+      assert.equal(contexts[output], `(${label} unavailable: looked in ${blocked}; audit the trace alone and note the gap in changed_context.)`);
+      if (input === "soulPath") assert.throws(() => readSoulSnapshot(files.soulPath), /refusing to propose/);
+      else {
+        assert.equal(readSoulSnapshot(files.soulPath).text, "soul text");
+        assert.equal(contexts.soulBaseline, "soul text");
+      }
+    }
   });
 
   it("the prompt carries the trace and contexts behind the sentinel", () => {

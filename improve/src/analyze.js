@@ -17,8 +17,12 @@ function unavailable(label, lookedIn) {
 
 function readBaseline(file, label) {
   if (!file) return unavailable(label, "(no path given)");
-  const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  return text.trim() ? text.slice(0, CONTEXT_CHARS) : unavailable(label, file);
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    return text.trim() ? text.slice(0, CONTEXT_CHARS) : unavailable(label, file);
+  } catch {
+    return unavailable(label, file);
+  }
 }
 
 /**
