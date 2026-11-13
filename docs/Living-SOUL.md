@@ -51,7 +51,10 @@ step per run:
    Verdicts are final and recorded in `soul/verdicts.jsonl` and the journal.
 3. `revert` withdraws the records that generation added (`reverted.jsonl`, kept
    as lineage) and compiles without them. `pending` adopts nothing. `keep`
-   adopts the first record the annotation stage kept, as a new generation.
+   adopts the first record the annotation stage kept, as a new generation,
+   but only once the active generation has `--min-sessions` sessions of its
+   own, since those are the baseline the new change will be judged against.
+   On a fresh install the first weeks only build that baseline.
 
 So exactly one change is under test at a time, and every change is judged by
 what happened in sessions after it, scored by the same analysis prompt and

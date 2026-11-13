@@ -87,11 +87,20 @@ class AutoCycleTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def _adopt_after_baseline(self, state_dir: Path, proposal: dict, misses: int) -> dict:
+        """First run builds a baseline; adoption happens once it has sessions."""
+        first = improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
+        self.assertEqual(first["action"], "baseline")
+        self._set_activations([(T0, 1)])
+        _fill(state_dir, "base", T0, total=10, misses=misses)
+        adopted = improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
+        self.assertEqual(adopted["action"], "adopt")
+        return adopted
+
     def test_adopts_one_record_then_waits_then_reverts_on_regression(self) -> None:
         state_dir, proposal = _run_fixture_proposal(self.root)
 
-        first = improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
-        self.assertEqual(first["action"], "adopt")
+        first = self._adopt_after_baseline(state_dir, proposal, misses=1)
         adopted = first["records"]
         self.assertEqual(len(adopted), 1)
         current = living_soul.current_generation()
@@ -101,7 +110,6 @@ class AutoCycleTests(unittest.TestCase):
         # Not enough sessions under the new generation yet: hold, adopt nothing.
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1), (start, current["generation"])])
-        _fill(state_dir, "base", T0, total=10, misses=1)
         waiting = improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
         self.assertEqual(waiting["action"], "wait")
 
@@ -116,11 +124,10 @@ class AutoCycleTests(unittest.TestCase):
 
     def test_change_that_does_not_hurt_is_kept(self) -> None:
         state_dir, proposal = _run_fixture_proposal(self.root)
-        improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
+        self._adopt_after_baseline(state_dir, proposal, misses=4)
         current = living_soul.current_generation()
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1), (start, current["generation"])])
-        _fill(state_dir, "base", T0, total=10, misses=4)
         _fill(state_dir, "after", start, total=10, misses=3)
         verdict = outcome.evaluate(state_dir, min_sessions=5)
         self.assertEqual(verdict["verdict"], "keep")
@@ -132,9 +139,8 @@ class AutoCycleTests(unittest.TestCase):
     def test_other_harness_sessions_do_not_count(self) -> None:
         state_dir, proposal = _run_fixture_proposal(self.root)
         improve.auto_cycle(state_dir=state_dir, proposal=proposal, min_sessions=5)
-        current = living_soul.current_generation()
         start = T0 + timedelta(days=7)
-        self._set_activations([(T0, 1), (start, current["generation"])])
+        self._set_activations([(T0, 1)])
         before = outcome.session_outcomes(state_dir)
         for i in range(10):
             _write_evidence(state_dir, f"codex{i}", start + timedelta(minutes=i), miss=True, harness="codex")

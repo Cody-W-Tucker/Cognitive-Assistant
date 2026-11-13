@@ -683,7 +683,9 @@ def auto_cycle(
     1. Judge the active generation against its parent (core.outcome).
     2. revert -> withdraw the records it added and compile without them.
     3. pending -> adopt nothing; one change is under test at a time.
-    4. keep/settled -> adopt the best kept record from this run's proposal.
+    4. keep/settled -> once the active generation has ``min_sessions`` of its
+       own (the baseline the next change is judged against), adopt the best
+       kept record from this run's proposal.
     """
     from core import living_soul, outcome
 
@@ -698,6 +700,13 @@ def auto_cycle(
         result.update(action="revert", records=added, generation=meta["generation"])
     elif verdict["verdict"] == "pending":
         result["action"] = "wait"
+    elif (
+        outcome.session_outcomes(resolved_state)
+        .get(living_soul.current_generation()["generation"], {})
+        .get("sessions", 0)
+        < min_sessions
+    ):
+        result["action"] = "baseline"
     else:
         candidate = _auto_candidate(proposal)
         if candidate is not None and not proposal.get("appliedAt"):
