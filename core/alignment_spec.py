@@ -12,37 +12,18 @@ not an input here; skills are the personalization source.
 Skills provide reusable operating procedures generated per profile. They feed
 the alignment spec.
 
-This command sits above the profile system: it reads from both registered
-profiles but does not belong to either. It is invoked without --profile.
-
-Usage:
-    python -m core build-alignment-spec
-    python -m core build-alignment-spec --output /path/to/output.md
 """
 
 from __future__ import annotations
 
-import asyncio
-import sys
 from pathlib import Path
 from typing import List, Optional
 
-from core.config import ROOT_DIR
-from core.skills_creator import canonical_skills_root
-from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
-from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
+from core import llm, paths
+from core.skill_engine import extract_frontmatter_value, iter_skills
 
+MIN_SPEC_CHARS = 200
 
-# Paths relative to repo root
-SEED_PATH = ROOT_DIR / "profiles" / "alignment" / "prompts" / "seed.md"
-OUTPUT_DIR = ROOT_DIR / "workspaces" / "alignment" / "artifacts"
-OUTPUT_FILE = OUTPUT_DIR / "alignment_spec.md"
-
-UNIFIED_SKILLS_DIR = canonical_skills_root()
-
-SKILLS_PLACEHOLDER = "{skills_content}"
-
-# Static sections - not recomputed by the LLM.
 SPEC_PREAMBLE = """\
 # Personalized Artifact Verification Spec
 
@@ -87,148 +68,33 @@ Verdict logic:
 """
 
 
-class AlignmentSpecCreator:
-    """Generate a personalized alignment spec from unified skills."""
-
-    def __init__(self) -> None:
-        self.api = APIConfig()
-        self.handle: LLMHandle = create_client(
-            self.api,
-            provider=DEFAULT_PROVIDER,
-            model=self.api.get_model(provider=DEFAULT_PROVIDER),
-            async_mode=True,
-        )
-
-    async def generate_spec(self, output_path: Optional[Path] = None) -> Path:
-        """Generate the alignment spec and write to disk."""
-        seed_content = self._load_seed()
-        skills_content = self._load_all_skills()
-
-        prompt = seed_content.replace(SKILLS_PLACEHOLDER, skills_content)
-        response = await generate_text_async(
-            self.handle,
-            user_prompt=prompt,
-            temperature=self.api.TEMPERATURE,
-            max_output_tokens=self.api.MAX_COMPLETION_TOKENS,
-        )
-
-        spec_content = self._extract_spec(response)
-        spec_content = SPEC_PREAMBLE + spec_content + SPEC_POSTAMBLE
-
-        resolved_output = output_path or OUTPUT_FILE
-        resolved_output.parent.mkdir(parents=True, exist_ok=True)
-        resolved_output.write_text(spec_content + "\n", encoding="utf-8")
-        print(f"Info: Wrote alignment spec to {resolved_output}")
-        return resolved_output
-
-    def _load_seed(self) -> str:
-        """Load the seed methodology template and validate its placeholder."""
-        if not SEED_PATH.exists():
-            raise FileNotFoundError(f"Alignment seed not found at {SEED_PATH}")
-        content = SEED_PATH.read_text(encoding="utf-8")
-        count = content.count(SKILLS_PLACEHOLDER)
-        if count != 1:
-            raise ValueError(
-                f"Alignment seed must contain placeholder "
-                f"'{SKILLS_PLACEHOLDER}' exactly once; found {count}."
-            )
-        return content
-
-    def _load_all_skills(self) -> str:
-        """Load all unified skills into a tagged document."""
-        sections = self._load_skills_from_root(UNIFIED_SKILLS_DIR)
-        if not sections:
-            raise FileNotFoundError(
-                "No skills found in workspaces/skills. Run build-skills or import skills first."
-            )
-        return "\n\n".join(sections)
-
-    def _load_skills_from_root(self, skills_dir: Path) -> List[str]:
-        """Load all SKILL.md files from the unified profile tree."""
-        if not skills_dir.exists():
-            print(f"Warning: Unified skills directory not found: {skills_dir}")
-            return []
-
-        skills: List[str] = []
-        for skill_file in sorted(skills_dir.glob("*/*/SKILL.md")):
-            source_profile = skill_file.parent.parent.name
-            skill_name = skill_file.parent.name
-            content = skill_file.read_text(encoding="utf-8").strip()
-            skills.append(
-                f'<skill source_profile="{source_profile}" name="{skill_name}">\n'
-                f"{content}\n"
-                f"</skill>"
-            )
-
-        if skills:
-            print(f"Info: Loaded {len(skills)} unified skills")
-        else:
-            print(f"Warning: No skills found in {skills_dir}")
-
-        return skills
-
-    def _extract_spec(self, response: str) -> str:
-        """Extract the alignment spec from the LLM response.
-
-        The response should be a complete markdown document. Strip any
-        wrapping fences if the LLM added them.
-        """
-        text = response.strip()
-        # Remove markdown code fences if present
-        if text.startswith("```markdown"):
-            text = text[len("```markdown"):].strip()
-        elif text.startswith("```md"):
-            text = text[len("```md"):].strip()
-        elif text.startswith("```"):
-            text = text[3:].strip()
-
-        if text.endswith("```"):
-            text = text[:-3].strip()
-
-        if len(text) < 200:
-            raise ValueError(
-                f"Generated alignment spec is unexpectedly short ({len(text)} chars). "
-                "LLM may have produced an error or truncated output."
-            )
-
-        return text
+def requirements() -> List[str]:
+    issues = llm.missing_config(llm.DEFAULT_PROVIDER)
+    if not iter_skills():
+        issues.append(f"No skills found in {paths.SKILLS_DIR}. Run build-skills or import skills first.")
+    return issues
 
 
-async def _async_run(output_path: Optional[Path]) -> int:
-    """Async entry point."""
-    creator = AlignmentSpecCreator()
-    try:
-        await creator.generate_spec(output_path=output_path)
-        return 0
-    finally:
-        await close_client_async(creator.handle)
+def skills_document() -> str:
+    """Every skill in the store, tagged with the group it lives in."""
+    blocks = []
+    for path in iter_skills():
+        content = path.read_text(encoding="utf-8").strip()
+        group = path.parent.parent.name
+        profile = extract_frontmatter_value(content, "source_profile")
+        origin = f' source_profile="{profile}"' if profile else ""
+        blocks.append(f'<skill group="{group}"{origin} name="{path.parent.name}">\n{content}\n</skill>')
+    print(f"Info: Loaded {len(blocks)} skills")
+    return "\n\n".join(blocks)
 
 
-def run(*, output_path: Optional[Path] = None) -> int:
-    """Synchronous entry point for CLI use."""
-    api = APIConfig()
-    issues = validate_provider_config(api, DEFAULT_PROVIDER)
-    if issues:
-        print("Error: Configuration issues found")
-        for issue in issues:
-            print(f"- {issue}")
-        return 1
-
-    if not UNIFIED_SKILLS_DIR.exists() or not any(UNIFIED_SKILLS_DIR.glob("*/*/SKILL.md")):
-        print(
-            "Error: No skills found in workspaces/skills. "
-            "Run build-skills or import skills first."
-        )
-        return 1
-
-    try:
-        return asyncio.run(_async_run(output_path))
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
-
-__all__ = [
-    "AlignmentSpecCreator",
-    "run",
-]
+async def build(*, output_path: Optional[Path] = None) -> Path:
+    seed = (paths.ALIGNMENT_PROMPTS_DIR / "seed.md").read_text(encoding="utf-8")
+    reply = await llm.complete(
+        seed.format(skills_content=skills_document()), min_chars=MIN_SPEC_CHARS, label="alignment spec"
+    )
+    output = output_path or paths.ALIGNMENT_SPEC_PATH
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(SPEC_PREAMBLE + reply + SPEC_POSTAMBLE + "\n", encoding="utf-8")
+    print(f"Info: Wrote alignment spec to {output}")
+    return output

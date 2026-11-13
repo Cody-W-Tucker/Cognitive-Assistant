@@ -1,298 +1,89 @@
 #!/usr/bin/env python3
-"""Profile-aware prompt creator.
+"""Turn a profile's answered questions into its human profile.
 
-Loads the most recent `questions_with_answers_qmd_*.csv` from the active
-profile's data directory, formats it into context, and writes
-`human_profile.md`.
+Each draft provider writes a candidate profile from the newest answers CSV;
+the synthesis provider merges the candidates into ``human_profile.md``.
+Candidates are kept beside it as ``profile_candidate_<provider>.md``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import csv
-import os
-import sys
-from dataclasses import dataclass
 from typing import List
 
-from core.config import Config
-from core import experience
-from lib.config import validate_provider_config
-from lib.llm import LLMHandle, close_client_async, create_client, generate_text_async
-
+from core import llm
+from core.config import ANSWER_COLUMNS, QUESTION_COLUMNS, LayerProfile
 
 ENSEMBLE_DRAFT_PROVIDERS = ("xai", "anthropic", "openai")
 ENSEMBLE_SYNTHESIS_PROVIDER = "anthropic"
+PROVIDERS = tuple(dict.fromkeys([*ENSEMBLE_DRAFT_PROVIDERS, ENSEMBLE_SYNTHESIS_PROVIDER]))
 
 
-@dataclass(frozen=True)
-class DraftResult:
-    """One model's draft profile output."""
-
-    provider: str
-    model: str
-    content: str
-
-
-def load_dataset_context(config: Config) -> str:
-    """Load the most recent dataset and format all context for the LLM."""
+def requirements(profile: LayerProfile) -> List[str]:
+    issues = [issue for provider in PROVIDERS for issue in llm.missing_config(provider)]
     try:
-        dataset_csv = config.get_most_recent_file("questions_with_answers_qmd_*.csv")
+        profile.latest_answers()
     except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            "No question_asker dataset files found in "
-            f"{config.paths.DATA_DIR}"
-        ) from exc
+        issues.append(str(exc))
+    return issues
 
-    print(f"Info: Loading dataset {os.path.basename(dataset_csv)}")
 
-    with open(dataset_csv, "r", encoding="utf-8") as file_handle:
-        reader = csv.DictReader(
-            file_handle,
-            delimiter=config.csv.DELIMITER,
-            quotechar=config.csv.QUOTECHAR,
-        )
-        data = list(reader)
+def load_dataset_context(profile: LayerProfile) -> str:
+    """The newest answers CSV as redacted markdown sections, one per category row."""
+    dataset = profile.latest_answers()
+    print(f"Info: Loading dataset {dataset.name}")
+    with open(dataset, "r", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
 
-    redact = config.get_redaction_function()
-    section_template = config.profile.section_header_template
-    answer_label = config.profile.answer_label
-    formatted_sections: List[str] = []
-    redaction_count = 0
-
-    for row in data:
+    sections: List[str] = []
+    redactions = 0
+    for row in rows:
         category = row.get("Category", "").strip()
-        goal = row.get("Goal", "").strip()
-        element = row.get("Element", "").strip()
-
         if not category:
             continue
-
-        qa_sections: List[str] = []
-
-        iter_columns = list(zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS))
-
-        for index, columns in enumerate(iter_columns, start=1):
-            question_col, answer_col = columns
-            question = row.get(question_col, "").strip()
-            answer = row.get(answer_col, "").strip()
-
+        answered: List[str] = []
+        for index, (question_col, answer_col) in enumerate(zip(QUESTION_COLUMNS, ANSWER_COLUMNS), start=1):
+            question = (row.get(question_col) or "").strip()
+            answer = (row.get(answer_col) or "").strip()
             if not question or not answer:
                 continue
-
-            redacted_answer = redact(answer)
-            if redacted_answer != answer:
-                redaction_count += 1
-
-            qa_sections.append(
-                f"{index}. {question}\n\n   {answer_label}: {redacted_answer}"
+            redacted = profile.redact(answer)
+            redactions += redacted != answer
+            answered.append(f"{index}. {question}\n\n   {profile.answer_label}: {redacted}")
+        if answered:
+            sections.append(
+                profile.section_header_template.format(category=category)
+                + f"\n\n## Goal: **{row.get('Goal', '').strip()}**\n\n"
+                + f"**Elements:** {row.get('Element', '').strip()}\n\n"
+                + "### Questions:\n\n"
+                + "\n\n".join(answered)
             )
+    if redactions:
+        print(f"Info: Applied redaction to {redactions} entries")
+    context = "\n\n---\n\n".join(sections)
+    print(f"Info: Loaded {len(sections)} sections ({len(context)} characters)")
+    return context
 
-        if qa_sections:
-            entry = section_template.format(category=category) + "\n\n"
-            entry += f"## Goal: **{goal}**\n\n"
-            entry += f"**Elements:** {element}\n\n"
-            entry += "### Questions:\n\n" + "\n\n".join(qa_sections)
-            formatted_sections.append(entry)
 
-    if redaction_count > 0:
-        print(f"Info: Applied redaction to {redaction_count} entries")
-
-    combined_context = "\n\n---\n\n".join(formatted_sections)
-    # Experience hook: accepted improvement records join the build context.
-    # SOUL stays the read-only baseline elsewhere; this only appends staged
-    # experience, and is a no-op while the experience store is empty.
-    experience_block = experience.compile_experience_block()
-    if experience_block:
-        combined_context += "\n\n---\n\n# Accepted experience\n\n" + experience_block
-    print(
-        f"Info: Loaded {len(formatted_sections)} sections "
-        f"({len(combined_context)} characters)"
+async def build(profile: LayerProfile) -> None:
+    prompt = profile.prompt("initial_template").format(context=load_dataset_context(profile))
+    drafts = await asyncio.gather(
+        *(llm.complete(prompt, provider=provider, label=f"{provider} draft") for provider in ENSEMBLE_DRAFT_PROVIDERS)
     )
-    return combined_context
-
-
-async def _call_llm(
-    config: Config, handle: LLMHandle, prompt: str, *, max_tokens: int
-) -> str:
-    """Generate text for a prompt using the shared async helper."""
-    try:
-        print(f"Info: Calling {handle.provider.upper()} with model {handle.model}")
-        content = await generate_text_async(
-            handle,
-            user_prompt=prompt,
-            temperature=config.api.TEMPERATURE,
-            max_output_tokens=max_tokens,
+    candidates = []
+    for provider, draft in zip(ENSEMBLE_DRAFT_PROVIDERS, drafts):
+        path = profile.artifacts_dir / f"profile_candidate_{provider}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(draft + "\n", encoding="utf-8")
+        print(f"Info: Saved {provider} draft to {path}")
+        candidates.append(
+            f'<candidate provider="{provider}" model="{llm.model_name(provider)}">\n{draft}\n</candidate>'
         )
-        print(
-            f"Info: {handle.provider.upper()} response successful "
-            f"({len(content)} chars)"
-        )
-        return content
-    except Exception as exc:
-        error_message = str(exc)
-        print(f"Error: LLM call failed with exception type {type(exc).__name__}")
-        print(f"Error: {error_message}")
-        if "rate_limit" in error_message.lower() or "429" in error_message:
-            print(
-                "Warning: Rate limit hit; wait before retrying or adjust provider limits"
-            )
-        return ""
-
-
-def get_prompt_creator_providers() -> List[str]:
-    """Return the distinct providers required by the ensemble workflow."""
-    return list(dict.fromkeys([*ENSEMBLE_DRAFT_PROVIDERS, ENSEMBLE_SYNTHESIS_PROVIDER]))
-
-
-def validate_prompt_creator_config(config: Config) -> List[str]:
-    """Validate the inputs and providers required by build-prompts."""
-    issues: List[str] = []
-    if not config.paths.QUESTIONS_CSV.exists():
-        issues.append(f"Questions CSV not found at {config.paths.QUESTIONS_CSV}")
-
-    for provider in get_prompt_creator_providers():
-        issues.extend(validate_provider_config(config.api, provider))
-
-    return list(dict.fromkeys(issues))
-
-
-async def _generate_draft(config: Config, provider: str, prompt: str) -> DraftResult:
-    """Generate one draft profile from a specific provider."""
-    handle = create_client(
-        config.api,
-        provider=provider,
-        model=config.api.get_model(provider=provider),
-        async_mode=True,
-    )
-
-    try:
-        content = await _call_llm(
-            config,
-            handle,
-            prompt,
-            max_tokens=config.api.get_max_completion_tokens(provider),
-        )
-        return DraftResult(provider=provider, model=handle.model, content=content)
-    finally:
-        await close_client_async(handle)
-
-
-def _build_candidate_profiles_block(draft_results: List[DraftResult]) -> str:
-    """Serialize candidate drafts for the synthesis prompt."""
-    draft_blocks = []
-    for result in draft_results:
-        draft_blocks.append(
-            "\n".join(
-                [
-                    f'<candidate provider="{result.provider}" model="{result.model}">',
-                    result.content.strip(),
-                    "</candidate>",
-                ]
-            )
-        )
-
-    return "\n\n".join(draft_blocks)
-
-
-def _save_draft_artifacts(config: Config, draft_results: List[DraftResult]) -> None:
-    """Persist candidate drafts without interfering with downstream human_profile discovery."""
-    for result in draft_results:
-        draft_path = config.paths.ARTIFACTS_DIR / f"profile_candidate_{result.provider}.md"
-        print(f"Info: Saving {result.provider.upper()} draft to {draft_path}")
-        draft_path.write_text(result.content.strip() + "\n", encoding="utf-8")
-
-
-async def _process_dataset(config: Config) -> int:
-    """Run the profile-specific prompt generation pipeline."""
-    print("Info: Processing dataset into profile artifacts")
-    print("Info: Step 1 generates ensemble draft profiles")
-
-    context = load_dataset_context(config)
-    base_prompt = config.prompts.initial_template.format(context=context)
-
-    draft_results = await asyncio.gather(
-        *[
-            _generate_draft(config, provider, base_prompt)
-            for provider in ENSEMBLE_DRAFT_PROVIDERS
-        ]
-    )
-    successful_drafts = [result for result in draft_results if result.content]
-    if len(successful_drafts) != len(ENSEMBLE_DRAFT_PROVIDERS):
-        failed_providers = [
-            provider
-            for provider in ENSEMBLE_DRAFT_PROVIDERS
-            if provider not in {result.provider for result in successful_drafts}
-        ]
-        print(
-            "Error: Failed to generate all ensemble drafts: "
-            + ", ".join(failed_providers)
-        )
-        return 1
-
-    _save_draft_artifacts(config, successful_drafts)
-
-    print("Info: Step 2 synthesizes the drafts with Anthropic")
-    synthesis_handle = create_client(
-        config.api,
+    final = await llm.complete(
+        profile.prompt("ensemble_synthesis_template").format(candidate_profiles="\n\n".join(candidates)),
         provider=ENSEMBLE_SYNTHESIS_PROVIDER,
-        model=config.api.get_model(provider=ENSEMBLE_SYNTHESIS_PROVIDER),
-        async_mode=True,
+        label="synthesized profile",
     )
-    try:
-        synthesis_prompt = _build_synthesis_prompt(
-            config,
-            candidate_profiles=_build_candidate_profiles_block(successful_drafts),
-        )
-        final_profile = await _call_llm(
-            config,
-            synthesis_handle,
-            synthesis_prompt,
-            max_tokens=config.api.get_max_completion_tokens(ENSEMBLE_SYNTHESIS_PROVIDER),
-        )
-        if not final_profile:
-            print("Error: Failed to synthesize final profile")
-            return 1
-
-        profile_path = config.paths.ARTIFACTS_DIR / "human_profile.md"
-        print(f"Info: Saving synthesized profile to {profile_path}")
-        profile_path.write_text(final_profile.strip() + "\n", encoding="utf-8")
-
-        print("Info: Artifacts created")
-        print(f"- Human profile: {profile_path}")
-        for result in successful_drafts:
-            print(
-                f"- Candidate draft: {config.paths.ARTIFACTS_DIR / ('profile_candidate_' + result.provider + '.md')}"
-            )
-        return 0
-    finally:
-        await close_client_async(synthesis_handle)
-
-
-def _build_synthesis_prompt(config: Config, *, candidate_profiles: str) -> str:
-    """Render the profile-specific ensemble synthesis prompt template."""
-    return config.prompts.ensemble_synthesis_template.format(
-        candidate_profiles=candidate_profiles,
-    )
-
-
-def run(config: Config) -> int:
-    """Synchronous entry point for CLI use."""
-    print(f"{config.profile.display_name} - Prompt Creator")
-    print("=" * 60)
-
-    issues = validate_prompt_creator_config(config)
-    if issues:
-        print("Error: Configuration issues found")
-        for issue in issues:
-            print(f"- {issue}")
-        return 1
-
-    try:
-        return asyncio.run(_process_dataset(config))
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
-
-__all__ = ["run", "load_dataset_context"]
+    profile.human_profile_path.write_text(final + "\n", encoding="utf-8")
+    print(f"Info: Saved synthesized profile to {profile.human_profile_path}")

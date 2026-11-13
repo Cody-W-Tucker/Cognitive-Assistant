@@ -1,4 +1,4 @@
-You are performing the synthesis step of a CA improvement pass. Folded evidence from past sessions is below. Your job is a text-only proposer: return narrow provisional plans as structured data on stdout. Do not inspect files, do not edit files, do not use a workspace.
+You are performing the synthesis step of a CA improvement pass. Folded evidence from past sessions is below. Your job is to propose narrow provisional plans as structured data. You have no tools and no files; reply with data only.
 
 ## Sessions analyzed
 
@@ -28,7 +28,7 @@ A rejected identity stays suppressed downstream on annotated finals unless the f
 
 ## What to do
 
-Return exactly one JSON object on stdout with exactly the shape `{"plans": [...]}`. Each entry is a narrow provisional plan with ONLY these keys:
+Return exactly one JSON object with exactly the shape `{"plans": [...]}`. Each entry is a narrow provisional plan with ONLY these keys:
 
 - `clusterId`: the folded cluster reference it annotates (matching one eligible folded cluster id listed above)
 - `provisionalIntent`: one-line untrusted intent prose (max 500 chars)
@@ -43,16 +43,13 @@ Example:
 {"plans": [{"id": "e1", "kind": "add", "clusterId": "<eligible cluster id>", "provisionalIntent": "<intent>", "provisionalSources": ["<session id>", "<session id>"], "provisionalCount": 2}]}
 ```
 
-The stdout payload MUST NEVER carry final durable record fields: no `record`, `title`, `body`, `evidence`, session quote mappings, `counterevidence`, `compilerImplication`, staged artifact, or diff. Annotation authors all of those; any plan carrying a final durable field is invalid and dropped individually. Plans MUST NEVER carry filesystem targets: no `file`, `path`, `workspace`, `cwd`, or absolute/relative paths. Deterministic code assigns storage; model-controlled paths are rejected.
+Plans MUST NEVER carry final durable record fields (`record`, `title`, `body`, `evidence`, session quote mappings, `counterevidence`, `compilerImplication`) or filesystem targets (`file`, `path`, `workspace`, `cwd`, or any path). Annotation authors the record; code assigns storage.
 
-Plans missing the cluster reference, carrying fewer than 2 distinct session ids from that cluster, or carrying malformed/unexpected fields are invalid and dropped individually; valid siblings still proceed. Plans without an explicit eligible cluster association never borrow one: missing linkage is never invented.
+A plan missing the cluster reference, carrying fewer than 2 distinct session ids from that cluster, or carrying any other field makes the whole reply invalid, and no plans are kept this run.
 
 Narrow proposer contract:
 
 1. The cluster reference must resolve an eligible folded cluster id.
 2. The session list holds at least 2 distinct eligible session ids from that cluster as context. These are not final evidence mappings.
-3. NEVER emit final durable fields here: no `record`, `title`, `body`, `evidence`, session quote mappings, `counterevidence`, `compilerImplication`, staged artifact, or diff. Annotation authors all durable fields; any plan carrying them is invalid and dropped individually.
-4. The staged artifact and its informational diff are rendered downstream from the ANNOTATED final record — do not paste record text here.
-5. Propose only plans: never edit live files, tracked files, SOUL, posture, skills, or Hermes. Nothing here reaches the repository until a human applies an annotated final. Apply remains the sole durable writer of the real experience surface.
-6. The proposer output is not authoritative pre-apply: it is input for deterministic materialization plus private stage/measure and the annotate step, which is the sole full-record origin. The human apply gate consumes only annotated finals.
-7. An empty `{"plans": []}` is valid when the evidence justifies no record; that yields zero edits downstream.
+3. Propose only plans: never edit live files, tracked files, SOUL, posture, skills, or Hermes. Nothing here reaches the repository until a human applies an annotated record.
+4. An empty `{"plans": []}` is valid when the evidence justifies no record; that yields zero edits downstream.

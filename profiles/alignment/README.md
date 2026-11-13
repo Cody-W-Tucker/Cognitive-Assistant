@@ -27,9 +27,11 @@ The pipeline is ordered and deterministic:
 
 1. The translation layer is generated first: the existential and operational
    `human_profile.md` files feed `interaction_posture_seed.md` to produce
-   `INTERACTION_POSTURE.md`, then both profile sources plus the posture feed
-   `soul_seed.md` to produce `SOUL.md` - the durable orchestrator
-   constitution.
+   `INTERACTION_POSTURE.md`, then both profile sources plus the posture and
+   the runtime lineage (accepted and withdrawn experience records under CA
+   home) feed `soul_seed.md` to produce `SOUL.md` - the bootstrap
+   orchestrator constitution. The adopted record ids it took in are written
+   to `absorbed.json` so the living SOUL does not add them again.
 2. `build-alignment-spec` then reads unified skills and produces the
    personalized verification spec.
 
@@ -44,9 +46,9 @@ The pipeline is ordered and deterministic:
 | `core/translation_layer_creator.py`                | Loads both profile human profiles, infers the interaction posture, generates the orchestrator soul, writes `INTERACTION_POSTURE.md` and `SOUL.md`.             |
 | `workspaces/alignment/artifacts/alignment_spec.md` | The generated, committed verification spec.                                                                                                     |
 | `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` | The generated orchestrator counterpart posture intermediate artifact.                                                                                     |
-| `workspaces/alignment/artifacts/SOUL.md`           | The generated orchestrator translation-layer soul.                                                                                              |
-
-| `workspaces/skills/<profile>/<skill>/SKILL.md`     | One unified skill document per profile/skill pair.                                                                                        |
+| `workspaces/alignment/artifacts/SOUL.md`           | The generated orchestrator translation-layer soul (the bootstrap SOUL).                                                                         |
+| `workspaces/alignment/artifacts/absorbed.json`     | Lineage record ids the bootstrap SOUL already took into account.                                                                               |
+| `workspaces/skills/<group>/<skill>/SKILL.md`       | The skill store read by `build-alignment-spec` (generated and imported skills).                                                                 |
 
 ## Build the translation layer
 
@@ -60,6 +62,7 @@ python -m core build-translation-layer
 Output:
 - `workspaces/alignment/artifacts/INTERACTION_POSTURE.md` - inferred orchestrator counterpart posture
 - `workspaces/alignment/artifacts/SOUL.md` - orchestrator translation-layer soul
+- `workspaces/alignment/artifacts/absorbed.json` - lineage records the SOUL absorbed
 
 ## Build the spec
 
@@ -86,3 +89,6 @@ python -m core --profile operational build-skills
 python -m core build-translation-layer
 python -m core build-alignment-spec
 ```
+
+`python -m core update` runs everything after `ask-questions` (and
+`ingest-corpus`) in this order. See `docs/Alignment-Artifacts.md`.

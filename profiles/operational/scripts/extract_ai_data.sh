@@ -2,15 +2,15 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(realpath "${script_dir}/../..")"
-output_dir="${repo_root}/Operational-Layer/data"
+repo_root="$(realpath "${script_dir}/../../..")"
+output_dir="${repo_root}/workspaces/operational/data/intake"
 extractor_target="${1:-all}"
 
 case "${extractor_target}" in
   all|claude-code|codex|continue|cursor|gemini|opencode|trae|windsurf)
     ;;
   list|help)
-    exec nix run "${repo_root}#ai-data-extraction" -- "${extractor_target}"
+    exec nix run "${repo_root}#ai-data-extractor" -- "${extractor_target}"
     ;;
   *)
     printf 'Usage: %s <extractor|all|list|help>\n' "$(basename "$0")" >&2
@@ -29,7 +29,7 @@ trap cleanup EXIT
 printf 'Running extractor %s...\n' "${extractor_target}"
 (
   cd "${temp_dir}"
-  nix run "${repo_root}#ai-data-extraction" -- "${extractor_target}"
+  nix run "${repo_root}#ai-data-extractor" -- "${extractor_target}"
 )
 
 shopt -s nullglob

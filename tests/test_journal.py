@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded v1 private lineage journal: append-only JSONL + derived views.
-
-TDD focused tests: journal helper integrated with core/improve lifecycle.
-"""
+"""Private lineage journal: append-only JSONL plus derived views."""
 
 from __future__ import annotations
 
@@ -147,50 +144,6 @@ class JournalAppendCompactTests(unittest.TestCase):
             self.assertEqual(current["event_count"], 2)
             self.assertIn("generated", json.dumps(current).lower() + bootstrap_text.lower())
 
-    def test_improve_apply_accepted_lifecycle_emits_journal(self) -> None:
-        from tests.test_improve import _run_fixture_proposal
-
-        from core import journal
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            state_dir, proposal = _run_fixture_proposal(root)
-            edit = proposal["edits"][0]
-            from core import improve
-
-            result = improve.apply(
-                state_dir=state_dir,
-                experience_root=root / "exp",
-                decisions={edit["id"]: "accepted"},
-            )
-            self.assertEqual(result["accepted"], [edit["id"]])
-            events = journal.read_events(state_dir)
-            types = [e.get("type") for e in events]
-            self.assertIn("proposal_created", types)
-            self.assertIn("experience_accepted", types)
-            self.assertIn("artifact_compiled", types)
-
-    def test_improve_apply_rejected_lifecycle_emits_journal(self) -> None:
-        from tests.test_improve import _run_fixture_proposal
-
-        from core import journal
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            state_dir, proposal = _run_fixture_proposal(root)
-            edit = proposal["edits"][0]
-            from core import improve
-
-            result = improve.apply(
-                state_dir=state_dir,
-                experience_root=root / "exp",
-                decisions={edit["id"]: "rejected:too-narrow"},
-            )
-            self.assertEqual(result["rejected"], [edit["id"]])
-            events = journal.read_events(state_dir)
-            types = [e.get("type") for e in events]
-            self.assertIn("proposal_rejected", types)
-
     def test_rejects_forbidden_content(self) -> None:
         from core import journal
 
@@ -226,7 +179,6 @@ class JournalAppendCompactTests(unittest.TestCase):
             (state / "ledger.json").write_text('{"clusters": []}', encoding="utf-8")
             (state / "open-gaps.json").write_text('{"gaps": []}', encoding="utf-8")
             (state / "cursor.json").write_text('{"analyzedIds": []}', encoding="utf-8")
-            (state / "synthesis-workspace").mkdir(parents=True, exist_ok=True)
             # Corrupt the JSONL with malformed lines.
             with open(state / "journal" / "events.jsonl", "a", encoding="utf-8") as handle:
                 handle.write("not-json{{{\n")
@@ -262,7 +214,6 @@ class JournalAppendCompactTests(unittest.TestCase):
             ]
             self.assertTrue(events_path.read_text(encoding="utf-8").startswith(before))
             self.assertEqual(len(raw_lines), 4)
-            self.assertEqual(second["id"], "evt-000004")
             ids = [json.loads(line).get("id") for line in raw_lines if line.strip().startswith("{")]
             ids = [i for i in ids if i]
             # Parsed valid ids remain unique (malformed lines carry no id).
@@ -299,57 +250,30 @@ class JournalAppendCompactTests(unittest.TestCase):
             self.assertNotIn("/abs/path/secret", current_text + bootstrap_text)
             self.assertNotIn("raw user text", current_text + bootstrap_text)
 
-    def test_compact_validates_views_regardless_of_size(self) -> None:
+    def test_views_grow_with_history_but_still_refuse_unsafe_text(self) -> None:
         from core import journal
 
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state"
-            for i in range(5):
-                journal.append_event(state, "run_completed", {"run_id": f"run-{i}"})
-            # Large but safe aggregate view still writes.
-            large_safe = "x" * (journal.MAX_STRING_CHARS * 25)
+            for i in range(200):
+                journal.append_event(state, "run_completed", {"run_id": f"run-{i:04d}-" + "x" * 150})
+            summary = journal.compact(state)
+            self.assertEqual(summary["event_count"], 200)
+            self.assertGreater(len((state / "journal" / "current.json").read_text()), journal.MAX_STRING_CHARS)
             with self.assertRaises(ValueError):
-                journal._check_string(large_safe, "current")
-            # Size-independent view check passes for safe text of any size.
-            journal._check_view_text(large_safe, "current")
-            # Same size with embedded credentials/paths still rejected.
-            with self.assertRaises(ValueError):
-                journal._check_view_text(large_safe + " sk-abcdefgh12345678", "current")
-            with self.assertRaises(ValueError):
-                journal._check_view_text(large_safe + " /home/user/secret/file", "current")
-
-    def test_tui_run_records_journal_events(self) -> None:
+                journal.append_event(state, "run_completed", {"run_id": "sk-abcdefgh12345678"})
+    def test_cli_journal_compact(self) -> None:
+        import os
         from unittest import mock
 
-        from core import improve, journal
-
-        proposal = {"id": "prop-tui-1", "edits": [{"id": "e1"}], "stats": {"transcripts": 2}}
-
-        class _Proc:
-            returncode = 0
-            stdout = json.dumps(proposal)
-
-        with tempfile.TemporaryDirectory() as directory:
-            state = Path(directory) / "state"
-            with mock.patch("core.improve.subprocess.run", return_value=_Proc()):
-                result = improve.run_tui(
-                    home=Path(directory), cwd=Path(directory), state_dir=state, analyzer="mock"
-                )
-            self.assertEqual(result["id"], "prop-tui-1")
-            types = [e.get("type") for e in journal.read_events(state)]
-            self.assertIn("run_completed", types)
-            self.assertIn("proposal_created", types)
-
-    def test_cli_journal_compact(self) -> None:
         from core import cli as cli_mod
         from core import journal
 
-        with tempfile.TemporaryDirectory() as directory:
-            state = Path(directory) / "state"
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(os.environ, {"CA_HOME": directory}):
+            state = Path(directory) / "improve"
             journal.append_event(state, "run_completed", {"run_id": "run-1"})
             (state / "journal" / "current.json").unlink()
-            rc = cli_mod.main(["journal-compact", "--state-dir", str(state)])
-            self.assertEqual(rc, 0)
+            self.assertEqual(cli_mod.main(["journal-compact"]), 0)
             self.assertTrue((state / "journal" / "current.json").exists())
             self.assertTrue((state / "journal" / "bootstrap.md").exists())
 

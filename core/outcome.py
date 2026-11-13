@@ -25,7 +25,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from core import living_soul
+from core import journal, living_soul
+from core.paths import improve_dir, soul_dir
 
 MISS_CLASSES = {"harm", "non-compliance"}
 
@@ -50,11 +51,11 @@ def is_miss(evidence: Dict) -> bool:
     return bool(negatives or evidence.get("gaps"))
 
 
-def session_outcomes(state_dir: Path, harness: str = "hermes") -> Dict[int, Dict[str, int]]:
+def session_outcomes(harness: str = "hermes") -> Dict[int, Dict[str, int]]:
     """Per generation: analyzed session count and sessions with a miss."""
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
-    for path in sorted((Path(state_dir) / "evidence").glob("*.json")):
+    for path in sorted((improve_dir() / "evidence").glob("*.json")):
         try:
             evidence = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -74,7 +75,7 @@ def session_outcomes(state_dir: Path, harness: str = "hermes") -> Dict[int, Dict
 
 
 def _verdicts_path() -> Path:
-    return living_soul.soul_dir() / "verdicts.jsonl"
+    return soul_dir() / "verdicts.jsonl"
 
 
 def verdicts() -> Dict[int, Dict]:
@@ -96,7 +97,7 @@ def _record_verdict(row: Dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, sort_keys=True) + "\n")
-    living_soul._journal(
+    journal.record(
         "soul_verdict",
         {
             "generation": row["generation"],
@@ -122,7 +123,6 @@ def z_score(current: Dict[str, int], baseline: Dict[str, int]) -> float:
 
 
 def evaluate(
-    state_dir: Path,
     *,
     min_sessions: int = 15,
     z_threshold: float = 1.645,
@@ -146,7 +146,7 @@ def evaluate(
         if record:
             _record_verdict(row)
         return row
-    outcomes = session_outcomes(state_dir)
+    outcomes = session_outcomes()
     empty = {"sessions": 0, "misses": 0}
     now, before = outcomes.get(number, empty), outcomes.get(parent, empty)
     row = {**base, "parent": parent, "current": now, "baseline": before}

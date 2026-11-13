@@ -1,52 +1,32 @@
 #!/usr/bin/env python3
-"""Unified configuration for the layer pipeline.
+"""Layer profiles: everything that varies between the existential and operational paths.
 
-A `LayerProfile` declares everything that varies between the existential and
-operational paths. A `Config` is built from a profile and exposes the shared
-configuration surface used by the pipeline.
+A profile's inputs live under ``profiles/<name>/`` (questions.csv, prompts/)
+and its outputs under ``workspaces/<name>/`` (data/, artifacts/).
 
 Usage:
-    from core.config import Config
-    config = Config.from_profile("existential")
+    from core.config import get_profile
+    profile = get_profile("existential")
 """
 
 from __future__ import annotations
 
-import sys
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import List, Tuple
 
-# Make the repo root importable so `lib.*` resolves regardless of how callers
-# invoke the pipeline.
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+from core import paths
 
-
-from lib.config import (  # noqa: E402
-    APIConfig,
-    DEFAULT_PROVIDER,
-    PathConfig,
-    RedactionConfig,
-    get_data_files as shared_get_data_files,
-    get_most_recent_file as shared_get_most_recent_file,
-    validate_provider_config,
-)
-from lib.prompts import (
-    load_prompt as shared_load_prompt,
-    prompt_mapping_key,
-)  # noqa: E402
-
-
-# ---------------------------------------------------------------------------
-# LayerProfile — single inspectable surface for layer-specific behavior
-# ---------------------------------------------------------------------------
+QUESTION_COLUMNS = ("Question 1", "Question 2", "Question 3")
+ANSWER_COLUMNS = ("AI_Answer 1", "AI_Answer 2", "AI_Answer 3")
+ANSWERS_PREFIX = "questions_with_answers_qmd_"
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 
 @dataclass(frozen=True)
 class SkillSpec:
-    """Declaration for one canonical skill generated from scoped profile context."""
+    """One skill generated from the named headings of a profile's human profile."""
 
     slug: str
     source_group: str
@@ -57,47 +37,70 @@ class SkillSpec:
 class LayerProfile:
     """Static declaration of everything a profile customizes."""
 
-    # Identity
     name: str
     display_name: str
-
-    # On-disk locations
-    profile_dir: Path  # profiles/<name>/
-    workspace_dir: Path  # workspaces/<name>/
-    questions_csv: Path  # profiles/<name>/questions.csv
-    prompts_dir: Path  # profiles/<name>/prompts/runtime
-
-    # QMD collections used for question-answering retrieval.
-    qmd_collections: List[str] = field(default_factory=list)
-
-    # Prompt set: logical_name -> filename inside prompts_dir
-    prompt_files: dict[str, str] = field(default_factory=dict)
-
-    # QMD synthesis prompt placeholders used by question_asker and health checks.
-    qmd_prompt_placeholders: List[str] = field(default_factory=list)
-
-    # Pipeline gates
+    qmd_collections: List[str]
+    prompt_files: dict[str, str]
+    skill_specs: List[SkillSpec]
+    section_header_template: str
+    answer_label: str
+    redaction_patterns: List[str] = field(default_factory=lambda: [r"\b[A-Z][a-z]+\s+[A-Z][a-z]+\b"])
     has_corpus_ingest: bool = False
-    has_tool_specs: bool = False
+    # Tool spec files this profile generates, with what each tool is for.
     supported_tools: dict[str, str] = field(default_factory=dict)
 
-    # Redaction patterns (regex strings)
-    redaction_patterns: List[str] = field(
-        default_factory=lambda: [r"\b[A-Z][a-z]+\s+[A-Z][a-z]+\b"]
-    )
+    @property
+    def profile_dir(self) -> Path:
+        return paths.REPO_ROOT / "profiles" / self.name
 
-    # Prompt creator section header style
-    section_header_template: str = "# Understanding: **{category}**"
-    answer_label: str = "AI Answer"
+    @property
+    def prompts_dir(self) -> Path:
+        return self.profile_dir / "prompts"
 
-    # Skills creator section grouping
-    skill_heading_groups: List[Tuple[str, List[str]]] = field(default_factory=list)
-    skill_specs: List[SkillSpec] = field(default_factory=list)
+    @property
+    def questions_csv(self) -> Path:
+        return self.profile_dir / "questions.csv"
 
+    @property
+    def workspace_dir(self) -> Path:
+        return paths.REPO_ROOT / "workspaces" / self.name
 
-# ---------------------------------------------------------------------------
-# Profile registry — the two layer profiles
-# ---------------------------------------------------------------------------
+    @property
+    def data_dir(self) -> Path:
+        return self.workspace_dir / "data"
+
+    @property
+    def artifacts_dir(self) -> Path:
+        return self.workspace_dir / "artifacts"
+
+    @property
+    def human_profile_path(self) -> Path:
+        return self.artifacts_dir / "human_profile.md"
+
+    @property
+    def tool_specs_dir(self) -> Path:
+        return self.artifacts_dir / "tool_specs"
+
+    def answers_path(self, timestamp: str) -> Path:
+        return self.data_dir / f"{ANSWERS_PREFIX}{timestamp}.csv"
+
+    def latest_answers(self) -> Path:
+        """The newest answered-questions CSV (timestamped names sort by time)."""
+        found = sorted(self.data_dir.glob(f"{ANSWERS_PREFIX}*.csv"))
+        if not found:
+            raise FileNotFoundError(f"No answered questions in {self.data_dir}; run ask-questions first")
+        return found[-1]
+
+    def prompt(self, name: str) -> str:
+        """Load one of the profile's prompt templates by logical name."""
+        if name not in self.prompt_files:
+            raise KeyError(f"Profile '{self.name}' does not declare prompt '{name}'")
+        return (self.prompts_dir / self.prompt_files[name]).read_text(encoding="utf-8").strip()
+
+    def redact(self, text: str) -> str:
+        for pattern in self.redaction_patterns:
+            text = re.sub(pattern, "[REDACTED]", text)
+        return text
 
 
 _PROFILES: dict[str, LayerProfile] = {}
@@ -109,7 +112,6 @@ def register_profile(profile: LayerProfile) -> None:
 
 
 def get_profile(name: str) -> LayerProfile:
-    """Look up a registered profile by name."""
     if name not in _PROFILES:
         available = ", ".join(sorted(_PROFILES)) or "(none registered)"
         raise KeyError(f"Unknown profile '{name}'. Available: {available}")
@@ -117,43 +119,28 @@ def get_profile(name: str) -> LayerProfile:
 
 
 def list_profiles() -> List[str]:
-    """Return the registered profile names."""
     return sorted(_PROFILES)
 
 
-# Built-in profiles ----------------------------------------------------------
+def all_profiles() -> List[LayerProfile]:
+    return [_PROFILES[name] for name in list_profiles()]
+
+
+_SHARED_PROMPTS = {
+    "synthesis_prompt": "synthesis_prompt.md",
+    "initial_template": "initial_template.md",
+    "ensemble_synthesis_template": "ensemble_synthesis_template.md",
+    "skills_creation_template": "skills_creation_template.md",
+    "qmd_query_template": "qmd_query_template.md",
+}
 
 EXISTENTIAL_PROFILE = LayerProfile(
     name="existential",
     display_name="Existential Layer",
-    profile_dir=ROOT_DIR / "profiles" / "existential",
-    workspace_dir=ROOT_DIR / "workspaces" / "existential",
-    questions_csv=ROOT_DIR / "profiles" / "existential" / "questions.csv",
-    prompts_dir=ROOT_DIR / "profiles" / "existential" / "prompts",
     qmd_collections=["Journal", "Personal"],
-    prompt_files={
-        "synthesis_prompt": "synthesis_prompt.md",
-        "initial_template": "initial_template.md",
-        "ensemble_synthesis_template": "ensemble_synthesis_template.md",
-        "skills_creation_template": "skills_creation_template.md",
-        "qmd_query_template": "qmd_query_template.md",
-    },
-    qmd_prompt_placeholders=["synthesis_prompt", "question", "retrieved_passages"],
-    has_corpus_ingest=False,
-    has_tool_specs=False,
+    prompt_files=dict(_SHARED_PROMPTS),
     section_header_template="# Understanding: **{category}**",
     answer_label="AI Answer",
-    skill_heading_groups=[
-        (
-            "group-1",
-            ["Core Frame", "High-Leverage Signals", "Interpretation Rules"],
-        ),
-        ("group-2", ["Success Conditions", "Constraint Map"]),
-        (
-            "group-3",
-            ["Growth / Trajectory", "Counterpart Implications", "Open Questions"],
-        ),
-    ],
     skill_specs=[
         SkillSpec(
             slug="mode-detection",
@@ -168,11 +155,7 @@ EXISTENTIAL_PROFILE = LayerProfile(
         SkillSpec(
             slug="relational-orientation",
             source_group="group-3",
-            source_headings=(
-                "Growth / Trajectory",
-                "Counterpart Implications",
-                "Open Questions",
-            ),
+            source_headings=("Growth / Trajectory", "Counterpart Implications", "Open Questions"),
         ),
     ],
 )
@@ -180,29 +163,9 @@ EXISTENTIAL_PROFILE = LayerProfile(
 OPERATIONAL_PROFILE = LayerProfile(
     name="operational",
     display_name="Operational Layer",
-    profile_dir=ROOT_DIR / "profiles" / "operational",
-    workspace_dir=ROOT_DIR / "workspaces" / "operational",
-    questions_csv=ROOT_DIR / "profiles" / "operational" / "questions.csv",
-    prompts_dir=ROOT_DIR / "profiles" / "operational" / "prompts",
     qmd_collections=["Base", "Consulting", "Customers"],
-    prompt_files={
-        "synthesis_prompt": "synthesis_prompt.md",
-        "initial_template": "initial_template.md",
-        "ensemble_synthesis_template": "ensemble_synthesis_template.md",
-        "skills_creation_template": "skills_creation_template.md",
-        "tool_specs_creation_template": "tool_specs_creation_template.md",
-        "qmd_query_template": "qmd_query_template.md",
-    },
-    qmd_prompt_placeholders=[
-        "synthesis_prompt",
-        "category",
-        "goal",
-        "element",
-        "question",
-        "retrieved_passages",
-    ],
+    prompt_files={**_SHARED_PROMPTS, "tool_specs_creation_template": "tool_specs_creation_template.md"},
     has_corpus_ingest=True,
-    has_tool_specs=True,
     supported_tools={
         "memory.md": "Memory agent for durable continuity and retrieval.",
         "tasks.md": "Task agent for capturing, shaping, and retrieving commitments.",
@@ -213,28 +176,6 @@ OPERATIONAL_PROFILE = LayerProfile(
     ],
     section_header_template="# Operational Category: **{category}**",
     answer_label="Operational Answer",
-    skill_heading_groups=[
-        (
-            "group-1",
-            ["Core Frame", "High-Leverage Signals", "Salience Structure"],
-        ),
-        (
-            "group-2",
-            ["Lived Thresholds", "Mode Shifts", "Breakdown and Repair"],
-        ),
-        (
-            "group-3",
-            ["Quality Detection", "Artifact Relation", "Success Conditions"],
-        ),
-        (
-            "group-4",
-            [
-                "Tensions and Tradeoffs",
-                "Boundary Conditions",
-                "Counterpart Implications",
-            ],
-        ),
-    ],
     skill_specs=[
         SkillSpec(
             slug="scope-framing",
@@ -254,237 +195,10 @@ OPERATIONAL_PROFILE = LayerProfile(
         SkillSpec(
             slug="boundary-handoff",
             source_group="group-4",
-            source_headings=(
-                "Tensions and Tradeoffs",
-                "Boundary Conditions",
-                "Counterpart Implications",
-            ),
+            source_headings=("Tensions and Tradeoffs", "Boundary Conditions", "Counterpart Implications"),
         ),
     ],
 )
 
 register_profile(EXISTENTIAL_PROFILE)
 register_profile(OPERATIONAL_PROFILE)
-
-
-# ---------------------------------------------------------------------------
-# Path / CSV / Prompts / Output sub-configs derived from a profile
-# ---------------------------------------------------------------------------
-
-
-class ProfilePathConfig(PathConfig):
-    """Filesystem layout for a profile rooted at its workspace directory.
-
-    Profile-owned inputs (questions.csv, prompts/) live under `profile_dir`;
-    runtime outputs (data/, artifacts/) live under `workspace_dir`.
-    """
-
-    def __init__(self, profile: LayerProfile) -> None:
-        paths = {
-            "DATA_DIR": "data",
-            "INTAKE_DIR": "data/intake",
-            "READY_DIR": "data/ready",
-            "ARTIFACTS_DIR": "artifacts",
-            "TOOL_SPECS_DIR": "artifacts/tool_specs",
-        }
-        super().__init__(profile.workspace_dir, paths)
-        # Profile-owned inputs are not under workspace_dir; attach explicitly.
-        self.PROFILE_DIR = profile.profile_dir
-        self.PROMPTS_DIR = profile.prompts_dir.parent
-        self.PROMPT_RUNTIME_DIR = profile.prompts_dir
-        self.QUESTIONS_CSV = profile.questions_csv
-
-    def ensure_directories_exist(self) -> None:
-        """Ensure workspace directories exist; prompt/profile dirs are read-only."""
-        for attr in [
-            "DATA_DIR",
-            "INTAKE_DIR",
-            "READY_DIR",
-            "ARTIFACTS_DIR",
-            "TOOL_SPECS_DIR",
-        ]:
-            getattr(self, attr).mkdir(parents=True, exist_ok=True)
-
-
-@dataclass
-class CSVConfig:
-    """CSV schema for profile question and answer datasets."""
-
-    profile: LayerProfile
-    DELIMITER: str = ","
-    QUOTECHAR: str = '"'
-
-    QUESTION_COLUMNS: List[str] = field(
-        default_factory=lambda: ["Question 1", "Question 2", "Question 3"]
-    )
-    ANSWER_COLUMNS: List[str] = field(
-        default_factory=lambda: ["AI_Answer 1", "AI_Answer 2", "AI_Answer 3"]
-    )
-    CATEGORY_KEY_COLUMNS: List[str] = field(
-        default_factory=lambda: ["Category", "Goal", "Element"]
-    )
-
-    @property
-    def FIELDNAMES(self) -> List[str]:
-        base = [
-            "Category",
-            "Goal",
-            "Element",
-            *self.QUESTION_COLUMNS,
-        ]
-        base.extend(self.ANSWER_COLUMNS)
-        return base
-
-
-@dataclass
-class ProfileRedactionConfig(RedactionConfig):
-    """Redaction config sourced from the profile's pattern list."""
-
-    SENSITIVE_PATTERNS: List[str] = field(default_factory=list)
-
-
-@dataclass
-class PromptsConfig:
-    """Lazily-loaded prompt template strings declared by the profile."""
-
-    profile: LayerProfile
-
-    def _load(self, name: str) -> str:
-        if name not in self.profile.prompt_files:
-            raise KeyError(
-                f"Profile '{self.profile.name}' does not declare prompt '{name}'"
-            )
-        return shared_load_prompt(
-            str(self.profile.prompts_dir),
-            prompt_mapping_key(self.profile.prompt_files),
-            name,
-        )
-
-    @property
-    def synthesis_prompt(self) -> str:
-        return self._load("synthesis_prompt")
-
-    @property
-    def initial_template(self) -> str:
-        return self._load("initial_template")
-
-    @property
-    def ensemble_synthesis_template(self) -> str:
-        return self._load("ensemble_synthesis_template")
-
-    @property
-    def skills_creation_template(self) -> str:
-        return self._load("skills_creation_template")
-
-    @property
-    def qmd_query_template(self) -> str:
-        return self._load("qmd_query_template")
-
-    @property
-    def tool_specs_creation_template(self) -> str:
-        return self._load("tool_specs_creation_template")
-
-    def has(self, name: str) -> bool:
-        """Whether the profile declares this prompt name."""
-        return name in self.profile.prompt_files
-
-
-@dataclass
-class OutputConfig:
-    """Output file naming patterns."""
-
-    QUESTIONS_WITH_ANSWERS_PATTERN: str = "questions_with_answers_qmd_{timestamp}.csv"
-    TIMESTAMP_FORMAT: str = "%Y%m%d_%H%M%S"
-
-
-# ---------------------------------------------------------------------------
-# Top-level Config aggregate
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Config:
-    """Top-level configuration bound to a single layer profile."""
-
-    profile: LayerProfile
-    api: APIConfig = field(default_factory=APIConfig)
-    paths: ProfilePathConfig = field(init=False)
-    csv: CSVConfig = field(init=False)
-    redaction: ProfileRedactionConfig = field(init=False)
-    prompts: PromptsConfig = field(init=False)
-    output: OutputConfig = field(default_factory=OutputConfig)
-
-    def __post_init__(self) -> None:
-        self.paths = ProfilePathConfig(self.profile)
-        self.csv = CSVConfig(profile=self.profile)
-        self.redaction = ProfileRedactionConfig(
-            SENSITIVE_PATTERNS=list(self.profile.redaction_patterns),
-        )
-        self.prompts = PromptsConfig(profile=self.profile)
-        self.paths.ensure_directories_exist()
-
-    # ----- factory methods ---------------------------------------------------
-
-    @classmethod
-    def from_profile(cls, profile_name: str) -> "Config":
-        """Build a config bound to the named profile."""
-        return cls(profile=get_profile(profile_name))
-
-    # ----- validation --------------------------------------------------------
-
-    def validate(self, providers: Optional[List[str]] = None) -> List[str]:
-        """Validate provider config and required profile inputs."""
-        target_providers = providers or [
-            "xai", "anthropic", "openai",
-        ]
-        issues: List[str] = []
-        for provider in target_providers:
-            issues.extend(validate_provider_config(self.api, provider))
-        if not self.paths.QUESTIONS_CSV.exists():
-            issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
-        return issues
-
-    def validate_llm_access(self, provider: str = "anthropic") -> List[str]:
-        """Validate just provider/LLM access for scripts that use a single model."""
-        return validate_provider_config(self.api, provider)
-
-    def validate_question_answering(self) -> List[str]:
-        """Validate everything required to run the QMD-backed question loop."""
-        issues: List[str] = []
-        if not self.paths.QUESTIONS_CSV.exists():
-            issues.append(f"Questions CSV not found at {self.paths.QUESTIONS_CSV}")
-        if not self.profile.qmd_collections:
-            issues.append(
-                f"No QMD collections configured for profile '{self.profile.name}'"
-            )
-        issues.extend(self.validate_llm_access(DEFAULT_PROVIDER))
-        return issues
-
-    # ----- helper accessors --------------------------------------------------
-
-    def get_data_files(self, pattern: str) -> List[Path]:
-        return shared_get_data_files(self.paths.DATA_DIR, pattern)
-
-    def get_most_recent_file(self, pattern: str) -> Path:
-        return shared_get_most_recent_file(self.paths.DATA_DIR, pattern)
-
-    def get_redaction_function(self) -> Callable[[str, Optional[List[str]]], str]:
-        """Return the configured redaction function."""
-        return self.redaction.get_redaction_function()
-
-
-__all__ = [
-    "APIConfig",
-    "Config",
-    "CSVConfig",
-    "LayerProfile",
-    "OutputConfig",
-    "PromptsConfig",
-    "ProfilePathConfig",
-    "ProfileRedactionConfig",
-    "EXISTENTIAL_PROFILE",
-    "OPERATIONAL_PROFILE",
-    "get_profile",
-    "list_profiles",
-    "register_profile",
-]

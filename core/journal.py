@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded v1 private lineage journal.
+"""Private lineage journal of what the improvement loop did.
 
 Append-only JSONL history at ``<stateDir>/journal/events.jsonl`` with
 derived deterministic views (``current.json``, ``bootstrap.md``).
@@ -10,11 +10,7 @@ Contract:
 - Sanitized before EVERY write: rejects raw transcripts/prompts/evidence
   quotes/full SOUL/credentials/absolute paths in events and excludes them
   from generated views.
-- Journal never applies/deploys/alters SOUL/Hermes; it only writes under
-  ``<stateDir>/journal``.
-- Retention: journal never GCs prompts/evidence/proposals/ledger/open-gaps/
-  synthesis workspace/cursor; those live outside ``journal/`` with current
-  behavior.
+- It only writes under ``<stateDir>/journal`` and never deletes anything else.
 - Payloads may carry ``sources``/``source_refs`` as short id refs only;
   no KB Markdown rendering (views list refs as plain text).
 """
@@ -25,9 +21,13 @@ import fcntl
 import json
 import os
 import re
+import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List
+
+from core.paths import improve_dir
 
 JOURNAL_DIRNAME = "journal"
 EVENTS_FILENAME = "events.jsonl"
@@ -40,7 +40,7 @@ ALLOWED_TYPES = frozenset(
         "proposal_created",
         "experience_accepted",
         "proposal_rejected",
-        "artifact_compiled",
+        "artifact_compiled",  # no longer emitted; kept so older journals still read
         "soul_compiled",
         "soul_rolled_back",
         "soul_verdict",
@@ -162,10 +162,6 @@ def _check_key(key: Any) -> None:
         raise ValueError(f"journal payload key {key!r} is forbidden (raw content excluded)")
 
 
-def _journal_lock_path(state_dir: Path) -> Path:
-    return journal_dir(Path(state_dir)) / ".journal.lock"
-
-
 def journal_dir(state_dir: Path) -> Path:
     """Return the journal directory for a state dir."""
     return Path(state_dir) / JOURNAL_DIRNAME
@@ -241,11 +237,6 @@ def _validate_value(value: Any, field: str) -> None:
     if value is None or isinstance(value, (bool, int, float)):
         return
     if isinstance(value, str):
-        if len(value) > MAX_ID_CHARS and field.lower() not in ("title", "reason", "kind", "note"):
-            # Long free text (transcript/prompt/quote/SOUL bodies) is rejected.
-            # Short titles/reasons/notes are allowed after pattern checks.
-            if len(value) > MAX_STRING_CHARS:
-                raise ValueError(f"journal payload field {field!r} too long")
         _check_string(value, field)
         return
     if isinstance(value, list):
@@ -320,8 +311,6 @@ def read_events(state_dir: Path) -> List[Dict[str, Any]]:
             continue
         if not isinstance(parsed, dict):
             continue
-        if parsed.get("type") not in ALLOWED_TYPES:
-            continue
         try:
             _validate_event(parsed)
         except ValueError:
@@ -330,45 +319,49 @@ def read_events(state_dir: Path) -> List[Dict[str, Any]]:
     return events
 
 
-def append_event(state_dir: Path, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate then append one event; regenerates views. Rejects forbidden content."""
-    if event_type not in ALLOWED_TYPES:
-        raise ValueError(f"unknown journal event type {event_type!r}")
-    if not isinstance(payload, dict):
-        raise ValueError("journal payload must be an object")
-    _validate_payload(payload)
-    base = Path(state_dir)
-    directory = _ensure_journal_dir(base)
+@contextmanager
+def _locked(state_dir: Path) -> Iterator[Path]:
+    """Hold the journal's exclusive lock; yields the journal directory."""
+    directory = _ensure_journal_dir(Path(state_dir))
     lock_path = directory / ".journal.lock"
     with open(lock_path, "a+", encoding="utf-8") as lock:
         _restrict_file(lock_path)
-        # State-local blocking lock for the full critical section.
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
-            events_path = directory / EVENTS_FILENAME
-            existing = read_events(base)
-            next_index = _physical_line_count(events_path, fallback=len(existing)) + 1
-            event = {
-                "id": f"evt-{next_index:06d}",
-                "type": event_type,
-                "at": _utcnow(),
-                "payload": json.loads(json.dumps(payload, sort_keys=True)),
-            }
-            with open(events_path, "a", encoding="utf-8") as handle:
-                handle.write(json.dumps(event, sort_keys=True) + "\n")
-                handle.flush()
-                try:
-                    os.fsync(handle.fileno())
-                except OSError:
-                    pass
-            _restrict_file(events_path)
-            _regen_views_unlocked(base, directory)
+            yield directory
         finally:
-            try:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-            except OSError:
-                pass
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def append_event(state_dir: Path, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate then append one event; regenerates views. Rejects forbidden content."""
+    _validate_event({"type": event_type, "payload": payload})
+    base = Path(state_dir)
+    with _locked(base) as directory:
+        events_path = directory / EVENTS_FILENAME
+        next_index = _physical_line_count(events_path, fallback=len(read_events(base))) + 1
+        event = {
+            "id": f"evt-{next_index:06d}",
+            "type": event_type,
+            "at": _utcnow(),
+            "payload": json.loads(json.dumps(payload, sort_keys=True)),
+        }
+        with open(events_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        _restrict_file(events_path)
+        _regen_views_unlocked(base, directory)
     return event
+
+
+def record(event_type: str, payload: Dict[str, Any]) -> None:
+    """Append to CA home's journal. The journal is a record of what happened,
+    so failing to write it warns instead of undoing the change it describes."""
+    try:
+        append_event(improve_dir(), event_type, payload)
+    except (OSError, ValueError) as exc:
+        print(f"warning: journal event {event_type} not recorded: {exc}", file=sys.stderr)
 
 
 def _summarize(events: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -378,38 +371,24 @@ def _summarize(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     proposals: List[str] = []
     runs: List[str] = []
     source_refs: List[str] = []
+    def keep(bucket: List[str], value: Any) -> None:
+        ref = _sanitize_ref(value)
+        if ref and ref not in bucket:
+            bucket.append(ref)
+
     for event in events:
         event_type = str(event.get("type"))
         by_type[event_type] = by_type.get(event_type, 0) + 1
         payload = event.get("payload", {}) if isinstance(event.get("payload"), dict) else {}
-        for key in ("run_id",):
-            value = payload.get(key)
-            # Exclude unsafe values rather than emitting them into views.
-            ref = _sanitize_ref(value) if isinstance(value, str) else None
-            if ref and ref not in runs:
-                runs.append(ref)
-        for key in ("proposal_id",):
-            value = payload.get(key)
-            ref = _sanitize_ref(value) if isinstance(value, str) else None
-            if ref and ref not in proposals:
-                proposals.append(ref)
-        record_id = payload.get("record_id")
-        if event_type == "experience_accepted" and isinstance(record_id, str):
-            ref = _sanitize_ref(record_id)
-            if ref and ref not in accepted:
-                accepted.append(ref)
-        edit_id = payload.get("edit_id")
-        if event_type == "proposal_rejected" and isinstance(edit_id, str):
-            ref = _sanitize_ref(edit_id)
-            if ref and ref not in rejected:
-                rejected.append(ref)
+        keep(runs, payload.get("run_id"))
+        keep(proposals, payload.get("proposal_id"))
+        if event_type == "experience_accepted":
+            keep(accepted, payload.get("record_id"))
+        if event_type == "proposal_rejected":
+            keep(rejected, payload.get("edit_id"))
         sources = payload.get("sources", payload.get("source_refs", []))
-        if isinstance(sources, list):
-            for item in sources:
-                # Safely reduce: keep only short id refs, drop the rest.
-                ref = _sanitize_ref(item)
-                if ref and ref not in source_refs:
-                    source_refs.append(ref)
+        for item in sources if isinstance(sources, list) else []:
+            keep(source_refs, item)
     last = events[-1] if events else None
     summary: Dict[str, Any] = {
         "event_count": len(events),
@@ -464,89 +443,25 @@ def _render_bootstrap(summary: Dict[str, Any]) -> str:
     lines.extend(["", "## Source refs (ids only, no KB rendering)", ""])
     refs = summary.get("source_refs", [])
     lines.extend([f"- {item}" for item in refs] or ["- (none)"])
-    lines.extend(
-        [
-            "",
-            "## Retention / state contract",
-            "",
-            "Journal never garbage-collects prompts or evidence. Outside `journal/` "
-            "with current behavior:",
-            "",
-            "- `evidence/` persisted distilled evidence (kept).",
-            "- `prompts/<runId>__*.md` + `.json` sidecars rendered model prompts (kept, 0600).",
-            "- `proposal.json` current proposal (kept; apply consumes).",
-            "- `ledger.json` / `open-gaps.json` folded ledger and eligible open gaps (kept).",
-            "- `synthesis-workspace/` private synthesis workspace (kept).",
-            "- `cursor.json` run cursor (kept).",
-            "- `rejections.jsonl` rejection records (kept).",
-            "",
-            "Journal writes only under `<stateDir>/journal/`; it never applies, "
-            "deploys, or alters SOUL/Hermes.",
-            "",
-        ]
-    )
+    lines.append("")
     return "\n".join(lines)
 
 
 def _regen_views_unlocked(base: Path, directory: Path) -> Dict[str, Any]:
-    """Regenerate views; caller must hold the journal flock."""
-    events = read_events(base)
-    # Defense in depth: read_events already skips unsafe lines, but exclude
-    # (rather than emit) anything still failing validation before view writes.
-    safe_events: List[Dict[str, Any]] = []
-    for event in events:
-        try:
-            _validate_event(event)
-        except ValueError:
-            continue
-        safe_events.append(event)
-    events = safe_events
-    summary = _summarize(events)
-    current_path = directory / CURRENT_FILENAME
-    bootstrap_path = directory / BOOTSTRAP_FILENAME
+    """Regenerate views; caller must hold the journal lock."""
+    summary = _summarize(read_events(base))
     current_text = json.dumps(summary, indent=2, sort_keys=True) + "\n"
-    # Views are validated before EVERY write, regardless of aggregate size.
-    _check_view_text(current_text, "current")
-    current_path.write_text(current_text, encoding="utf-8")
-    _restrict_file(current_path)
     bootstrap_text = _render_bootstrap(summary)
-    _check_view_text(bootstrap_text, "bootstrap")
-    bootstrap_path.write_text(bootstrap_text, encoding="utf-8")
-    _restrict_file(bootstrap_path)
+    for name, text in ((CURRENT_FILENAME, current_text), (BOOTSTRAP_FILENAME, bootstrap_text)):
+        _check_view_text(text, name)
+        path = directory / name
+        path.write_text(text, encoding="utf-8")
+        _restrict_file(path)
     return summary
 
 
 def compact(state_dir: Path) -> Dict[str, Any]:
-    """Regenerate deterministic views from tolerant event read.
-
-    Tolerates missing/malformed JSONL; never deletes evidence, prompts,
-    proposals, ledger/open-gaps, synthesis workspace, or cursor state;
-    never touches the repo, SOUL, or Hermes.
-    """
+    """Regenerate views from the events that still parse; touches nothing outside journal/."""
     base = Path(state_dir)
-    directory = _ensure_journal_dir(base)
-    lock_path = directory / ".journal.lock"
-    with open(lock_path, "a+", encoding="utf-8") as lock:
-        _restrict_file(lock_path)
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        try:
-            return _regen_views_unlocked(base, directory)
-        finally:
-            try:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-            except OSError:
-                pass
-
-
-__all__ = [
-    "ALLOWED_TYPES",
-    "BOOTSTRAP_FILENAME",
-    "CURRENT_FILENAME",
-    "EVENTS_FILENAME",
-    "JOURNAL_DIRNAME",
-    "append_event",
-    "compact",
-    "journal_dir",
-    "read_events",
-    "sanitize_sources",
-]
+    with _locked(base) as directory:
+        return _regen_views_unlocked(base, directory)

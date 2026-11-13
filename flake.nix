@@ -32,14 +32,9 @@
             };
           }
         );
-      mkLayerExports =
-        _profileName: workspaceDir:
-        let
-          humanProfile = workspaceDir + "/artifacts/human_profile.md";
-        in
-        {
-          inherit humanProfile;
-        };
+      mkLayerExports = workspaceDir: {
+        humanProfile = workspaceDir + "/artifacts/human_profile.md";
+      };
 
       # --- Skills ---
       skillsDir = ./workspaces/skills;
@@ -70,8 +65,8 @@
         }) skillEntries
       );
 
-      existential = mkLayerExports "existential" ./workspaces/existential;
-      operational = (mkLayerExports "operational" ./workspaces/operational) // {
+      existential = mkLayerExports ./workspaces/existential;
+      operational = (mkLayerExports ./workspaces/operational) // {
         toolSpecs = {
           memory = ./workspaces/operational/artifacts/tool_specs/memory.md;
           tasks = ./workspaces/operational/artifacts/tool_specs/tasks.md;
@@ -90,31 +85,22 @@
             runtimeInputs = [ pkgs.python314 ];
             text = ''
               export PYTHONPATH=${self}
-              exec python -P -m core.langfuse_review "$@"
+              exec python -P -m core review-queue "$@"
             '';
           };
-          # Interactive by default: renders the live stderr progress view and
-          # writes only a private proposal. The systemd timer below explicitly
-          # selects --headless because it has no terminal to paint.
-          ca-improve = pkgs.writeShellApplication {
-            name = "ca-improve";
+          # `ca improve-run` drives the Node improvement runtime, so node ships with it.
+          ca = pkgs.writeShellApplication {
+            name = "ca";
             runtimeInputs = [
               caPython
               pkgs.nodejs
             ];
             text = ''
               export PYTHONPATH=${self}
-              exec python -P -m core improve-run "$@"
-            '';
-          };
-          ca = pkgs.writeShellApplication {
-            name = "ca";
-            runtimeInputs = [ caPython ];
-            text = ''
-              export PYTHONPATH=${self}
               exec python -P -m core "$@"
             '';
           };
+          ai-data-extractor = ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default;
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
         }
       );
@@ -192,10 +178,6 @@
               type = lib.types.package;
               default = self.packages.${system}.ca;
               description = "CA CLI (`python -m core`) carrying the bootstrap SOUL.";
-            };
-            improvePackage = lib.mkOption {
-              type = lib.types.package;
-              default = self.packages.${system}.ca-improve;
             };
             hermesHome = lib.mkOption {
               type = lib.types.str;
@@ -301,7 +283,8 @@
                 ++ lib.optional (cfg.llm.apiKeyFile != null) "CA_LLM_API_KEY_FILE=${cfg.llm.apiKeyFile}";
                 ExecStart = lib.escapeShellArgs (
                   [
-                    "${cfg.improvePackage}/bin/ca-improve"
+                    "${cfg.package}/bin/ca"
+                    "improve-run"
                     "--headless"
                   ]
                   ++ lib.optionals cfg.improve.auto [
@@ -348,7 +331,6 @@
               (pkgs.python314.withPackages (
                 python-pkgs: with python-pkgs; [
                   python-dotenv
-                  pydantic
                   anthropic
                   pandas
                   openai
@@ -359,7 +341,7 @@
                 cudaSupport = false;
               })
               pkgs.nodejs
-              ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
+              self.packages.${pkgs.stdenv.hostPlatform.system}.ai-data-extractor
             ];
           };
         }

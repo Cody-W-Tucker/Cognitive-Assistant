@@ -2,7 +2,9 @@
 
 The repo is the bootstrap: it collects source data and builds the bootstrap
 SOUL (`workspaces/alignment/artifacts/SOUL.md`). What Hermes runs is the
-*living* SOUL, which lives in CA's state dir and never flows back into the repo.
+*living* SOUL, which lives under CA home and never flows back into the repo.
+Code: `core/living_soul.py` (generations), `core/experience.py` (records),
+`core/outcome.py` (verdicts), `core/improve.py` (`auto_cycle`).
 
 ```
 <CA home>/                       $CA_HOME or $XDG_DATA_HOME/cognitive-assistant
@@ -13,6 +15,8 @@ SOUL (`workspaces/alignment/artifacts/SOUL.md`). What Hermes runs is the
   soul/generations/NNNN.md       every compiled SOUL, never edited
   soul/generations/NNNN.json     its inputs: bootstrap sha, record ids, reason
   soul/current.md                symlink to the active generation
+  soul/activations.jsonl         when each generation became active
+  soul/verdicts.jsonl            outcome verdict per generation
 $HERMES_HOME/SOUL.md             symlink to soul/current.md
 ```
 
@@ -50,8 +54,11 @@ step per run:
    miss rate rose with a one-sided two-proportion z above 1.645, else `keep`.
    Verdicts are final and recorded in `soul/verdicts.jsonl` and the journal.
 3. `revert` withdraws the records that generation added (`reverted.jsonl`, kept
-   as lineage) and compiles without them. `pending` adopts nothing. `keep`
-   adopts the first record the annotation stage kept, as a new generation,
+   as lineage), logs them in `improve/rejections.jsonl` with reason
+   `reverted` so later runs do not propose them again on the same sessions,
+   and compiles without them. `pending` adopts nothing. `keep` adopts the
+   first record the annotation stage kept (never one withdrawn before), as a
+   new generation,
    but only once the active generation has `--min-sessions` sessions of its
    own, since those are the baseline the new change will be judged against.
    On a fresh install the first weeks only build that baseline.
@@ -67,18 +74,25 @@ verbatim line of the session, and `ca soul status` shows every verdict.
 
 ## Rebootstrap
 
-Runs on the NAS when you choose to. It reads source data together with the
-lineage under CA home, writes a new bootstrap SOUL plus `absorbed.json` naming
-the records it took into account, and those records then drop out of the
-learned section on the next compile.
+Runs when you choose to: `python -m core build-translation-layer` (or
+`update`) on a machine whose CA home holds the lineage. It reads source data
+together with every record under `experience/authored/` (adopted and
+withdrawn), writes a new bootstrap SOUL plus `absorbed.json` naming the
+adopted records it took into account, and those records then drop out of the
+learned section on the next compile. See
+[Alignment Artifacts](Alignment-Artifacts.md).
 
 ## Home Manager
 
 `homeManagerModules.cognitive-assistant` owns `$HERMES_HOME/SOUL.md` (remove it
 from `hermesHomeFiles`, which would overwrite the link), compiles on
-activation, and runs `ca-improve --headless --auto --harness hermes` weekly with
-`HERMES_HOME` and the model endpoint set. Every model call is a tool-free chat
-completion to `llm.baseUrl` (see the CLI reference); no agent harness runs.
+activation (`ca soul compile` then `ca soul link`), and runs
+`ca improve-run --headless --auto --min-sessions <n> --harness hermes` from a
+weekly user timer with `HERMES_HOME` and the `CA_LLM_*` endpoint variables set.
+Every model call is a tool-free chat completion to `llm.baseUrl` (see
+[Improvement Loop](Improvement-Loop.md)); no agent harness runs. Other options:
+`improve.enable`, `improve.auto`, `improve.minSessions`, `improve.harnesses`,
+`improve.timerConfig`, `llm.roleModels`, `llm.apiKeyFile`, `package`.
 
 ```nix
 services.cognitive-assistant = {

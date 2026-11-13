@@ -38,7 +38,7 @@ class LangfuseReviewTests(unittest.TestCase):
                 import json
                 return json.dumps(self.payload).encode()
 
-        def opener(request):
+        def opener(request, **_kwargs):
             calls.append(request)
             query = parse_qs(urlsplit(request.full_url).query)
             if "/scores" in request.full_url:
@@ -86,7 +86,7 @@ class LangfuseReviewTests(unittest.TestCase):
                 import json
                 return json.dumps(self.payload).encode()
 
-        def opener(request):
+        def opener(request, **_kwargs):
             requests.append(request)
             page = int(parse_qs(urlsplit(request.full_url).query)["page"][0])
             if "items" in request.full_url:

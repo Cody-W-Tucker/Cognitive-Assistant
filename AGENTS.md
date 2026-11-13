@@ -1,21 +1,29 @@
 # Agent Guidelines for Cognitive-Assistant
 
-Full documentation for the Cognitive-Assistant project is in `docs/`.
+Full documentation for the Cognitive-Assistant project is in `docs/` (index:
+`docs/README.md`).
 
 ## Layout
 
 The repo is one unified pipeline parameterized by a layer profile.
 
 ```
-core/                 unified pipeline (one set of scripts)
+core/                 unified pipeline and CLI (config.py, paths.py, llm.py, stage modules,
+                      improve.py / experience.py / living_soul.py / outcome.py / journal.py)
+improve/              Node improvement runtime (bin/ca-improve.js, src/, prompts/, tests/)
 profiles/<name>/      profile-specific inputs (questions.csv, prompts/)
-workspaces/<name>/    runtime data (data/, artifacts/) per profile
-lib/                  shared infrastructure (config, llm, prompts, health)
-scripts/              shell launchers and utility entry points
-tests/                profile-aware health tests
+profiles/alignment/   prompts for the cross-profile stages (not a profile)
+workspaces/<name>/    data/ (gitignored) and artifacts/ per profile
+workspaces/skills/    the skill store
+workspaces/alignment/ bootstrap SOUL, interaction posture, alignment spec
+tests/                Python unit tests
 ```
 
 Two profiles are registered: `existential` and `operational`.
+
+Runtime state (improvement pass, experience records, living SOUL) lives under
+CA home (`$CA_HOME`, default `$XDG_DATA_HOME/cognitive-assistant`), never in
+the repo. See `docs/Workspaces-and-Generated-Artifacts.md`.
 
 ## CLI
 
@@ -43,34 +51,49 @@ python -m core --profile operational build-tool-specs
 # Profile-aware validation
 python -m core --profile <name> health-check
 
-# Alignment spec generation
-python -m core build-alignment-spec
+# Everything after ask-questions, for every profile
+python -m core update
+
+# Improvement loop and living SOUL (state under CA home)
+python -m core improve-run [--headless [--auto]]
+python -m core improve-apply [--proposal <id> --decisions "e1=accepted e2=rejected:too-narrow"]
+python -m core improve-synthesize
+python -m core journal-compact
+python -m core soul compile|status|rollback <n>|link <hermes-home>
 ```
+
+Full flag reference: `docs/CLI-and-Command-Reference.md`.
 
 Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)
 fail with a clear error rather than silently no-op.
 
 `build-skills` writes canonical generated skills to
-`workspaces/skills/<profile>/<skill>/SKILL.md` for generated profile skills.
-Manual imports can still live under purpose categories like
-`workspaces/skills/workflow/<skill>/SKILL.md`.
+`workspaces/skills/<profile>/<skill>/SKILL.md` and deletes skills in that
+profile folder the profile no longer declares. Manual imports live under
+purpose categories like `workspaces/skills/workflow/<skill>/SKILL.md`.
 `build-translation-layer` reads from both profiles and writes the orchestrator
-translation layer (`INTERACTION_POSTURE.md` and `SOUL.md`) to
+translation layer (`INTERACTION_POSTURE.md` and `SOUL.md`, plus
+`absorbed.json` naming the lineage records it took in) to
 `workspaces/alignment/artifacts/`.
 `build-alignment-spec` reads unified skills and writes the alignment spec.
-`update` runs the full pipeline: per-profile stages (including `build-skills`), then cross-profile
-stages (`build-translation-layer` + `build-alignment-spec`).
+`update` runs `build-prompts`, `build-skills` and (where supported)
+`build-tool-specs` for one or all profiles, then the cross-profile stages
+(`build-translation-layer` + `build-alignment-spec`). It does not run
+`ingest-corpus` or `ask-questions`.
 
-See `profiles/alignment/README.md` for details.
+See `profiles/alignment/README.md` and `docs/Alignment-Artifacts.md` for details.
 
 ## Tests
 
 ```bash
-nix develop --command python -m unittest tests.test_health -v
+nix develop --command python -m unittest discover -s tests -v   # all Python tests
+nix develop --command bash -c 'cd improve && npm test'           # Node runtime tests
 ```
 
-The health test runs `check_prompt_files` and `check_prompt_rendering` against
-every registered profile.
+`tests/` has no `__init__.py`: use `discover -s tests` (not `-t .`), or name
+modules directly, e.g. `python -m unittest tests.test_improve`.
+`tests/test_ascii.py` enforces strict ASCII on code, root `*.md`, alignment
+prompts/artifacts and several `docs/` pages.
 
 ## Code Style
 
@@ -81,10 +104,19 @@ every registered profile.
 **Naming:** snake_case for functions/variables, PascalCase for classes,
 UPPER_CASE for constants.
 
-**Configuration:** Environment variables for secrets (.env). All layer-specific
-behavior is declared once in `core/config.py` as a `LayerProfile` and looked up
-by name. Don't add new per-layer scripts; extend a profile.
+**Configuration:** Environment variables for secrets (.env):
+`<PROVIDER>_API_KEY` / `_MODEL` / `_MAX_OUTPUT` for bootstrap stages
+(`core/llm.py`), `CA_LLM_*` for the improvement runtime (`improve/src/model.js`).
+All layer-specific behavior is declared once in `core/config.py` as a
+`LayerProfile` and looked up by name; its paths derive from its name. Shared
+locations (skill store, alignment artifacts, CA home) are in `core/paths.py`.
+Don't add new per-layer scripts; extend a profile.
+
+**Stages:** each stage module exposes `requirements(...)` (a list of missing
+configuration) and `async build(...)`; `core/cli.py` runs them through
+`_run_stage`.
 
 **Adding a profile:** Add a `LayerProfile(...)` instance in `core/config.py`,
-register it via `register_profile`, create the matching `profiles/<name>/`
-(questions.csv, prompts/) and `workspaces/<name>/` directories.
+register it via `register_profile`, and create `profiles/<name>/`
+(questions.csv, prompts/). `workspaces/<name>/` is created on first write.
+See `docs/Layer-Profiles.md`.

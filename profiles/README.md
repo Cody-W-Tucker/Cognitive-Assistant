@@ -23,7 +23,7 @@ For the profile-backed layers (`existential` and `operational`), each directory 
 - `prompts/`: the prompt templates loaded by `ask-questions`, `build-prompts`, `build-skills`, and `build-tool-specs` when applicable.
 - `README.md`: profile-specific notes, intent, and background.
 
-`profiles/operational/scripts/` exists for operational-specific helpers, but the main pipeline still runs through `python -m core`.
+`profiles/operational/scripts/extract_ai_data.sh` fills `workspaces/operational/data/intake/` from local coding agents via the flake's `ai-data-extractor`; the main pipeline still runs through `python -m core`.
 
 ## How it connects to the rest of the system
 
@@ -33,14 +33,14 @@ At runtime, `core/config.py` maps each registered profile to:
 - a `workspace_dir` in `workspaces/<name>/`
 - a `questions_csv` file
 - a `prompts_dir`
-- pipeline capability flags such as whether the profile supports corpus ingest or tool spec generation
+- capability fields such as `has_corpus_ingest` and `supported_tools` (tool spec generation)
 
 That profile declaration determines which commands are valid and which artifacts get produced.
 
 Examples:
 
-- `existential` reads graph-derived JSONL packets from its workspace and builds prompts from those answers.
-- `operational` enables `ingest-corpus` and `build-tool-specs`.
+- `existential` answers its questions from the `Journal` and `Personal` QMD collections.
+- `operational` answers from `Base`, `Consulting` and `Customers`, and enables `ingest-corpus` and `build-tool-specs`.
 - `alignment` is not a normal `--profile` target; it sits above both profiles and consumes their generated outputs.
 
 ## Typical flow
@@ -58,7 +58,7 @@ python -m core --profile operational build-skills
 python -m core --profile operational build-tool-specs
 ```
 
-Those commands read from `profiles/<name>/...` and write to `workspaces/<name>/artifacts/...`.
+Those commands read from `profiles/<name>/...` and write to `workspaces/<name>/...` (skills go to `workspaces/skills/<name>/`). See `docs/Layer-Profiles.md` for the `LayerProfile` fields and how to add a profile.
 
 ## Editing guidance
 

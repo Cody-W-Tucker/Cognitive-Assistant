@@ -2,388 +2,161 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 
 import { runPipeline } from "../src/pipeline.js";
-import { synthesizeWithModel } from "../src/synthesize.js";
-import { consolidateLedger } from "../src/consolidate.js";
-import { buildMockFinalAnnotation } from "../src/annotate.js";
+import { readJson } from "../src/state.js";
+import { invokeWith, tmpDir, writeCodexSession, writeSoul } from "./helpers.mjs";
 
-function tmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "ca-pipe-"));
+/** A HOME with `n` substantial Codex sessions plus a fresh state dir and SOUL. */
+function setup(n = 2) {
+  const root = tmpDir();
+  const home = path.join(root, "home");
+  for (let i = 0; i < n; i += 1) writeCodexSession(home, `codex-${i}`);
+  return { home, stateDir: path.join(root, "state"), soulPath: writeSoul(root) };
 }
 
-function homeWithTranscripts(n = 2) {
-  const home = tmpDir();
-  const dir = path.join(home, ".codex", "sessions");
-  fs.mkdirSync(dir, { recursive: true });
-  for (let i = 0; i < n; i += 1) {
-    const payload = JSON.stringify({ role: "user", text: `bootstrap context please ${i}` });
-    const tools = ["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name, input: { name } }));
-    fs.writeFileSync(path.join(dir, `2026-01-0${i + 1}T00-00-00Z.jsonl`), `${[payload, ...tools].join("\n")}\n`, "utf8");
-  }
-  return home;
-}
+const run = (env, options = {}) => runPipeline({ ...env, since: "all", analyzer: "mock", ...options });
 
-const GAP_QUOTE = "sessions re-derive project context from scratch";
-const GAP_QUOTE_B = "sessions never record why a fix was chosen";
-
-/** Same gap sightings for every trace so the fold floor is met twice. */
-function gapEvidence() {
-  const gap = (quote) => ({
-    proposedInstruction: quote === GAP_QUOTE ? "Bootstrap context once" : "Record why a fix was chosen",
-    mistake: quote,
-    quote,
-    recurrenceRisk: "every new session pays the same cost",
-  });
-  return { status: "ok", positive: [], negative: [], gaps: [gap(GAP_QUOTE), gap(GAP_QUOTE_B)] };
-}
-
-/** Build a strictly valid NARROW plan from the actual folded ledger. */
-function planForLedger(ledger) {
-  const cluster = (ledger?.clusters || []).find((c) => c.eligible);
-  assert.ok(cluster, "ledger must hold an eligible cluster");
-  assert.ok(cluster.sources.length >= 2);
-  return {
-    clusterId: cluster.id,
-    provisionalIntent: cluster.proposedInstruction,
-    provisionalSources: [...cluster.sources],
-  };
-}
-
-/** Build a strictly valid ANNOTATION final for one plan. */
-function finalAnnotationForPlan(plan, ledger, evidenceIndex) {
-  return buildMockFinalAnnotation(
-    { id: "e1", kind: "add", ...plan },
-    { ledger, evidenceIndex },
-  );
-}
-
-describe("pipeline production wiring (injectable invokes, no real acpx)", () => {
-  it("counts successful evidence from earlier checkpointed runs toward recurrence", async () => {
-    const home = homeWithTranscripts(1);
-    const stateDir = tmpDir();
-    const options = {
-      home,
-      stateDir,
-      analyzer: "mock",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-    };
-
-    const first = await runPipeline(options);
-    assert.equal(first.stats.eligible, 0, "one session alone cannot satisfy the recurrence floor");
-
-    const sessions = path.join(home, ".codex", "sessions");
-    fs.writeFileSync(
-      path.join(sessions, "2026-01-02T00-00-00Z.jsonl"),
-      `${[
-        JSON.stringify({ role: "user", text: "same gap in a later session" }),
-        ...["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name })),
-      ].join("\n")}\n`,
-      "utf8",
-    );
-    const second = await runPipeline(options);
-    assert.ok(second.stats.eligible >= 1, "prior successful evidence combines with the new session");
-    assert.ok(second.edits.length >= 1, "eligible recurrence reaches the proposal path");
-  });
-
-  it("keeps successful session checkpoints across runs and analyzes only a newly discovered session", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    let analysisCalls = 0;
-    const analyzeInvoke = () => {
-      analysisCalls += 1;
-      return { status: "ok", evidence: gapEvidence() };
-    };
-    const options = {
-      home,
-      stateDir,
-      analyzer: "mock",
-      analyzeInvoke,
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-    };
-
-    await runPipeline(options);
-    assert.equal(analysisCalls, 2, "first run analyzes both discovered sessions");
-
-    await runPipeline(options);
-    assert.equal(analysisCalls, 2, "second run does not reanalyze successful sessions");
-
-    const sessions = path.join(home, ".codex", "sessions");
-    fs.writeFileSync(
-      path.join(sessions, "2026-01-03T00-00-00Z.jsonl"),
-      `${[
-        JSON.stringify({ role: "user", text: "new session after checkpoint" }),
-        ...["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name })),
-      ].join("\n")}\n`,
-      "utf8",
-    );
-    await runPipeline(options);
-    assert.equal(analysisCalls, 3, "the checkpoint retains prior sessions and admits only the new one");
-  });
-
-  it("production success persists prompts + proposal notes with injected invokes (annotate owns finals)", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "model",
-      runId: "run-PIPE1",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      synthesizeInvoke: (args) => {
-        const ledger = args?.ledger;
-        const plans = [planForLedger(ledger)];
-        // TEXT-ONLY: return stdout plans only with no filesystem access;
-        // deterministic code materializes under synthesis-workspace.
-        assert.equal(args?.cwd, undefined, "text-only invoke must not receive cwd");
-        assert.equal(args?.workspace, undefined, "text-only invoke must not receive workspace");
-        return { status: "ok", result: { plans } };
-      },
-      annotateInvoke: (args) => {
-        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
-        const plans = args?.staged || [];
-        // Production invoke supplies complete finals; the test double builds
-        // them from the staged plans without inventing sessions.
-        // (production success path — runs once)
-        return {
-          status: "ok",
-          annotations: plans.map((p, i) => ({
-            id: p.id || `e${i + 1}`,
-            verdict: "keep",
-            reason: String(p.provisionalIntent || "keep"),
-            record: {
-              id: `exp-test-a1b2c3d4e5f${i}`,
-              title: String(p.provisionalIntent),
-              body: `Recurring gap: ${p.provisionalIntent}`,
-              clusterId: String(p.clusterId),
-              sources: [...p.provisionalSources],
-              evidence: p.provisionalSources.map((source) => ({
-                polarity: "negative",
-                text: GAP_QUOTE,
-                source,
-                effect: GAP_QUOTE,
-              })),
-              counterevidence: "none observed",
-              compilerImplication: "compiler appends this record to the experience block",
-            },
-          })),
-        };
-      },
-    });
+describe("run with the mock analyzer", () => {
+  it("proposes one complete, validated record from a gap recurring in two sessions", async () => {
+    const env = setup(2);
+    const invoke = invokeWith();
+    const proposal = await run(env, { invoke });
     assert.equal(proposal.edits.length, 1);
-    assert.ok(proposal.edits[0].annotation && proposal.edits[0].annotation.verdict === "keep");
-    assert.ok(proposal.edits[0].record && proposal.edits[0].record.title.length > 0);
-    assert.ok(fs.existsSync(path.join(stateDir, "prompts", "run-PIPE1__consolidate.md")));
-    assert.ok(fs.existsSync(path.join(stateDir, "prompts", "run-PIPE1__synthesis.md")));
-    assert.ok(Array.isArray(proposal.notes));
-    assert.equal(proposal.synthesis.failed, false);
-  });
-
-  it("mock follows the same plan->measure->preface->annotate-final path (annotation builds finals)", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "mock",
-      runId: "run-MOCK1",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-    });
-    assert.ok(proposal.edits.length >= 1);
-    for (const edit of proposal.edits) {
-      assert.equal(edit.annotation.verdict, "keep");
-      assert.ok(edit.record.title && edit.record.body);
-      assert.ok(Array.isArray(edit.record.sources) && edit.record.sources.length >= 2);
-      assert.ok(edit.stagedArtifact.includes(edit.record.id));
+    const [edit] = proposal.edits;
+    assert.equal(edit.annotation.verdict, "keep");
+    assert.match(edit.record.id, /^exp-[a-z0-9-]+-[0-9a-f]{12}$/);
+    assert.deepEqual(edit.record.sources, ["codex-0", "codex-1"]);
+    assert.deepEqual(edit.evidence, edit.record.evidence);
+    assert.equal(edit.title, `Experience record: ${edit.record.title}`);
+    assert.deepEqual(proposal.stats, { transcripts: 2, analyzed: 2, skipped: 0, failed: 0, clusters: 1, eligible: 1 });
+    assert.equal(proposal.appliedAt, null);
+    assert.equal(proposal.soul.path, env.soulPath);
+    assert.deepEqual(readJson(path.join(env.stateDir, "proposal.json")), proposal);
+    assert.deepEqual(invoke.calls.map((c) => c.role), ["analysis", "analysis", "synthesis", "annotate"]);
+    for (const name of ["ledger.json", "open-gaps.json", "cursor.json", "evidence/codex-0.json"]) {
+      assert.ok(fs.existsSync(path.join(env.stateDir, name)), name);
     }
   });
 
-  it("production without annotation finals fails closed (invents nothing)", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "model",
-      runId: "run-PIPE-CLOSED",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
-      annotateInvoke: (args) => {
-        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
-        return { status: "ok", annotations: [] };
+  it("checkpoints sessions: a second run analyzes only what is new, yet earlier evidence still counts", async () => {
+    const env = setup(1);
+    const invoke = invokeWith();
+    const first = await run(env, { invoke });
+    assert.equal(first.stats.eligible, 0, "one session cannot meet the evidence floor");
+    assert.equal(first.edits.length, 0);
+    await run(env, { invoke });
+    assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 1, "an unchanged session is not re-analyzed");
+    writeCodexSession(env.home, "codex-later", { day: "13" });
+    const third = await run(env, { invoke });
+    assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 2);
+    assert.equal(third.stats.transcripts, 1);
+    assert.equal(third.edits.length, 1, "the new session plus saved evidence reach the floor");
+  });
+
+  it("evidence carries session time, and a failed re-analysis keeps the earlier good evidence", async () => {
+    const env = setup(1);
+    const file = path.join(env.home, ".codex", "sessions", "2026", "10", "12", "rollout-codex-0.jsonl");
+    await run(env);
+    const evidenceFile = path.join(env.stateDir, "evidence", "codex-0.json");
+    assert.equal(typeof readJson(evidenceFile).sessionAt, "number");
+    fs.appendFileSync(file, `${JSON.stringify({ role: "user", content: "one more thing" })}\n`);
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(file, later, later);
+    const failing = invokeWith({
+      analysis: () => {
+        throw new Error("timed out");
       },
     });
-    assert.deepEqual(proposal.edits, []);
-    assert.ok(proposal.synthesis.failed || proposal.staging.failed, "fail-closed must be visible via synthesis or staging");
+    const proposal = await run(env, { invoke: failing });
+    assert.equal(proposal.stats.failed, 1);
+    assert.equal(readJson(evidenceFile).status, "ok");
   });
 
-  it("production synthesis failure yields no edits plus a visible proposal note", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "model",
-      runId: "run-PIPE2",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "failed", error: "boom-consolidate" }),
-      synthesizeInvoke: () => ({ status: "failed", error: "boom-synth" }),
-    });
-    assert.deepEqual(proposal.edits, []);
-    assert.equal(proposal.synthesis.failed, true);
-    assert.ok(typeof proposal.synthesis.note === "string" && proposal.synthesis.note.length > 0);
-    assert.ok(proposal.notes.some((n) => /boom-synth|fail/i.test(n)));
+  it("sessions without analyzer gaps never produce a cluster", async () => {
+    const env = setup(2);
+    const proposal = await run(env, { invoke: invokeWith({ analysis: () => ({ positive: [], negative: [], gaps: [] }) }) });
+    assert.deepEqual([proposal.stats.clusters, proposal.edits.length], [0, 0]);
   });
 
-  it("prompt persistence failure surfaces a visible proposal/run note", async () => {
-    const blocker = path.join(tmpDir(), "blocker");
-    fs.writeFileSync(blocker, "x", "utf8");
-    const badState = path.join(blocker, "nope");
-    const ledger = {
-      version: 1,
-      minGapEvidence: 2,
-      clusters: [
-        {
-          id: "g-a",
-          proposedInstruction: "Bootstrap context once",
-          representativeQuote: GAP_QUOTE,
-          mistake: "m",
-          sources: ["s1", "s2"],
-          count: 2,
-          eligible: true,
-          perSource: { s1: { quote: GAP_QUOTE, mistake: "m" }, s2: { quote: GAP_QUOTE, mistake: "m" } },
-        },
-        {
-          id: "g-b",
-          proposedInstruction: "Do another thing",
-          representativeQuote: GAP_QUOTE,
-          mistake: "m",
-          sources: ["s1", "s2"],
-          count: 2,
-          eligible: true,
-          perSource: { s1: { quote: GAP_QUOTE, mistake: "m" }, s2: { quote: GAP_QUOTE, mistake: "m" } },
-        },
-      ],
-    };
-    // EDIT-ONLY: JSON plans alone never yield durable edits; with an
-    // unwritable stateDir (no observable workspace) synthesis fails closed.
-    const synth = synthesizeWithModel(ledger, {
-      evidenceIndex: new Map(),
-      invoke: ({ ledger: led }) => ({ status: "ok", plans: [planForLedger(led)] }),
-      stateDir: badState,
-      runId: "run-PP1",
-    });
-    assert.deepEqual(synth.edits, []);
-    assert.ok(/fail-closed|no workspace/i.test(synth.note || ""));
-    const cons = consolidateLedger(ledger, {
-      invoke: () => ({ status: "ok", merges: [] }),
-      stateDir: badState,
-      runId: "run-PP2",
-    });
-    assert.ok(/persistence failed/i.test(cons.note || ""));
-  });
-
-  it("deterministic code materializes validated text-only plans: pipeline never fabricates seed edits", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "model",
-      runId: "run-NOFAB1",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-      // TEXT-ONLY: injected production synthesis returns stdout plans with no
-      // filesystem access; deterministic code materializes validated plans.
-      synthesizeInvoke: ({ ledger }) => ({ status: "ok", result: { plans: [planForLedger(ledger)] } }),
-      annotateInvoke: (args) => {
-        if (args?.stage === "annotate-preface") return { status: "ok", ready: true };
-        const plans = args?.staged || [];
-        return {
-          status: "ok",
-          annotations: plans.map((p, i) => ({
-            id: p.id || `e${i + 1}`,
-            verdict: "keep",
-            reason: String(p.provisionalIntent || "keep"),
-            record: {
-              id: `exp-test-a1b2c3d4e5f${i}`,
-              title: String(p.provisionalIntent),
-              body: `Recurring gap: ${p.provisionalIntent}`,
-              clusterId: String(p.clusterId),
-              sources: [...p.provisionalSources],
-              evidence: p.provisionalSources.map((source) => ({
-                polarity: "negative",
-                text: GAP_QUOTE,
-                source,
-                effect: GAP_QUOTE,
-              })),
-              counterevidence: "none observed",
-              compilerImplication: "compiler appends this record to the experience block",
-            },
-          })),
-        };
+  it("a synthesis failure or invalid plans yield no edits and a visible note", async () => {
+    for (const synthesis of [
+      () => {
+        throw new Error("endpoint down");
       },
-    });
-    assert.ok(proposal.edits.length >= 1, "validated text-only plans materialize to candidate edits");
-    const measured = JSON.parse(fs.readFileSync(path.join(stateDir, "measured-changes.json"), "utf8"));
-    const changes = measured.changes || measured;
-    assert.ok(changes.length >= 1, "pipeline measures deterministically materialized workspace changes");
-    assert.ok(fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")));
-    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-keep.md")), "synthetic seed records do not exist");
-    assert.ok(!fs.existsSync(path.join(stateDir, "synthesis-workspace", "seed-remove.md")), "synthetic seed records do not exist");
+      () => ({ plans: [{ clusterId: "g-unknown", provisionalIntent: "x", provisionalSources: ["a", "b"] }] }),
+    ]) {
+      const invoke = invokeWith({ synthesis });
+      const proposal = await run(setup(2), { invoke });
+      assert.deepEqual(proposal.edits, []);
+      assert.equal(proposal.synthesis.failed, true);
+      assert.match(proposal.notes.join("\n"), /synthesis (failed|plans invalid)/);
+      assert.ok(!invoke.calls.some((c) => c.role === "annotate"), "nothing to annotate");
+    }
   });
 
-  it("traces with no actual analyzer gap evidence never create synthetic gaps (RED)", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "mock",
-      runId: "run-NOSYNTH",
-      analyzeInvoke: () => ({ status: "ok", evidence: { status: "ok", positive: [], negative: [], gaps: [] } }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-    });
-    assert.deepEqual(proposal.edits, []);
-    assert.equal(proposal.stats.clusters, 0, "no analyzer gaps means no clusters");
-    assert.equal(proposal.stats.eligible, 0);
-    const ledger = JSON.parse(fs.readFileSync(path.join(stateDir, "ledger.json"), "utf8"));
-    assert.deepEqual(ledger.clusters, [], "ledger must not fabricate fallback gaps from distilled traces");
-    let gaps = null;
+  it("an annotation that is missing or carries a paraphrased quote yields no edits", async () => {
+    for (const annotate of [() => ({ annotations: [] }), (ctx) => paraphrased(ctx)]) {
+      const proposal = await run(setup(2), { invoke: invokeWith({ annotate }) });
+      assert.deepEqual(proposal.edits, []);
+      assert.equal(proposal.annotation.failed, true);
+      assert.match(proposal.notes.join("\n"), /annotate failed/);
+    }
+  });
+
+  it("a rejected identity stays suppressed until new evidence arrives", async () => {
+    const env = setup(2);
+    const first = await run(env);
+    const { record } = first.edits[0];
+    const row = { proposal: first.id, edit: "e1", reason: "too-narrow", title: record.title, clusterId: record.clusterId, recordId: record.id, sources: record.sources };
+    fs.writeFileSync(path.join(env.stateDir, "rejections.jsonl"), `${JSON.stringify(row)}\n`);
+    const invoke = invokeWith();
+    const second = await run(env, { invoke });
+    assert.deepEqual(second.edits, []);
+    assert.ok(invoke.calls.find((c) => c.role === "synthesis").prompt.includes(`[e1] ${record.title}`), "rejections reach the synthesis prompt");
+    writeCodexSession(env.home, "codex-new", { day: "14" });
+    const third = await run(env);
+    assert.equal(third.edits.length, 1, "a session the rejection did not cite lifts suppression");
+  });
+
+  it("a gap corroborated from an earlier run is marked on the edit", async () => {
+    const env = setup(1);
+    await run(env);
+    writeCodexSession(env.home, "codex-b", { day: "13" });
+    fs.rmSync(path.join(env.stateDir, "evidence", "codex-0.json"));
+    const proposal = await run(env);
+    assert.equal(proposal.edits.length, 1);
+    assert.equal(proposal.edits[0].corroboratedOpenGap, true);
+    assert.match(proposal.edits[0].rationale, /^open-gap corroborated singleton: /);
+    assert.deepEqual(proposal.edits[0].record.sources, ["codex-0", "codex-b"]);
+  });
+
+  it("fails before any work when the SOUL is missing or empty, or the analyzer is unknown", async () => {
+    const env = setup(2);
+    await assert.rejects(run({ ...env, soulPath: path.join(env.stateDir, "nope.md") }), /SOUL baseline unavailable/);
+    fs.writeFileSync(env.soulPath, "  \n");
+    await assert.rejects(run(env), /SOUL baseline .* is empty/);
+    assert.equal(fs.existsSync(env.stateDir), false);
+    await assert.rejects(run(setup(1), { analyzer: "llm" }), /--analyzer must be model or mock/);
+  });
+
+  it("a real run without a configured endpoint fails before analyzing anything", async () => {
+    const env = setup(2);
+    const saved = process.env.CA_LLM_BASE_URL;
+    delete process.env.CA_LLM_BASE_URL;
     try {
-      gaps = JSON.parse(fs.readFileSync(path.join(stateDir, "open-gaps.json"), "utf8")).gaps;
-    } catch {
-      gaps = [];
+      await assert.rejects(run(env, { analyzer: "model" }), /CA_LLM_BASE_URL is not set/);
+    } finally {
+      if (saved !== undefined) process.env.CA_LLM_BASE_URL = saved;
     }
-    assert.deepEqual(gaps, [], "open-gap ledger must only persist actual analyzer gap observations");
-  });
-
-  it("mock synthesis authors the workspace and each final binds its specific change", async () => {
-    const home = homeWithTranscripts(2);
-    const stateDir = tmpDir();
-    const proposal = await runPipeline({
-      home,
-      stateDir,
-      analyzer: "mock",
-      runId: "run-MOCKBIND1",
-      analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
-      consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
-    });
-    assert.ok(proposal.edits.length >= 1);
-    const measured = JSON.parse(fs.readFileSync(path.join(stateDir, "measured-changes.json"), "utf8"));
-    const changes = measured.changes || measured;
-    const byId = new Map(changes.map((m) => [String(m.id), m]));
-    for (const edit of proposal.edits) {
-      assert.ok(edit.measuredIds && edit.measuredIds.length >= 1, "each final binds specific measured IDs");
-      for (const mid of edit.measuredIds) assert.ok(byId.has(String(mid)), `measured ID ${mid} resolves`);
-      // No blanket attachment: the edit's IDs must be a strict subset scoped
-      // to its own plan file, never the full workspace change set.
-      assert.ok(edit.measuredIds.length < changes.length || changes.length === 1, "binding must be specific, not blanket all-IDs");
-    }
+    assert.equal(fs.existsSync(path.join(env.stateDir, "evidence")), false);
   });
 });
+
+/** The mock annotation with one quote reworded, which validation must refuse. */
+async function paraphrased(context) {
+  const { mockInvoke } = await import("../src/mock.js");
+  const reply = await mockInvoke("annotate", "", context);
+  reply.annotations[0].record.evidence[0].text += " (paraphrased)";
+  return reply;
+}

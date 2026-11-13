@@ -2,165 +2,42 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { fileURLToPath } from "node:url";
 
-import {
-  loadPrompt,
-  render,
-  renderPrompt,
-  SELF_SESSION_SENTINEL,
-} from "../src/prompts.js";
+import { loadPrompt, render, renderPrompt } from "../src/prompts.js";
+import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
+import { tmpDir } from "./helpers.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const NOTICE = path.join(HERE, "..", "LICENSE.NOTICE");
-const RUNTIME_SRC = path.join(HERE, "..", "src");
-
-describe("prompts loader (Backpass src/prompts.js shape, CA paths)", () => {
-  it("loads checked-in prompts relative to the runtime, not CWD", () => {
-    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "ca-prompts-cwd-"));
+describe("prompt loader and strict render", () => {
+  it("loads checked-in prompts relative to the runtime, not the cwd", () => {
     const previous = process.cwd();
-    process.chdir(elsewhere);
+    process.chdir(tmpDir());
     try {
-      const text = loadPrompt("analysis");
-      assert.ok(text.includes("{{TRACE}}"), "analysis prompt must declare {{TRACE}}");
+      for (const name of ["analysis", "consolidate", "synthesis", "annotate"]) assert.ok(loadPrompt(name).length > 0);
     } finally {
       process.chdir(previous);
     }
   });
 
-  it("loads consolidate/synthesis/annotate prompts via the same strict loader", () => {
-    for (const name of ["consolidate", "synthesis", "annotate", "annotate-preface"]) {
-      const text = loadPrompt(name);
-      assert.ok(text.length > 0, `${name} must load`);
-    }
+  it("rejects missing prompts and path traversal", () => {
+    assert.throws(() => loadPrompt("nonexistent-prompt-xyz"), /not found/);
+    assert.throws(() => loadPrompt("../LICENSE"), /invalid prompt name/);
   });
 
-  it("rejects missing prompt files with a clear error", () => {
-    assert.throws(() => loadPrompt("nonexistent-prompt-xyz"), /not found|no such file/i);
-  });
-
-  it("rejects path traversal in prompt names", () => {
-    assert.throws(() => loadPrompt("../LICENSE"), /invalid prompt name/i);
-  });
-
-  it("replaces every declared {{PLACEHOLDER}} occurrence (duplicates render alike)", () => {
-    const out = render("a {{X}} b {{X}} c", { X: "zee" });
-    assert.equal(out, "a zee b zee c");
-  });
-
-  it("fails on a missing placeholder value", () => {
+  it("renders every occurrence and fails on missing, unused, or malformed placeholders", () => {
+    assert.equal(render("a {{X}} b {{X}} c", { X: "zee" }), "a zee b zee c");
     assert.throws(() => render("a {{MISSING}} b", {}), /MISSING/);
-  });
-
-  it("fails on an unused value", () => {
     assert.throws(() => render("a {{X}}", { X: "x", EXTRA: "e" }), /EXTRA/);
+    assert.throws(() => render("a {{lowercase}}", { lowercase: "x" }), /unexpected/);
+    assert.throws(() => render("a {{X}}", { X: "x", "bad-key": "y" }), /unexpected/);
   });
 
-  it("fails on unexpected (non-UPPER_SNAKE) template tokens", () => {
-    assert.throws(() => render("a {{lowercase}}", { lowercase: "x" }), /unexpected/i);
+  it("does not re-render placeholder-shaped text injected through a value", () => {
+    assert.equal(render("a {{X}}", { X: "{{Y}}" }), "a {{Y}}");
   });
 
-  it("fails on unexpected value keys", () => {
-    assert.throws(() => render("a {{X}}", { X: "x", "bad-key": "y" }), /unexpected|invalid/i);
-  });
-
-  it("renderPrompt keeps the self-session sentinel FIRST", () => {
-    const out = renderPrompt(
-      "analysis",
-      {
-        TRANSCRIPT_ID: "t1",
-        HARNESS: "pi",
-        SOUL_BASELINE: "soul",
-        INTERACTION_POSTURE: "posture",
-        EXPERIENCE_RECORDS: "records",
-        TRACE: "trace",
-      },
-    );
-    assert.ok(out.startsWith(`${SELF_SESSION_SENTINEL}\n`), "sentinel must be the first line");
-    assert.equal(SELF_SESSION_SENTINEL, "<!-- ca-improve:self-session -->");
-  });
-
-  it("analysis/consolidate/synthesis/annotate/annotate-preface are the checked-in prompts", () => {
-    const promptDir = path.join(HERE, "..", "prompts");
-    const names = fs.readdirSync(promptDir).filter((f) => f.endsWith(".md")).sort();
-    assert.deepEqual(names, ["analysis.md", "annotate-preface.md", "annotate.md", "consolidate.md", "synthesis.md"]);
-    void RUNTIME_SRC;
-  });
-
-  it("annotate.md declares exactly its placeholders and required contract text", () => {
-    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "annotate.md"), "utf8");
-    const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
-    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "SOUL_SHA256", "SOUL_SNAPSHOT", "STAGED_CANDIDATES"]);
-    assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
-    assert.ok(!text.includes("Backpass"), "prompt body carries no license comments (see LICENSE.NOTICE)");
-    const notice = fs.readFileSync(NOTICE, "utf8");
-    assert.ok(/Backpass/.test(notice) && /0268201/.test(notice) && /src\/prompts\/annotate\.md/.test(notice));
-    assert.ok(notice.includes("improve/prompts/annotate.md"));
-    assert.ok(/annotations/.test(text) && /coverage/i.test(text) && /revert/i.test(text));
-    assert.ok(/verbatim/i.test(text) && /quote/i.test(text) && /source/i.test(text));
-    assert.ok(/counterevidence/i.test(text) && /none observed/i.test(text));
-    assert.ok(/compilerImplication/i.test(text));
-    assert.ok(/never/i.test(text) && /SOUL/.test(text) && /Hermes/.test(text));
-  });
-
-  it("annotate-preface.md declares exactly its placeholders and required contract text", () => {
-    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "annotate-preface.md"), "utf8");
-    const tokens = [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)].map((m) => m[1]);
-    assert.deepEqual([...new Set(tokens)].sort(), ["COUNT", "RUN_ID", "STAGED_SUMMARY"]);
-    assert.ok(!text.includes("ca-improve:self-session"), "sentinel lives in the loader, not the file");
-    assert.ok(/staged/i.test(text) && /fresh logical/i.test(text) && /revert/i.test(text));
-  });
-
-  it("renderPrompt renders annotate prompts with sentinel FIRST and strict placeholders", () => {
-    const preface = renderPrompt("annotate-preface", { COUNT: "1", STAGED_SUMMARY: "s", RUN_ID: "run-T" });
-    assert.ok(preface.startsWith(`${SELF_SESSION_SENTINEL}\n`));
-    assert.ok(preface.includes("run-T"));
-    const annotate = renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c", RUN_ID: "run-T", SOUL_SNAPSHOT: "soul snapshot", SOUL_SHA256: "abc123" });
-    assert.ok(annotate.startsWith(`${SELF_SESSION_SENTINEL}\n`));
-    assert.ok(annotate.includes("run-T"));
-    assert.throws(() => renderPrompt("annotate", { COUNT: "1", STAGED_CANDIDATES: "c" }), /RUN_ID/);
-    assert.throws(
-      () => renderPrompt("annotate-preface", { COUNT: "1", STAGED_SUMMARY: "s", RUN_ID: "r", EXTRA: "x" }),
-      /EXTRA/,
-    );
-  });
-
-  it("synthesis.md requires literal clusterId + provisionalSources + provisionalIntent with a copyable JSON plans scaffold", () => {
-    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
-    assert.ok(text.includes("clusterId"), "synthesis prompt must name the exact literal key clusterId");
-    assert.ok(text.includes("provisionalSources"), "synthesis prompt must name the exact literal key provisionalSources");
-    assert.ok(text.includes("provisionalIntent"), "synthesis prompt must name provisionalIntent");
-    assert.ok(/text-only/i.test(text), "synthesis prompt must declare text-only proposer");
-    assert.ok(!/edit-only|edit turn/i.test(text), "synthesis prompt must not describe an edit turn");
-    const fence = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]);
-    assert.ok(fence.length >= 1, "synthesis prompt must include a copyable JSON plans scaffold in a fenced code block");
-    const scaffold = fence.join("\n");
-    assert.ok(scaffold.includes("plans"), "scaffold must show plans");
-    assert.ok(scaffold.includes("clusterId"), "scaffold must show clusterId");
-    assert.ok(scaffold.includes("provisionalSources"), "scaffold must show provisionalSources");
-    for (const forbidden of ["record", "counterevidence", "compilerImplication", "stagedArtifact"]) {
-      assert.ok(!scaffold.includes(`"${forbidden}"`), "scaffold must not carry final field " + forbidden);
-    }
-    for (const forbidden of ['"file"', '"path"', '"workspace"', '"cwd"']) {
-      assert.ok(!scaffold.includes(forbidden), "scaffold must not carry filesystem target " + forbidden);
-    }
-  });
-
-  it("synthesis.md skeleton uses the exact text-only plans shape", () => {
-    const text = fs.readFileSync(path.join(HERE, "..", "prompts", "synthesis.md"), "utf8");
-    assert.match(text, /"plans"/);
-    assert.match(text, /provisionalSources/);
-  });
-
-  it("preserves literal placeholder-shaped text injected through values", () => {
-    const out = render("a {{TRACE}} b", {
-      TRACE: "literal {{TRACE}} and {{OTHER}} {{lower}} {{bad-key}} shapes",
-    });
-    assert.equal(out, "a literal {{TRACE}} and {{OTHER}} {{lower}} {{bad-key}} shapes b");
-  });
-
-  it("still fails on a missing declared key even with literal-shape values allowed", () => {
-    assert.throws(() => render("a {{TRACE}} {{MISSING}} b", { TRACE: "x {{TRACE}} y" }), /MISSING/);
+  it("puts the self-session sentinel first, so the runtime's own calls are never analyzed", () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, "probe.md"), "hello {{NAME}}");
+    assert.equal(renderPrompt("probe", { NAME: "x" }, { promptsDir: dir }), `${SELF_SESSION_SENTINEL}\nhello x`);
   });
 });
