@@ -76,8 +76,9 @@ learned section on the next compile.
 
 `homeManagerModules.cognitive-assistant` owns `$HERMES_HOME/SOUL.md` (remove it
 from `hermesHomeFiles`, which would overwrite the link), compiles on
-activation, and runs `ca-improve --headless --harness hermes` weekly with
-`HERMES_HOME` set.
+activation, and runs `ca-improve --headless --auto --harness hermes` weekly with
+`HERMES_HOME` and the model endpoint set. Every model call is a tool-free chat
+completion to `llm.baseUrl` (see the CLI reference); no agent harness runs.
 
 ```nix
 services.cognitive-assistant = {
@@ -85,5 +86,9 @@ services.cognitive-assistant = {
   hermesHome = config.services.hermes-agent.hermesHome;
   soul.prefix = brevityInstructions + delegationInstructions;
   soul.suffix = agentsDocument;
+  llm = {
+    baseUrl = "http://127.0.0.1:8081/v1";   # llama-swap on the NAS
+    model = "qwen-3.6-35b-a3b";
+  };
 };
 ```

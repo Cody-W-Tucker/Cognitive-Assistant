@@ -3,8 +3,8 @@
 // eligibility/evidence floors, then fixed raw-stdout production synthesis
 // -> workspace measure -> annotation -> fresh reviewable proposal JSON.
 //
-// Resume never invokes discovery/export/ACPX analysis: no transcript
-// discovery, no OpenCode export, no per-trace analyze (acpx or mock).
+// Resume never invokes discovery/export/model analysis: no transcript
+// discovery, no OpenCode export, no per-trace analyze (model or mock).
 // State absent/incomplete/corrupt fails closed with an actionable error.
 // Writes land only under stateDir; apply remains the sole durable
 // experience writer.
@@ -13,14 +13,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { consolidateLedger, saveOpenGaps, loadOpenGaps, corroborateOpenGaps } from "./consolidate.js";
-import { synthesizeWithAcpx, measuredIdsForPlan } from "./synthesize.js";
+import { synthesizeWithModel, measuredIdsForPlan } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import {
   annotateStaging,
   applyRejectionSuppression,
-  acpxAnnotatePrefaceInvoke,
-  acpxAnnotateInvoke,
+  modelAnnotatePrefaceInvoke,
+  modelAnnotateInvoke,
 } from "./annotate.js";
 import {
   initStateDir,
@@ -66,10 +66,10 @@ function readRejections(stateDir) {
 /**
  * Run the resume-only synthesis pass over persisted state.
  *
- * Injectable invokes (no real acpx in tests): `consolidateInvoke` the one
+ * Injectable invokes (no real model in tests): `consolidateInvoke` the one
  * judged consolidation call, `synthesizeInvoke` the production synthesis
  * call, `annotateInvoke` the preface->annotate pair. Defaults are the real
- * acpx invokes. There is no analyze/discovery invoke: resume never analyzes.
+ * model invokes. There is no analyze/discovery invoke: resume never analyzes.
  *
  * @returns the fresh proposal object (also written to stateDir/proposal.json)
  */
@@ -213,7 +213,7 @@ export async function runSynthesizeResume({
 
   // 5. Private run-isolated synthesis workspace inside stateDir. Each run
   // gets a clean synthesis-workspace/<runId> root so stale artifacts from
-  // prior runs can never be measured/annotated/proposed. ACPX synthesis is
+  // prior runs can never be measured/annotated/proposed. model synthesis is
   // text-only (no workspace cwd); validated plans are materialized
   // deterministically by code there. Apply remains the only durable
   // experience writer.
@@ -228,7 +228,7 @@ export async function runSynthesizeResume({
 
   // 6. Fixed raw-stdout production synthesis (never mock, never analysis).
   emit("synthesize:start");
-  const out = synthesizeWithAcpx(ledger, {
+  const out = synthesizeWithModel(ledger, {
     evidenceIndex,
     soulBaseline,
     soulSnapshot: soulSnapshot.text,
@@ -303,10 +303,10 @@ export async function runSynthesizeResume({
   });
   const defaultAnnotate = (args) => {
     if (args?.stage === "annotate-preface") {
-      return acpxAnnotatePrefaceInvoke({ prompt: args.prompt, promptFile: args.promptFile });
+      return modelAnnotatePrefaceInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     if (args?.stage === "annotate") {
-      return acpxAnnotateInvoke({ prompt: args.prompt, promptFile: args.promptFile });
+      return modelAnnotateInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     return { status: "failed", error: "annotate invoke unavailable; production invents nothing" };
   };
@@ -388,7 +388,7 @@ export async function runSynthesizeResume({
       note: consolidation.note || "",
     },
     synthesis: {
-      analyzer: "acpx",
+      analyzer: "model",
       failed: synthesisFailed,
       note: synthesisNote,
     },

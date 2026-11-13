@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { prepareExperienceWorkspace, measureExperienceWorkspace, assertSynthesisContainment } from "../src/experience-workspace.js";
 import { consolidateLedger, loadOpenGaps } from "../src/consolidate.js";
-import { acpxSynthesisInvoke, synthesizeWithAcpx } from "../src/synthesize.js";
-import { runAcpxPromptFile } from "../src/acpx-text.js";
+import { modelSynthesisInvoke, synthesizeWithModel } from "../src/synthesize.js";
+import { runModelPromptFile } from "../src/model-call.js";
 
 function tmpDir() { return fs.mkdtempSync(path.join(os.tmpdir(), "ca-phase2-")); }
 
@@ -57,7 +57,7 @@ describe("phase2 acpx text-only (no workspace cwd)", () => {
     const ws = prepareExperienceWorkspace({ stateDir, records: [] });
     let seen = null;
     const ledger = { version: 1, minGapEvidence: 2, clusters: [{ id: "g-1", proposedInstruction: "do x", representativeQuote: "q", mistake: "m", sources: ["s1", "s2"], count: 2, eligible: true, perSource: { s1: { quote: "q", mistake: "m" }, s2: { quote: "q", mistake: "m" } } }] };
-    const out = synthesizeWithAcpx(ledger, {
+    const out = synthesizeWithModel(ledger, {
       evidenceIndex: new Map([["s1", [{ quote: "q" }]], ["s2", [{ quote: "q" }]]]),
       invoke: (args) => {
         seen = args;
@@ -75,14 +75,14 @@ describe("phase2 acpx text-only (no workspace cwd)", () => {
     assert.ok(fs.existsSync(path.join(stateDir, "synthesis-workspace", "e1.md")), "deterministic code materializes validated plans");
     // Unknown cluster fails closed (never throws).
     const freshState = tmpDir();
-    const out2 = synthesizeWithAcpx(ledger, {
+    const out2 = synthesizeWithModel(ledger, {
       evidenceIndex: new Map(),
       invoke: () => ({ status: "ok", plans: [{ clusterId: "g-ghost", provisionalIntent: "do x", provisionalSources: ["s1", "s2"] }] }),
       stateDir: freshState, runId: "run-WS2",
       soulSnapshot: "soul snapshot", soulSha256: "abc123",
     });
     assert.deepEqual(out2.edits, []);
-    void runAcpxPromptFile;
-    void acpxSynthesisInvoke;
+    void runModelPromptFile;
+    void modelSynthesisInvoke;
   });
 });

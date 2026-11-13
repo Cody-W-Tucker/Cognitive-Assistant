@@ -1,7 +1,7 @@
 // Full headless pipeline: discover -> collect -> distill -> analyze
-// (acpx-only, injectable) -> fold (deterministic) -> consolidate (one
-// judged acpx call, fail-soft to exact observation identity) -> synthesize (mock deterministic
-// or production acpx, fail-closed) -> proposal. Writes private state only;
+// (model-only, injectable) -> fold (deterministic) -> consolidate (one
+// judged model call, fail-soft to exact observation identity) -> synthesize (mock deterministic
+// or production model, fail-closed) -> proposal. Writes private state only;
 // never touches the CA repo, tracked files, or live Hermes.
 
 import fs from "node:fs";
@@ -9,13 +9,13 @@ import path from "node:path";
 
 import { discoverTranscripts } from "./discovery.js";
 import { distill, recordToEvents } from "./distill.js";
-import { analyzeTracesAsync, mockInvoke, assertAcpxAvailable } from "./analyze.js";
+import { analyzeTracesAsync, mockInvoke, assertModelConfigured } from "./analyze.js";
 import { foldEvidence } from "./fold.js";
 import { consolidateLedger } from "./consolidate.js";
-import { synthesizeCandidates, synthesizeWithAcpx, measuredIdsForPlan } from "./synthesize.js";
+import { synthesizeCandidates, synthesizeWithModel, measuredIdsForPlan } from "./synthesize.js";
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
-import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
+import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, modelAnnotatePrefaceInvoke, modelAnnotateInvoke } from "./annotate.js";
 import { checkpointKey, initStateDir, readEvidenceRecords, readJson, readSessionCheckpoint, writeJson, writeProposal, assertMinGapEvidence } from "./state.js";
 import { readSoulSnapshot } from "./soul.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
@@ -170,10 +170,10 @@ function harnessSummaryOf(transcripts) {
 /**
  * Run the headless pass. All writes land under `stateDir`.
  *
- * Injectable model invokes (no real acpx in tests): `analyzeInvoke`
+ * Injectable model invokes (no real model in tests): `analyzeInvoke`
  * overrides the per-trace analyzer, `consolidateInvoke` the one judged
  * consolidation call, `synthesizeInvoke` the production synthesis call.
- * Each defaults to the analyzer selection (`mock` double vs real acpx).
+ * Each defaults to the analyzer selection (`mock` double vs real model).
  *
  * @returns the proposal object (also written to stateDir/proposal.json)
  */
@@ -183,7 +183,7 @@ export async function runPipeline({
   since = "30d",
   harnesses = null,
   strictHarnesses = false,
-  analyzer = "acpx",
+  analyzer = "model",
   soulPath = null,
   posturePath = null,
   experienceRoot = null,
@@ -220,10 +220,9 @@ export async function runPipeline({
   emit("analyze:start", { total: pending, pending, cached: 0, analyzer });
   const traces = await collectTraces(discovery.transcripts, jobs);
   if (analyzer !== "mock" && !analyzeInvoke) {
-    // Real production run path only: fail fast before trace analysis when
-    // the acpx binary selected via CA_IMPROVE_ACPX_BIN/BACKPASS_ACPX_BIN is
-    // unavailable. Mock runs and injected invokes bypass real acpx entirely.
-    assertAcpxAvailable();
+    // Real production run path only: fail fast before trace analysis when no
+    // model endpoint is configured. Mock runs and injected invokes make no calls.
+    assertModelConfigured();
   }
   const invoke = analyzeInvoke || (analyzer === "mock" ? mockInvoke : undefined);
   let completed = 0;
@@ -265,7 +264,7 @@ export async function runPipeline({
   const recurrenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const folded = foldEvidence(recurrenceRecords, { minGapEvidence });
-  // Consolidation is acpx-only when >=2 eligible gaps exist; the mock
+  // Consolidation is model-only when >=2 eligible gaps exist; the mock
   // analyzer keeps deterministic exact observation identity with a visible note.
   const consolidation = consolidateLedger(folded, {
     ...(consolidateInvoke ? { invoke: consolidateInvoke } : analyzer === "mock" ? { analyzer: "mock" } : {}),
@@ -292,7 +291,7 @@ export async function runPipeline({
   const rejections = readRejections(stateDir);
   const harnessSummary = harnessSummaryOf(discovery.transcripts);
   const runNote = consolidation.note || "";
-  // Private writable synthesis workspace inside stateDir. ACPX synthesis is
+  // Private writable synthesis workspace inside stateDir. model synthesis is
   // text-only (no workspace cwd); validated narrow plans are materialized
   // deterministically by code under synthesis-workspace. Apply remains the
   // only durable experience writer. No synthetic seed records are ever
@@ -313,15 +312,15 @@ export async function runPipeline({
   let synthesisFailed = false;
   if (analyzer === "mock") {
     // Deterministic reviewable path: narrow change plans only, no model
-    // traffic, no real acpx calls. The mock synthesis itself authored the
+    // traffic, no real model calls. The mock synthesis itself authored the
     // private workspace BEFORE this point (see synthesizeCandidates /
     // applyMockSynthesisWorkspace); the pipeline never fabricates
     // plan-derived edits. Final records come only from the mock
     // annotate step below (same plan->stage/measure->preface->annotate path).
     edits = synthesizeCandidates(ledger, { evidenceIndex, soulBaseline, soulSnapshot: soulSnapshot.text, soulSha256, workspace: workspaceCwd, workspaceRoot: workspaceCwd, cwd: workspaceCwd, stateDir });
   } else {
-    // Production acpx-only synthesis: strict validation, fail-closed.
-    const out = synthesizeWithAcpx(ledger, {
+    // Production model-only synthesis: strict validation, fail-closed.
+    const out = synthesizeWithModel(ledger, {
       evidenceIndex,
       soulBaseline,
       soulSnapshot: soulSnapshot.text,
@@ -344,7 +343,7 @@ export async function runPipeline({
   // Synthesis output is the ONLY author of workspace changes: the mock
   // synthesis authored the workspace before measurement (above) and
   // production deterministic code materialized validated text-only plans
-  // under synthesis-workspace (no ACPX filesystem write). Here the pipeline
+  // under synthesis-workspace (no model filesystem write). Here the pipeline
   // only measures the
   // actual resulting created/modified/deleted files with stable anchored
   // diffs (never synthetic plan deltas). Production never derives durable
@@ -404,12 +403,12 @@ export async function runPipeline({
     if (analyzer === "mock") {
       return { status: "ok", annotations: mockFinalFor(args?.staged || staged) };
     }
-    // Production: real ACPX text-output calls (fail-closed, invents nothing).
+    // Production: real model calls (fail-closed, invents nothing).
     if (args?.stage === "annotate-preface") {
-      return acpxAnnotatePrefaceInvoke({ prompt: args.prompt, promptFile: args.promptFile });
+      return modelAnnotatePrefaceInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     if (args?.stage === "annotate") {
-      return acpxAnnotateInvoke({ prompt: args.prompt, promptFile: args.promptFile });
+      return modelAnnotateInvoke({ prompt: args.prompt, promptFile: args.promptFile });
     }
     return { status: "failed", error: "annotate invoke unavailable; production invents nothing" };
   };

@@ -186,8 +186,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     improve_run_parser.add_argument(
         "--analyzer",
-        default="acpx",
-        help="Analyzer backend: acpx (default, model calls via acpx only) or mock (no model calls).",
+        default="model",
+        help="Analyzer backend: model (default, tool-free chat completions via CA_LLM_BASE_URL) or mock (no model calls).",
     )
     improve_run_parser.add_argument(
         "--min-gap-evidence",

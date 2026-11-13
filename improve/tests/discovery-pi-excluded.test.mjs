@@ -10,7 +10,6 @@ import {
   EXCLUDED_HARNESSES,
   discoverTranscripts,
 } from "../src/discovery.js";
-import { buildAcpxArgs } from "../src/acpx-text.js";
 
 describe("discovery Pi exclusion (default scope + explicit rejection)", () => {
   it("default scope is hermes/claude/codex/opencode only", () => {
@@ -52,17 +51,6 @@ describe("discovery Pi exclusion (default scope + explicit rejection)", () => {
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
       fs.rmSync(stateDir, { recursive: true, force: true });
-    }
-  });
-
-  it("Pi stays usable as the fixed ACPX executor (not affected by discovery exclusion)", () => {
-    const prev = process.env.CA_IMPROVE_ACPX_ARGS;
-    process.env.CA_IMPROVE_ACPX_ARGS = "--env KEY=value";
-    try {
-      assert.deepEqual(buildAcpxArgs({}), ["--env", "KEY=value", "--format", "quiet", "pi"]);
-    } finally {
-      if (prev === undefined) delete process.env.CA_IMPROVE_ACPX_ARGS;
-      else process.env.CA_IMPROVE_ACPX_ARGS = prev;
     }
   });
 });

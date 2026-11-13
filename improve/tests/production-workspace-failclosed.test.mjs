@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { synthesizeWithAcpx, measuredIdsForPlan } from "../src/synthesize.js";
+import { synthesizeWithModel, measuredIdsForPlan } from "../src/synthesize.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "../src/experience-workspace.js";
 
 function makeLedger() {
@@ -90,7 +90,7 @@ test("text-only production ACPX synthesis materializes markdown and measurement 
       plans: [{ clusterId: "c1", provisionalIntent: "Do X", provisionalSources: ["s1", "s2"] }],
     };
   };
-  const out = synthesizeWithAcpx(makeLedger(), {
+  const out = synthesizeWithModel(makeLedger(), {
     evidenceIndex: makeEvidenceIndex(),
     stateDir,
     runId: "run-test",
@@ -116,7 +116,7 @@ test("production prompt is text-only proposer, never an edit turn", () => {
       plans: [{ clusterId: "c1", provisionalIntent: "Do X", provisionalSources: ["s1", "s2"] }],
     };
   };
-  synthesizeWithAcpx(makeLedger(), {
+  synthesizeWithModel(makeLedger(), {
     evidenceIndex: makeEvidenceIndex(),
     stateDir,
     runId: "run-test",
@@ -156,7 +156,7 @@ test("invalid synthesis plans fail closed with zero candidate edits", async () =
   const proposal = await runPipeline({
     home,
     stateDir,
-    analyzer: "acpx",
+    analyzer: "model",
     analyzeInvoke: async () => ({ status: "skipped", reason: "tdd empty" }),
     consolidateInvoke: () => ({ status: "ok", ledger: ledgerForTest }),
     synthesizeInvoke: (args) => {

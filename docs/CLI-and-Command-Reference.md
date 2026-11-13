@@ -30,10 +30,10 @@ https://github.com/kunchenguid/backpass commit
 **experience records**, never direct SOUL/memory/skill patches.
 
 Pipeline: `discover` (global transcript stores) -> `collect` -> `distill`
-(deterministic) -> `analyze` (acpx only, injectable/mockable) -> `fold`
-(deterministic, `minGapEvidence` floor) -> `consolidate` (one judged acpx
+(deterministic) -> `analyze` (one model call per trace, injectable/mockable) -> `fold`
+(deterministic, `minGapEvidence` floor) -> `consolidate` (one judged model
 call, mechanical merge, fail-soft to lexical) -> `synthesize` (mock
-deterministic or production acpx, fail-closed) -> `stage` (deterministic
+deterministic or production model call, fail-closed) -> `stage` (deterministic
 private staging; synth output is a staged change plan, never final) ->
 `measure` (deterministic stable measured IDs/deltas, coverage-or-revert per
 measurement) -> `annotate-preface` then `annotate` (fresh logical invocations,
@@ -87,12 +87,22 @@ Runtime state: everything that changes after bootstrap lives under CA home
 `soul/` (living SOUL generations). Analysis reads the living SOUL once one is
 compiled, else the bootstrap SOUL. See `docs/Living-SOUL.md`.
 
-Production model invocations use ACPX with Pi. Syntax only, literal shape:
+Model calls: every stage (analysis, consolidation, synthesis, annotation) is
+one tool-free OpenAI-compatible chat completion made by
+`improve/bin/model-call.js` (`improve/src/model-call.js`). No agent harness,
+no tools, no workspace, no shell; the reply is parsed strictly as data and
+code assigns every path and field. Configuration is environment only:
 
-`acpx --env KEY=value --format quiet pi ...`
+- `CA_LLM_BASE_URL` -- endpoint base, e.g. `http://nas:8081/v1` (required)
+- `CA_LLM_MODEL` -- model for every stage; `CA_LLM_MODEL_<ROLE>` overrides one
+  (`ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE`)
+- `CA_LLM_API_KEY_FILE` -- optional bearer key file for a hosted endpoint
 
-where global flags (`--env KEY=value`, `--format quiet`) precede `pi`
-and `...` is Pi's subcommand/prompt appended downstream.
+Requests use temperature 0, seed 0 and JSON-only output. Each validated reply
+is cached in `<state>/model-cache/<sha256 of request>.txt`, so an unchanged
+prompt is never sent twice. Network errors, 429 and 5xx are retried twice
+within the stage deadline (a shared endpoint may be swapping models). A run
+fails closed before analysis when no endpoint is configured.
 
 Private state (never CA repo state): `$XDG_DATA_HOME/cognitive-assistant/improve/`
 (`cursor.json` run state, `evidence/`, `ledger.json` folded ledger,
@@ -143,12 +153,12 @@ claims.
 
 `python -m core improve-synthesize --state-dir <dir> [--min-gap-evidence N] [--soul-path SOUL.md]`
 reuses persisted successful evidence (`state/evidence/*.json`) and thefolded ledger (`state/ledger.json` + `state/open-gaps.json`) without any
-discovery, export, or ACPX analysis: no transcript discovery, no OpenCode
+discovery, export, or model analysis: no transcript discovery, no OpenCode
 export, no per-trace analyze. It consolidates only if required (the same
 `<2 gaps` skip / mock-free production path as `improve-run`), checks the
 eligibility/evidence floors (`>=min-gap-evidence` distinct sessions per
 eligible cluster), then runs fixed raw-stdout production synthesis
-(`synthesizeWithAcpx` text-only, no workspace/cwd passed; deterministic code materializes validated plans under `synthesis-workspace`) ->
+(`synthesizeWithModel` text-only, no workspace/cwd passed; deterministic code materializes validated plans under `synthesis-workspace`) ->
 workspace measure (`measured-changes.json`) -> fresh
 `annotate-preface` then `annotate` -> fresh reviewable `proposal.json`
 (`reviewed: false`, `appliedAt: null`). Absent/incomplete/corrupt state
@@ -168,27 +178,23 @@ headless pass weekly; applying stays manual).
 
 Adapted from the Backpass operational source
 (`src/prompts/consolidate.md` at commit 0268201; see
-`improve/LICENSE.NOTICE`): one bounded acpx-only call sees the full open gap
+`improve/LICENSE.NOTICE`): one bounded model call sees the full open gap
 set and merges entries that describe the same underlying gap. Runs only when
 `>=2` eligible/open gaps exist; otherwise the run keeps deterministic lexical
 identity with a visible note and makes no model call. The mock analyzer never
-calls acpx here. The rendered prompt is persisted privately as
+makes the model call here. The rendered prompt is persisted privately as
 `prompts/<runId>__consolidate.md` plus a `.json` sidecar carrying run/stage
 identifying metadata (`runId`, `stage: consolidate`), both `0600` where
-supported. The model returns `{"merges": [[ids], ...]}` via ACPX text-output
-(`--format quiet`, never JSON-RPC `--format json`); the single final object
-is extracted strictly by `improve/src/acpx-text.js` (tolerates only `[acpx]`
-framing lines, whitespace, and one optional ```json fence; fail-closed on
-absent/malformed/ambiguous candidates, top-level arrays/scalars, JSON-RPC
-envelopes, and model prose - no loose regex) before stage parsing validates
+supported. The model returns `{"merges": [[ids], ...]}`; the single final
+object is extracted by `improve/src/model-call.js` (the whole reply, one
+optional ```json fence, or the outermost braces; top-level arrays/scalars and
+prose fail) before stage parsing validates
 strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
 across groups; malformed groups and unknown IDs are dropped, shrinking a
-group below two drops it). Model roles follow the Backpass split, through Pi only: analysis and consolidation use `openai-codex/gpt-5.6-luna`; synthesis and annotation use `openai-codex/gpt-5.6-sol`. Distillation stays local. `CA_IMPROVE_ACPX_ARGS` supports additional ACPX
-arguments but rejects `--format`/`--output` overrides so model-final output
-remains text-mode `--format quiet`; this prevents JSON-RPC parsing mismatch. The merge itself is mechanical: union distinct
+group below two drops it). Each role's model comes from `CA_LLM_MODEL` or its `CA_LLM_MODEL_<ROLE>` override. Distillation stays local. The merge itself is mechanical: union distinct
 session sources (never double-count a session), preserve per-source quote
 provenance, keep the shortest instruction as canonical, and re-check the
-`minGapEvidence` floor. acpx failure or invalid output degrades to the
+`minGapEvidence` floor. model call failure or invalid output degrades to the
 deterministic lexical current result with a visible proposal/run note
 (`proposal.notes` + `proposal.consolidation.note`); it never aborts the run.
 
@@ -207,24 +213,23 @@ Annotation is the sole full-record author; staged plans carry no
 record/evidence. The prompt states explicitly: propose only plans -- never live
 files, tracked files, SOUL, posture, skills, or Hermes -- and the plan is
 not authoritative pre-apply (the terminal review/apply gate consumes only
-annotated finals). Production runs are acpx-only with ACPX text-output
-(`--format quiet`, never JSON-RPC) plus the strict single-object extractor
-(`improve/src/acpx-text.js`), a bounded stdout payload (max 20000 chars, max
+annotated finals). Production runs make one tool-free model call with the
+strict synthesis parser (`improve/src/synthesis-parser.js`), a bounded payload (max 20000 chars, max
 16 plans, max 500 intent chars), and strict provenance validation against the
 eligible ledger (reject malformed, unknown/ineligible clusters, <2 distinct
 known sources, authoritative final fields, path-like or unexpected fields,
 duplicate/unsafe ids). No workspace/cwd is passed to the production
-invocation and no ACPX filesystem change is authoritative: deterministic code
+invocation and no model-made filesystem change is authoritative: deterministic code
 writes only validated plans as Markdown under existing
 `stateDir/synthesis-workspace` (no model-controlled path target), then the
 existing measure -> annotate -> proposal chain observes those files. The mock path is deterministic
 `synthesizePlans` with no real calls, still reviewable, with no synthetic
 provenance or fallback candidate. Production failure
-(acpx error or zero valid plans) fails closed: no plans plus a visible
+(model call error or zero valid plans) fails closed: no plans plus a visible
 proposal note (`proposal.notes` +
 `proposal.synthesis.note`). `minGapEvidence` (integer >= 2) is validated
 centrally (`assertMinGapEvidence`) at the JS CLI and at the direct
-`runPipeline`/`runSynthesizeResume`/`synthesizeWithAcpx` boundaries so run
+`runPipeline`/`runSynthesizeResume`/`synthesizeWithModel` boundaries so run
 and synthesize match. Prior rejections (`state/rejections.jsonl`) render
 into `{{REJECTIONS}}`; synthesis itself does not suppress -- suppression
 applies downstream on annotated finals unless the final carries higher
@@ -244,8 +249,8 @@ and opens the fresh logical annotate session. Placeholders `{{COUNT}}`,
 `{{STAGED_SUMMARY}}`, `{{RUN_ID}}` render the staged-existing set through the
 existing strict loader/renderer (`improve/src/prompts.js`), sentinel FIRST and
 never baked into the file. The preface outcome is revert-only readiness
-metadata (`{"ready": true}`) via a real ACPX text-output call
-(`acpxAnnotatePrefaceInvoke`, `--format quiet`, strict extraction): it never annotates, never authors
+metadata (`{"ready": true}`) via a real model call
+(`modelAnnotatePrefaceInvoke`, strict extraction): it never annotates, never authors
 records/evidence, and never edits live files,
 tracked files, SOUL, posture, skills, or Hermes. An empty staged set stays
 sequenced as annotate-preface then annotate. Rendered as
@@ -270,8 +275,8 @@ with its `source` session id; paraphrases and swapped sessions fail), plus requi
 and `compilerImplication` on the staged record. Prohibited operations are
 explicit: never live files, tracked files, SOUL, posture, skills, or Hermes;
 the proposal stays non-authoritative until the human apply gate consumes only
-annotated finals. Production is acpx-only (real `acpxAnnotateInvoke` ACPX
-text-output, strict single-object extraction) with strict final validation and
+annotated finals. Production makes one model call (real `modelAnnotateInvoke`,
+strict single-object extraction) with strict final validation and
 fail-closed (staging marked via `staging/annotate.failed`,
 candidates cleared, no final proposal edits); the mock path is deterministic
 final annotation with no real calls, still reviewable. The terminal

@@ -198,7 +198,7 @@ def run_headless(
     cwd: Path,
     state_dir: Optional[Path] = None,
     since: str = "30d",
-    analyzer: str = "acpx",
+    analyzer: str = "model",
     soul_path: Optional[Path] = None,
     min_gap_evidence: int = 2,
     harnesses: Optional[List[str]] = None,
@@ -248,7 +248,7 @@ def run_tui(
     cwd: Path,
     state_dir: Optional[Path] = None,
     since: str = "30d",
-    analyzer: str = "acpx",
+    analyzer: str = "model",
     soul_path: Optional[Path] = None,
     min_gap_evidence: int = 2,
     harnesses: Optional[List[str]] = None,
@@ -287,7 +287,7 @@ def synthesize_resume(
     eligibility/evidence floors, then runs fixed raw-stdout production
     synthesis -> workspace measure -> annotation -> fresh proposal JSON.
 
-    Never invokes discovery/export/ACPX analysis. Absent/incomplete/corrupt
+    Never invokes discovery/export/model analysis. Absent/incomplete/corrupt
     state fails closed with an actionable error. Never writes the CA repo or
     Hermes; apply remains the sole durable experience writer.
     """

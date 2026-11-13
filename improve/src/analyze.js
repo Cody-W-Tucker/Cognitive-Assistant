@@ -1,9 +1,8 @@
 // SPDX: MIT (Backpass MIT (c) 2026 Kun Chen) — see improve/LICENSE.NOTICE.
-// Analyzer boundary adapted from Backpass src/acpx.js + src/analyze.js
-// (commit 0268201): every model call goes through the `acpx` binary only —
-// this runtime owns no API keys and makes no direct model calls. The invoke
-// function is injectable so tests (and headless CI) can substitute a mock
-// with zero model traffic. The model prompt itself is the checked-in
+// Analyzer boundary adapted from Backpass src/analyze.js (commit 0268201).
+// Every model call is one tool-free chat completion through model-call.js;
+// the invoke function is injectable so tests (and headless CI) can substitute
+// a mock with zero model traffic. The model prompt itself is the checked-in
 // improve/prompts/analysis.md (adapted from Backpass
 // src/prompts/analysis.md), rendered by improve/src/prompts.js with the
 // self-session sentinel FIRST; no inline prompt text lives here.
@@ -13,63 +12,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { renderPrompt } from "./prompts.js";
-import { runAcpxPromptFile, runAcpxPromptFileAsync } from "./acpx-text.js";
-import { modelForRole } from "./models.js";
+import { runModelPromptFile, runModelPromptFileAsync } from "./model-call.js";
 import { defaultExperienceRoot } from "./state.js";
 import { defaultSoulPath } from "./soul.js";
 
-export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
-
-/** Resolve the acpx binary fresh from the environment (selection order). */
-export function resolveAcpxBin() {
-  return process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
-}
-
-/**
- * Focused availability preflight for the real production run path.
- * Respects CA_IMPROVE_ACPX_BIN / BACKPASS_ACPX_BIN selection; never reads
- * machine config, never replaces acpx. Returns { ok, bin, path } or
- * { ok: false, bin, error } with remediation. No model traffic, no traces.
- */
-export function checkAcpxAvailable({ bin } = {}) {
-  const target = bin || resolveAcpxBin();
-  const isPath = String(target).includes("/");
-  const candidates = [];
-  if (isPath) {
-    candidates.push(path.resolve(String(target)));
-  } else {
-    const pathEnv = String(process.env.PATH || "");
-    for (const dir of pathEnv.split(path.delimiter)) {
-      if (!dir) continue;
-      candidates.push(path.join(dir, String(target)));
-    }
-    if (!candidates.length) candidates.push(String(target));
-  }
-  for (const candidate of candidates) {
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return { ok: true, bin: target, path: candidate };
-    } catch {
-      // try next PATH entry
-    }
-  }
-  return {
-    ok: false,
-    bin: target,
-    error:
-      `acpx binary not available (looked for ${JSON.stringify(target)}` +
-      ` via CA_IMPROVE_ACPX_BIN/BACKPASS_ACPX_BIN/PATH): install acpx on PATH` +
-      ` or set CA_IMPROVE_ACPX_BIN=/path/to/acpx (BACKPASS_ACPX_BIN also honored).` +
-      ` No traces were analyzed and no evidence was written.`,
-  };
-}
-
-/** Throwing variant for the production run path (before trace analysis). */
-export function assertAcpxAvailable(options = {}) {
-  const result = checkAcpxAvailable(options);
-  if (!result.ok) throw new Error(result.error);
-  return result;
-}
+export { checkModelConfigured, assertModelConfigured } from "./model-call.js";
 
 /** Repo root resolved relative to the runtime, never CWD. */
 export function defaultRepoRoot() {
@@ -168,7 +115,7 @@ function safeName(text) {
 
 // Backpass's trivial-run gate, applied to CA's already-distilled trace. A
 // single-turn user sessions stay eligible when it has meaningful agent/tool
-// work; only genuinely tiny shells skip the ACPX call.
+// work; only genuinely tiny shells skip the model call.
 export function distilledTraceStats(distilled) {
   const text = String(distilled || "");
   return {
@@ -231,17 +178,11 @@ export function persistPrompt(
 }
 
 /**
- * Default invoke: one acpx call per distilled trace. The persisted analysis
- * prompt file (private state) travels via `--file`; ACPX text-output
- * (`--format quiet`, never JSON-RPC) is requested on stdout and the single
- * final JSON object is extracted strictly. Any failure is fail-soft (status
- * "failed") so one bad transcript never stops a run. Pi stays the executor;
- * role model luna with ACPX --timeout 180s (mandatory, before the agent).
+ * Default invoke: one tool-free model call per distilled trace on its persisted
+ * prompt. Any failure is fail-soft (status "failed") so one bad transcript
+ * never stops a run.
  */
-export function acpxInvoke(options = {}) {
-  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
-    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
-  }
+export function modelInvoke(options = {}) {
   const { trace, model = null, timeoutSec = null, timeoutMs = null, prompt = null, promptFile = null, contexts, promptsDir, spawnFn = null } = options;
   void prompt;
   void contexts;
@@ -249,12 +190,12 @@ export function acpxInvoke(options = {}) {
   void trace;
   const file = promptFile ? String(promptFile) : "";
   if (!file) {
-    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+    return { status: "failed", error: "model prompt file is required (reuse persisted prompt)" };
   }
-  const out = runAcpxPromptFile({
+  const out = runModelPromptFile({
     role: "analysis",
     promptFile: file,
-    model: model || modelForRole("analysis"),
+    ...(model ? { model } : {}),
     timeoutSec: timeoutSec ?? 180,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
@@ -308,7 +249,7 @@ export function mockInvoke({ trace }) {
 export function analyzeTraces(
   traces,
   {
-    invoke = acpxInvoke,
+    invoke = modelInvoke,
     contexts,
     promptsDir,
     stateDir = null,
@@ -401,7 +342,7 @@ export function analyzeTraces(
 export async function analyzeTracesAsync(traces, options = {}) {
   const { invoke = null, jobs = 4, onRecord = null, stateDir = null, runId = null, promptsDir, repoRoot, soulPath, posturePath, experienceRoot, contexts } = options;
   const merged = { ...loadDefaultContexts({ repoRoot, soulPath, posturePath, experienceRoot }), ...(contexts || {}) };
-  const useInvoke = invoke || (async ({ promptFile }) => { const out = await runAcpxPromptFileAsync({ role: "analysis", promptFile, model: modelForRole("analysis"), timeoutSec: 180 }); return out.status === "ok" ? { status: "ok", evidence: out.result } : { status: "failed", error: out.error }; });
+  const useInvoke = invoke || (async ({ promptFile }) => { const out = await runModelPromptFileAsync({ role: "analysis", promptFile }); return out.status === "ok" ? { status: "ok", evidence: out.result } : { status: "failed", error: out.error }; });
   let next = 0;
   const records = new Array(traces.length);
   async function one(trace) {

@@ -1,6 +1,6 @@
 // SPDX: MIT (Backpass MIT (c) 2026 Kun Chen) — see improve/LICENSE.NOTICE.
 // Consolidation adapted from Backpass src/consolidate.js + src/gap-ledger.js
-// (commit 0268201), narrowed to the CA folded ledger: one bounded acpx call
+// (commit 0268201), narrowed to the CA folded ledger: one bounded model call
 // judges same-gap paraphrases, the merge itself stays mechanical. Failure is
 // fail-soft to deterministic exact observation identity with a visible run note.
 
@@ -8,9 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt, resolveAcpxBin } from "./analyze.js";
-import { runAcpxPromptFile } from "./acpx-text.js";
-import { modelForRole } from "./models.js";
+import { persistPrompt } from "./analyze.js";
+import { runModelPromptFile } from "./model-call.js";
 import { assertMinGapEvidence } from "./state.js";
 
 export const MIN_CONSOLIDATE_ENTRIES = 2;
@@ -53,7 +52,7 @@ export function saveOpenGaps(stateDir, gaps) {
  * Mechanically corroborate open/singleton observations BEFORE the
  * minGapEvidence eligibility floor. Matches ONLY on stable raw observation
  * identity (normalized exact gap quote/mistake) or on an explicitly
- * ACPX-validated merge membership persisted with member IDs/provenance.
+ * model-validated merge membership persisted with member IDs/provenance.
  * Never uses proposedInstruction/instruction text for matching: the same
  * generic instruction across unrelated quotes/sessions must not corroborate.
  * Unions distinct session sources, preserves every source-backed quote
@@ -171,7 +170,7 @@ export function corroborateOpenGaps(ledger, persisted, { minGapEvidence = 2 } = 
     }
   }
   // Persistable snapshot: union of persisted + current (mechanical, no drop).
-  // Persisted entries carry member IDs/provenance so ACPX-validated paraphrase
+  // Persisted entries carry member IDs/provenance so model-validated paraphrase
   // merges stay safely reusable across runs; instruction text is stored for
   // display only and never used for matching.
   const snapshot = new Map();
@@ -339,27 +338,18 @@ export function mergeClusters(ledger, groups, { minGapEvidence = 2 } = {}) {
   return { ...ledger, clusters: mergedClusters };
 }
 
-/** Default acpx invoke for consolidation. Same executable protocol as
- * analyze acpx (analyze.js): the `acpx` binary, Pi executor, ACPX
- * text-output (`--format quiet`, never JSON-RPC), extra args from
- * CA_IMPROVE_ACPX_ARGS, persisted prompt via `--file`, role model luna
- * with ACPX --timeout 180s (mandatory, before the agent), model-final
- * JSON extracted strictly from text stdout. */
-export function acpxConsolidateInvoke(options = {}) {
-  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
-    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
-  }
+/** Default consolidation invoke: one tool-free model call on the persisted prompt (model-call.js). */
+export function modelConsolidateInvoke(options = {}) {
   const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
   void prompt;
-  void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
   if (!file) {
-    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+    return { status: "failed", error: "model prompt file is required (reuse persisted prompt)" };
   }
-  const out = runAcpxPromptFile({
+  const out = runModelPromptFile({
     role: "consolidate",
     promptFile: file,
-    model: model || modelForRole("consolidate"),
+    ...(model ? { model } : {}),
     timeoutSec: timeoutSec ?? 180,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
@@ -371,18 +361,18 @@ export function acpxConsolidateInvoke(options = {}) {
 }
 
 /**
- * Run consolidation: acpx-only when >=2 current/open clusters exist.
+ * Run consolidation: model-only when >=2 current/open clusters exist.
  * ALL current/open clusters (including ineligible singletons from actual
- * analyzer gap observations) are submitted to the ACPX consolidation prompt
+ * analyzer gap observations) are submitted to the model consolidation prompt
  * BEFORE minGapEvidence eligibility gating; the merge itself can promote
  * distinct-session singletons to eligible. Persists the rendered prompt
- * privately with run/stage metadata. acpx failure/invalid degrades to the
+ * privately with run/stage metadata. model failure/invalid degrades to the
  * deterministic exact observation identity current result with a visible
  * note; it never aborts the run.
  */
 export function consolidateLedger(
   ledger,
-  { invoke = acpxConsolidateInvoke, promptsDir, stateDir = null, runId = null, minGapEvidence = 2, analyzer = "acpx", persist = true, archivePrompt = null } = {},
+  { invoke = modelConsolidateInvoke, promptsDir, stateDir = null, runId = null, minGapEvidence = 2, analyzer = "model", persist = true, archivePrompt = null } = {},
 ) {
   minGapEvidence = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   const resolvedRun = runId || `run-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
@@ -474,13 +464,13 @@ export function consolidateLedger(
     }
   }
   const withPersist = (entry) => (persistNote ? { ...entry, note: entry.note ? `${entry.note}\n${persistNote}` : persistNote } : entry);
-  if (!promptFile && invoke === acpxConsolidateInvoke) {
+  if (!promptFile && invoke === modelConsolidateInvoke) {
     persistOpen(working);
     return withPersist({
       ledger: working,
-      failed: "acpx prompt file is required (reuse persisted prompt)",
+      failed: "model prompt file is required (reuse persisted prompt)",
       merged: 0,
-      note: "consolidation failed (acpx prompt file is required (reuse persisted prompt)); continuing with exact observation identity for this run",
+      note: "consolidation failed (model prompt file is required (reuse persisted prompt)); continuing with exact observation identity for this run",
       promptFile,
     });
   }

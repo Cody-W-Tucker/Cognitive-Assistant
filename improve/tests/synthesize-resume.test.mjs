@@ -292,7 +292,7 @@ describe("improve-synthesize resume-only pipeline", () => {
       "readOpencodeExport",
       "analyzeTraces",
       "mockInvoke",
-      "assertAcpxAvailable",
+      "assertModelConfigured",
     ]) {
       assert.ok(!src.includes(forbidden), `resume must not reference ${forbidden}`);
     }

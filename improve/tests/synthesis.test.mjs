@@ -11,7 +11,7 @@ import {
   buildSynthesisPrompt,
   validateCandidate,
   validateChangePlan,
-  synthesizeWithAcpx,
+  synthesizeWithModel,
   renderRejectionsForPrompt,
   isSuppressedByRejection,
   BODY_MAX_CHARS,
@@ -287,7 +287,7 @@ describe("strict candidate validation (production acpx)", () => {
   });
 });
 
-describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () => {
+describe("synthesizeWithModel (production only, narrow plans, fail-closed)", () => {
   function plan(overrides = {}) {
     return {
       clusterId: "g-aaa",
@@ -303,7 +303,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
     // TEXT-ONLY: durable plans come from validated stdout payload,
     // materialized deterministically by code (no ACPX filesystem write).
     const stateDir = tmpDir();
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ ...plan(), id: "e1" }] }),
       stateDir,
@@ -321,7 +321,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
 
   it("valid JSON plans materialize deterministically (text-only, no ACPX filesystem write)", () => {
     const stateDir = tmpDir();
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: (args) => {
         assert.equal(args.workspace, undefined, "production invoke must not receive workspace");
@@ -344,7 +344,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
     const ws = `${stateDir}/synthesis-workspace`;
     fs.mkdirSync(ws, { recursive: true });
     fs.writeFileSync(`${ws}/e9.md`, validWorkspaceBody(), "utf8");
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", result: { plans: [] } }),
       stateDir,
@@ -358,7 +358,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
 
   it("drops plans carrying authoritative final fields; fails closed when none remain", () => {
     const leaked = { ...plan(), record: { title: "leaked" } };
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [leaked] }),
     });
@@ -369,7 +369,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
 
   it("drops invalid plans (unknown cluster); fails closed with visible note", () => {
     const bad = plan({ clusterId: "g-ghost" });
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [bad] }),
     });
@@ -379,7 +379,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
   });
 
   it("fails closed with visible note and no edits on acpx failure", () => {
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "failed", error: "boom" }),
     });
@@ -390,7 +390,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
 
   it("persists the synthesis prompt with run/stage metadata", () => {
     const stateDir = tmpDir();
-    synthesizeWithAcpx(ledger(), {
+    synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [] }),
       stateDir,
@@ -401,7 +401,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
 
   it("makes no real acpx calls (injectable invoke only)", () => {
     let seen = null;
-    synthesizeWithAcpx(ledger(), {
+    synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: (args) => {
         seen = args;
@@ -414,7 +414,7 @@ describe("synthesizeWithAcpx (production only, narrow plans, fail-closed)", () =
   it("does not suppress at synthesis; suppression operates on annotated finals downstream", () => {
     const rejections = [{ edit: "e9", title: "Bootstrap context once", clusterId: "g-aaa", sources: ["s1", "s2"] }];
     const stateDir = tmpDir();
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ ...plan(), id: "e1" }] }),
       rejections,
@@ -628,7 +628,7 @@ describe("review findings: quote/session binding + cluster linkage + suppression
   it("RED: model {edits:[...]}/{candidates:[...]} full-record shapes are rejected (strict {plans:[...]} only)", () => {
     const rec = boundCandidate().record;
     for (const result of [{ edits: [{ record: rec }] }, { candidates: [{ record: rec }] }]) {
-      const out = synthesizeWithAcpx(boundLedger(), {
+      const out = synthesizeWithModel(boundLedger(), {
         evidenceIndex: boundIndex(),
         invoke: () => ({ status: "ok", result }),
       });
@@ -639,7 +639,7 @@ describe("review findings: quote/session binding + cluster linkage + suppression
 
   it("RED: malformed model shapes fail closed", () => {
     for (const result of [{}, { plans: "nope" }, { plans: [{ clusterId: "" }] }, { candidates: [{ record: { title: "" } }] }]) {
-      const out = synthesizeWithAcpx(boundLedger(), {
+      const out = synthesizeWithModel(boundLedger(), {
         evidenceIndex: boundIndex(),
         invoke: () => ({ status: "ok", result }),
       });
@@ -651,13 +651,13 @@ describe("review findings: quote/session binding + cluster linkage + suppression
 
 describe("synthesis invocation/write containment + mock workspace author", () => {
   it("rejects workspace/cwd on the text-only invoke and guards materialization root", async () => {
-    const { synthesizeWithAcpx, assertContainedSynthesisWorkspace, acpxSynthesisInvoke } = await import("../src/synthesize.js");
+    const { synthesizeWithModel, assertContainedSynthesisWorkspace, modelSynthesisInvoke } = await import("../src/synthesize.js");
     const stateDir = tmpDir();
     assert.throws(() => assertContainedSynthesisWorkspace("/tmp/evil-workspace", stateDir), /denied|outside|private/);
     assert.throws(() => assertContainedSynthesisWorkspace("/tmp/evil-workspace/synthesis-workspace-evil", null), /denied|outside|private/);
-    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", workspace: "/tmp/evil" }), /text-only/);
-    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", cwd: "/tmp/evil" }), /text-only/);
-    const out = synthesizeWithAcpx(ledger(), {
+    assert.throws(() => modelSynthesisInvoke({ prompt: "x", promptFile: "f", workspace: "/tmp/evil" }), /text-only/);
+    assert.throws(() => modelSynthesisInvoke({ prompt: "x", promptFile: "f", cwd: "/tmp/evil" }), /text-only/);
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: evidenceIndex(),
       invoke: () => ({ status: "ok", plans: [{ clusterId: "g-aaa", provisionalIntent: "x", provisionalSources: ["s1", "s2"] }] }),
       stateDir,

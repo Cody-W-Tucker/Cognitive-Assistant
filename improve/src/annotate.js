@@ -9,9 +9,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt, resolveAcpxBin } from "./analyze.js";
-import { runAcpxPromptFile } from "./acpx-text.js";
-import { modelForRole } from "./models.js";
+import { persistPrompt } from "./analyze.js";
+import { runModelPromptFile } from "./model-call.js";
 import { validateCandidate, isSuppressedByRejection, isValidRecordId, renderStagedArtifact, renderDiff } from "./synthesize.js";
 import { validateStaged } from "./stage.js";
 import { createHash } from "node:crypto";
@@ -249,28 +248,18 @@ function annotationsFrom(outcome) {
   return null;
 }
 
-/**
- * Default ACPX invoke for annotate-preface: persisted preface prompt via
- * `--file`, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout,
- * single final `{"ready": true}` object extracted strictly. Pi executor;
- * role model sol with ACPX --timeout 300s (mandatory, before the agent).
- * No direct model client, no fallback.
- */
-export function acpxAnnotatePrefaceInvoke(options = {}) {
-  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
-    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
-  }
+/** Default annotate-preface invoke: one tool-free model call; reply must be one `{"ready": true}` object. */
+export function modelAnnotatePrefaceInvoke(options = {}) {
   const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
   void prompt;
-  void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
   if (!file) {
-    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+    return { status: "failed", error: "model prompt file is required (reuse persisted prompt)" };
   }
-  const out = runAcpxPromptFile({
+  const out = runModelPromptFile({
     role: "annotate",
     promptFile: file,
-    model: model || modelForRole("annotate"),
+    ...(model ? { model } : {}),
     timeoutSec: timeoutSec ?? 300,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
@@ -281,27 +270,18 @@ export function acpxAnnotatePrefaceInvoke(options = {}) {
   return { status: "ok", result: out.result };
 }
 
-/**
- * Default ACPX invoke for annotate: persisted annotate prompt via `--file`,
- * ACPX text-output (`--format quiet`, never JSON-RPC) on stdout, single
- * final `{"annotations": [...]}` object extracted strictly. Same argv
- * contract as the preface invoke (sol/300s, Pi executor).
- */
-export function acpxAnnotateInvoke(options = {}) {
-  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
-    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
-  }
+/** Default annotate invoke: one tool-free model call; reply must be one `{"annotations": [...]}` object. */
+export function modelAnnotateInvoke(options = {}) {
   const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
   void prompt;
-  void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
   if (!file) {
-    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+    return { status: "failed", error: "model prompt file is required (reuse persisted prompt)" };
   }
-  const out = runAcpxPromptFile({
+  const out = runModelPromptFile({
     role: "annotate",
     promptFile: file,
-    model: model || modelForRole("annotate"),
+    ...(model ? { model } : {}),
     timeoutSec: timeoutSec ?? 300,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),

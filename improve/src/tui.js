@@ -119,7 +119,7 @@ export function startTui(meta, { stderr = process.stderr } = {}) {
 }
 
 /**
- * Keep the repaint loop in a sibling event loop. CA's ACPX calls use spawnSync;
+ * Keep the repaint loop in a sibling event loop. CA's model calls use spawnSync;
  * without this boundary an interval in the pipeline process cannot advance
  * while a model is working.
  */

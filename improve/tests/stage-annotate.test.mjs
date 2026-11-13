@@ -294,7 +294,7 @@ describe("synth->private stage / measure->annotate-preface->annotate (annotation
     await pipeline.runPipeline({
       home: tmpDir(),
       stateDir: tmpDir(),
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-SEQ1",
       analyzeInvoke: trackingInvoke("analyze"),
       consolidateInvoke: trackingInvoke("consolidate"),
@@ -317,7 +317,7 @@ describe("synth->private stage / measure->annotate-preface->annotate (annotation
     await pipeline.runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-PRIV1",
       analyzeInvoke: () => ({ status: "ok", evidence: { status: "ok", positive: [], negative: [], gaps: [] } }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),

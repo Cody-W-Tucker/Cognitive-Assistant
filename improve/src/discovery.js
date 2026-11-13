@@ -14,7 +14,7 @@ import os from "node:os";
 import { HEAD_BYTES, headHasSelfSentinel } from "./sentinel.js";
 import { checkpointKey, readSessionCheckpoint } from "./state.js";
 
-/** Harnesses this slice discovers (Pi is excluded; Pi stays valid only as an ACPX agent option). */
+/** Harnesses this slice discovers. Pi sessions are excluded as machine/automation work. */
 export const SUPPORTED_HARNESSES = ["hermes", "claude", "codex", "opencode"];
 
 /** Explicitly out of scope for this slice, with reasons. */
@@ -425,8 +425,6 @@ function discoverSqlite(options) {
  * `perHarness[h].error`, never a failed discovery. Sessions carrying the
  * runtime sentinel (or rooted under `stateDir`) are counted as `self` and
  * dropped. Pi/Grok/Cursor are never read; they appear in `excluded`.
- * Pi remains a valid ACPX agent option for production model invocations;
- * it is excluded only from discovery scope.
  */
 /**
  * `strict` makes an unreadable or missing store for any selected harness an

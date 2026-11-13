@@ -4,7 +4,7 @@
 Resume loads persisted successful evidence + ledger/open-gap state,
 consolidates only if required, checks eligibility/evidence floors, then
 fixed raw-stdout production synthesis -> workspace measure -> annotation ->
-fresh reviewable proposal JSON. It never invokes discovery/export/ACPX
+fresh reviewable proposal JSON. It never invokes discovery/export/model
 analysis; absent/incomplete/corrupt state fails closed actionable.
 """
 
@@ -129,7 +129,7 @@ class ImproveSynthesizeStateTests(unittest.TestCase):
             "readOpencodeExport",
             "analyzeTraces",
             "mockInvoke",
-            "assertAcpxAvailable",
+            "assertModelConfigured",
             "collectTraces",
             "distill(",
         ):
@@ -139,7 +139,7 @@ class ImproveSynthesizeStateTests(unittest.TestCase):
             )
         for required in (
             "readEvidenceRecords",
-            "synthesizeWithAcpx",
+            "synthesizeWithModel",
             "measureExperienceWorkspace",
             "annotateStaging",
             "buildFinalProposal",
@@ -187,7 +187,7 @@ class ImproveSynthesizeStateTests(unittest.TestCase):
             )
             self.assertTrue((state_dir / "ledger.json").exists())
             self.assertGreaterEqual(len(list((state_dir / "evidence").glob("*.json"))), 1)
-            # Resume via injected production doubles: the fake ACPX synthesis
+            # Resume via injected production doubles: the fake model synthesis
             # returns stdout-only provisional plans; deterministic code
             # materializes the workspace and annotation supplies finals.
             probe = root / "resume-probe.mjs"

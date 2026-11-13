@@ -5,12 +5,17 @@ import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 
-import { runAcpxPromptFile, runAcpxPromptFileAsync } from "../src/acpx-text.js";
+import { runModelPromptFile, runModelPromptFileAsync } from "../src/model-call.js";
 import {
-  acpxSynthesisInvoke,
+
+  modelSynthesisInvoke,
   materializeValidatedPlans,
   parseStrictBoundedSynthesisStdout,
 } from "../src/synthesize.js";
+
+// A configured endpoint, so these cases reach the reply parser (spawn is faked).
+process.env.CA_LLM_BASE_URL ||= "http://model.test/v1";
+process.env.CA_LLM_MODEL ||= "test-model";
 
 function makeTempPrompt() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ca-synth-raw-"));
@@ -38,7 +43,7 @@ function makeAsyncSpawn(stdoutText, exitCode = 0) {
 describe("synthesis raw-stdout boundary (sync)", () => {
   it("prose synthesis stdout fails strict path", () => {
     const { file } = makeTempPrompt();
-    const out = acpxSynthesisInvoke({
+    const out = modelSynthesisInvoke({
       promptFile: file,
       model: "test-model",
       spawnFn: syncSpawn('prose before {"plans":[]} prose after'),
@@ -48,7 +53,7 @@ describe("synthesis raw-stdout boundary (sync)", () => {
 
   it("fenced synthesis stdout fails strict path", () => {
     const { file } = makeTempPrompt();
-    const out = acpxSynthesisInvoke({
+    const out = modelSynthesisInvoke({
       promptFile: file,
       model: "test-model",
       spawnFn: syncSpawn('```json\n{"plans":[]}\n```'),
@@ -58,7 +63,7 @@ describe("synthesis raw-stdout boundary (sync)", () => {
 
   it("exact {\"plans\":[]} succeeds", () => {
     const { file } = makeTempPrompt();
-    const out = acpxSynthesisInvoke({
+    const out = modelSynthesisInvoke({
       promptFile: file,
       model: "test-model",
       spawnFn: syncSpawn('{"plans":[]}'),
@@ -67,10 +72,10 @@ describe("synthesis raw-stdout boundary (sync)", () => {
     assert.deepEqual(out.plans, []);
   });
 
-  it("sync runAcpxPromptFile rejects prose synthesis stdout", () => {
+  it("sync runModelPromptFile rejects prose synthesis stdout", () => {
     const { file } = makeTempPrompt();
     const raw = 'prose {"plans":[]} tail';
-    const out = runAcpxPromptFile({
+    const out = runModelPromptFile({
       role: "synthesis",
       promptFile: file,
       model: "test-model",
@@ -85,7 +90,7 @@ describe("synthesis raw-stdout boundary (async)", () => {
   it("prose synthesis stdout fails at helper", async () => {
     const { file } = makeTempPrompt();
     const raw = 'prose before {"plans":[]} prose after';
-    const out = await runAcpxPromptFileAsync({
+    const out = await runModelPromptFileAsync({
       role: "synthesis",
       promptFile: file,
       model: "test-model",
@@ -98,7 +103,7 @@ describe("synthesis raw-stdout boundary (async)", () => {
   it("fenced synthesis stdout fails at helper", async () => {
     const { file } = makeTempPrompt();
     const raw = '```json\n{"plans":[]}\n```';
-    const out = await runAcpxPromptFileAsync({
+    const out = await runModelPromptFileAsync({
       role: "synthesis",
       promptFile: file,
       model: "test-model",
@@ -111,7 +116,7 @@ describe("synthesis raw-stdout boundary (async)", () => {
   it("exact {\"plans\":[]} passes at helper", async () => {
     const { file } = makeTempPrompt();
     const raw = '{"plans":[]}';
-    const out = await runAcpxPromptFileAsync({
+    const out = await runModelPromptFileAsync({
       role: "synthesis",
       promptFile: file,
       model: "test-model",

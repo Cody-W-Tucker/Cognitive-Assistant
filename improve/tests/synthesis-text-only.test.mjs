@@ -8,11 +8,11 @@ import os from "node:os";
 import path from "node:path";
 
 import {
-  synthesizeWithAcpx,
+  synthesizeWithModel,
   validateProvisionalPlans,
   materializeValidatedPlans,
   buildSynthesisPrompt,
-  acpxSynthesisInvoke,
+  modelSynthesisInvoke,
   SYNTHESIS_MAX_PLANS,
   SYNTHESIS_STDOUT_MAX_CHARS,
 } from "../src/synthesize.js";
@@ -76,7 +76,7 @@ describe("text-only invocation (no workspace/cwd, bounded stdout)", () => {
   it("production invoke receives no workspace/cwd and prompt never asks to inspect/edit workspace/edit turn", () => {
     const stateDir = tmpDir();
     let seen = null;
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: idx(),
       invoke: (args) => {
         seen = args;
@@ -102,10 +102,10 @@ describe("text-only invocation (no workspace/cwd, bounded stdout)", () => {
     assert.ok(!/invocation cwd/i.test(prompt));
   });
 
-  it("acpxSynthesisInvoke rejects workspace/cwd options fail-closed", () => {
-    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", workspace: "/tmp/w" }), /text-only/);
-    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", cwd: "/tmp/w" }), /text-only/);
-    assert.throws(() => acpxSynthesisInvoke({ prompt: "x", promptFile: "f", workspaceRoot: "/tmp/w" }), /text-only/);
+  it("modelSynthesisInvoke rejects workspace/cwd options fail-closed", () => {
+    assert.throws(() => modelSynthesisInvoke({ prompt: "x", promptFile: "f", workspace: "/tmp/w" }), /text-only/);
+    assert.throws(() => modelSynthesisInvoke({ prompt: "x", promptFile: "f", cwd: "/tmp/w" }), /text-only/);
+    assert.throws(() => modelSynthesisInvoke({ prompt: "x", promptFile: "f", workspaceRoot: "/tmp/w" }), /text-only/);
   });
 
   it("bounded payload: oversize plans array and oversize stdout fail closed", () => {
@@ -121,7 +121,7 @@ describe("text-only invocation (no workspace/cwd, bounded stdout)", () => {
 describe("strict stdout schema/provenance validation (fail-closed)", () => {
   it("rejects malformed, candidates/edits keys, and non-array plans", () => {
     for (const raw of [null, [], {}, { plans: "nope" }, { candidates: [] }, { edits: [] }, { plans: [{ clusterId: "" }] }]) {
-      const out = synthesizeWithAcpx(ledger(), {
+      const out = synthesizeWithModel(ledger(), {
         evidenceIndex: idx(),
         invoke: () => ({ status: "ok", result: raw }),
         stateDir: tmpDir(),
@@ -175,7 +175,7 @@ describe("strict stdout schema/provenance validation (fail-closed)", () => {
 describe("deterministic materialization (code-only, no model-controlled path)", () => {
   it("writes only validated markdown under existing stateDir/synthesis-workspace", () => {
     const stateDir = tmpDir();
-    const out = synthesizeWithAcpx(ledger(), {
+    const out = synthesizeWithModel(ledger(), {
       evidenceIndex: idx(),
       invoke: () => ({ status: "ok", plans: [validPlan({ id: "e7" })] }),
       stateDir,
@@ -190,7 +190,7 @@ describe("deterministic materialization (code-only, no model-controlled path)", 
     assert.ok(body.includes("clusterId: g-aaa"));
     assert.ok(body.includes("s1") && body.includes("s2"));
     // No model-controlled path target: plans carrying file/path are rejected, never written.
-    const evil = synthesizeWithAcpx(ledger(), {
+    const evil = synthesizeWithModel(ledger(), {
       evidenceIndex: idx(),
       invoke: () => ({ status: "ok", plans: [{ ...validPlan(), file: "../../evil.md" }] }),
       stateDir: tmpDir(),
@@ -263,7 +263,7 @@ describe("regression: normal production run wires prepared workspace root to mat
     const proposal = await runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-REG1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
@@ -320,6 +320,6 @@ describe("regression: normal production run wires prepared workspace root to mat
 
   it("pipeline passes its prepared workspace root to synthesis materialization", () => {
     const src = fs.readFileSync(new URL("../src/pipeline.js", import.meta.url), "utf8");
-    assert.ok(/synthesizeWithAcpx\(ledger,\s*\{[\s\S]*?workspaceRoot:\s*workspaceCwd[\s\S]*?\}\);/.test(src), "pipeline must pass workspaceRoot: workspaceCwd to synthesizeWithAcpx");
+    assert.ok(/synthesizeWithModel\(ledger,\s*\{[\s\S]*?workspaceRoot:\s*workspaceCwd[\s\S]*?\}\);/.test(src), "pipeline must pass workspaceRoot: workspaceCwd to synthesizeWithModel");
   });
 });

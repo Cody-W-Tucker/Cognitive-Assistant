@@ -1,5 +1,5 @@
 // Isolated repaint loop for ca-improve. The pipeline may block synchronously
-// inside ACPX; this process receives its progress as NDJSON over stdin.
+// inside model; this process receives its progress as NDJSON over stdin.
 import readline from "node:readline";
 
 import { startTui } from "./tui.js";

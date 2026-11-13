@@ -1,5 +1,5 @@
 // SPDX: MIT — strict synthesis stdout parser (lowest-level shared module).
-// Standalone with zero project imports so both acpx-text (helper boundary)
+// Standalone with zero project imports so both model-text (helper boundary)
 // and synthesize (invoke) can share it without a circular dependency.
 // Contract: stdout after whitespace/BOM must be exactly one JSON object
 // with exactly `{plans:[...]}` — no prose, no fenced/framed content, no
@@ -7,7 +7,7 @@
 
 /**
  * Strict bounded-synthesis stdout parser (synthesis only).
- * @param {unknown} stdout raw ACPX stdout
+ * @param {unknown} stdout raw model stdout
  * @returns {{ plans: unknown[] } | null} parsed payload or null when malformed
  */
 export function parseStrictBoundedSynthesisStdout(stdout) {

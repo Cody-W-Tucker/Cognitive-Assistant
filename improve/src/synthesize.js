@@ -1,6 +1,6 @@
 // SPDX: MIT (Backpass MIT (c) 2026 Kun Chen) — see improve/LICENSE.NOTICE.
 // Synthesis adapted from Backpass src/synthesize.js + src/proposal.js
-// (commit 0268201), narrowed to this slice's contract: text-only ACPX
+// (commit 0268201), narrowed to this slice's contract: text-only model
 // proposer of narrow staged change plans plus deterministic code
 // materialization under stateDir/synthesis-workspace. The SOUL baseline
 // is read-only context — synthesis never patches SOUL, memory files, or
@@ -11,15 +11,14 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt, resolveAcpxBin } from "./analyze.js";
+import { persistPrompt } from "./analyze.js";
 import { parseWorkspaceFileProvenance } from "./workspace-frontmatter.js";
-import { runAcpxPromptFile } from "./acpx-text.js";
+import { runModelPromptFile } from "./model-call.js";
 import { parseStrictBoundedSynthesisStdout } from "./synthesis-parser.js";
-import { modelForRole } from "./models.js";
 import { readSoulSnapshot } from "./soul.js";
 import { assertMinGapEvidence } from "./state.js";
 // Private writable synthesis workspace under stateDir (synthesis-workspace).
-// ACPX synthesis is text-only (no workspace cwd); validated narrow plans
+// model synthesis is text-only (no workspace cwd); validated narrow plans
 // are materialized deterministically by code inside it. Synthesis must
 // refuse/forbid/deny any durable write to the source repo, SOUL.md,
 // skills, or Hermes; apply remains the only durable experience
@@ -39,7 +38,7 @@ export function assertSynthesisWorkspaceOnly(target, workspaceRoot) {
 
 /**
  * Containment at the synthesis invocation/write boundary (not only
- * helpers/cwd). ACPX executes an external process, so the only safe
+ * helpers/cwd). model executes an external process, so the only safe
  * posture is: reject any workspace outside the expected
  * stateDir/synthesis-workspace private root, and ensure the invocation
  * carries no workspace cwd (text-only). Fail-closed (throw) on escape.
@@ -69,7 +68,7 @@ function safePlanFileId(id) {
  * Deterministic mock-synthesis workspace author (MOCK ONLY). When the mock
  * path needs a reviewable workspace, the mock synthesis itself authors the
  * private workspace BEFORE measurement: one created record per narrow plan.
- * Production never calls this and never passes a workspace/cwd to ACPX —
+ * Production never calls this and never passes a workspace/cwd to model —
  * production synthesis is a text-only proposer (no workspace cwd) and
  * deterministic code materializes validated plans inside the private
  * workspace. Containment is enforced before any write. No synthetic
@@ -300,7 +299,7 @@ export function validateChangePlan(plan, { ledger } = {}) {
   return { ok: errors.length === 0, errors };
 }
 
-// --- production (acpx-only) synthesis -------------------------------------
+// --- production (model-only) synthesis -------------------------------------
 
 function oneLine(text, max = 240) {
   const flat = String(text || "").replace(/\s+/g, " ").trim();
@@ -480,7 +479,7 @@ export function isSuppressedByRejection(candidate, rejections) {
 
 // --- strict provisional-plan constants (Option 2 text-only) ------------------
 
-/** Max raw ACPX stdout chars accepted for the synthesis payload. */
+/** Max raw model stdout chars accepted for the synthesis payload. */
 export const SYNTHESIS_STDOUT_MAX_CHARS = 20000;
 /** Max provisional plans accepted per run (bounded payload). */
 export const SYNTHESIS_MAX_PLANS = 16;
@@ -501,7 +500,7 @@ function isPathLike(value) {
 }
 
 /**
- * Strict fail-closed validation of the raw ACPX stdout payload against the
+ * Strict fail-closed validation of the raw model stdout payload against the
  * eligible ledger. Rejects: malformed (missing/non-array plans,
  * candidates/edits keys), unknown/ineligible clusters, <2 distinct known
  * sources, authoritative final fields, path-like or unexpected fields,
@@ -796,7 +795,7 @@ function writeFileViaDirFd(dirFd, name, body, rootDisplay) {
 }
 
 /**
- * Deterministic materialization of text-only ACPX synthesis plans: write
+ * Deterministic materialization of text-only model synthesis plans: write
  * only validated narrow plans as Markdown under the existing
  * stateDir/synthesis-workspace root. Filenames derive solely from
  * validated safe ids (no model-controlled path target); content is the
@@ -1015,45 +1014,34 @@ export function materializeValidatedPlans(plans, { stateDir, workspaceRoot = nul
 
 /**
  * Strict bounded-synthesis stdout parser (synthesis only; re-exported from
- * the shared lowest-level synthesis-parser module so acpx-text and
+ * the shared lowest-level synthesis-parser module so model-text and
  * synthesize share one implementation without a circular dependency).
  * Stdout must be exactly one JSON object with exactly `{plans:[...]}` —
- * no prose, no fenced wrapping, no substring extraction. Other ACPX roles
- * keep their own framing behavior via extractAcpxFinalJson; synthesis does
+ * no prose, no fenced wrapping, no substring extraction. Other model roles
+ * keep their own framing behavior via extractFinalJson; synthesis does
  * not use it. Returns the parsed object or null.
  */
 export { parseStrictBoundedSynthesisStdout };
 
 /**
- * Default acpx invoke for synthesis (text-only): persisted prompt via
- * `--file`, ACPX text-output (`--format quiet`, never JSON-RPC) on stdout.
- * No workspace/cwd is passed: the model is a text-only proposer and never
- * executes with a filesystem cwd. Stdout must hold exactly one final JSON
- * object `{"plans": [...]}` within the bounded payload; it is parsed
- * strictly here and returned unvalidated (validation happens in
- * synthesizeWithAcpx against the eligible ledger). Same executable protocol
- * as analyze acpx (analyze.js): the `acpx` binary, Pi executor, extra args
- * from CA_IMPROVE_ACPX_ARGS, role model sol with ACPX --timeout 300s
- * (mandatory, before the agent).
+ * Default synthesis invoke: one tool-free model call on the persisted prompt.
+ * The reply must be exactly one bounded `{"plans": [...]}` object; plans are
+ * validated against the eligible ledger in synthesizeWithModel.
  */
-export function acpxSynthesisInvoke(options = {}) {
-  if (options && Object.prototype.hasOwnProperty.call(options, "agent")) {
-    throw new Error("CA ACPX executor is fixed to pi (caller agent is not accepted)");
-  }
+export function modelSynthesisInvoke(options = {}) {
   if (options && (Object.prototype.hasOwnProperty.call(options, "workspace") || Object.prototype.hasOwnProperty.call(options, "workspaceRoot") || Object.prototype.hasOwnProperty.call(options, "cwd"))) {
     throw new Error("synthesis invoke is text-only: workspace/cwd must not be passed");
   }
   const { prompt, promptFile = null, model = null, timeoutSec = null, timeoutMs = null, spawnFn = null } = options;
   void prompt;
-  void resolveAcpxBin;
   const file = promptFile ? String(promptFile) : "";
   if (!file) {
-    return { status: "failed", error: "acpx prompt file is required (reuse persisted prompt)" };
+    return { status: "failed", error: "model prompt file is required (reuse persisted prompt)" };
   }
-  const out = runAcpxPromptFile({
+  const out = runModelPromptFile({
     role: "synthesis",
     promptFile: file,
-    model: model || modelForRole("synthesis"),
+    ...(model ? { model } : {}),
     timeoutSec: timeoutSec ?? 300,
     ...(timeoutMs !== null && timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(spawnFn ? { spawnFn } : {}),
@@ -1063,23 +1051,23 @@ export function acpxSynthesisInvoke(options = {}) {
   }
   const stdout = typeof out.stdout === "string" ? out.stdout : "";
   if (stdout.length > SYNTHESIS_STDOUT_MAX_CHARS) {
-    return { status: "failed", error: `acpx synthesis stdout exceeds ${SYNTHESIS_STDOUT_MAX_CHARS} chars` };
+    return { status: "failed", error: `model synthesis stdout exceeds ${SYNTHESIS_STDOUT_MAX_CHARS} chars` };
   }
   // Consume the helper-validated result directly (already strictly parsed
-  // via the shared synthesis-parser at the runAcpxPromptFile boundary);
+  // via the shared synthesis-parser at the runModelPromptFile boundary);
   // no loose reparse here — a non-object result is malformed.
   const parsed = out.result;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.plans)) {
-    return { status: "failed", error: "acpx synthesis returned malformed payload (expected {plans:[...]})" };
+    return { status: "failed", error: "model synthesis returned malformed payload (expected {plans:[...]})" };
   }
   if (parsed.candidates !== undefined || parsed.edits !== undefined) {
-    return { status: "failed", error: "acpx synthesis returned forbidden candidates/edits key (expected {plans:[...]} only)" };
+    return { status: "failed", error: "model synthesis returned forbidden candidates/edits key (expected {plans:[...]} only)" };
   }
   if (Object.keys(parsed).length !== 1 || !Object.prototype.hasOwnProperty.call(parsed, "plans")) {
-    return { status: "failed", error: "acpx synthesis returned extra top-level fields (expected {plans:[...]} only)" };
+    return { status: "failed", error: "model synthesis returned extra top-level fields (expected {plans:[...]} only)" };
   }
   if (parsed.plans.length > SYNTHESIS_MAX_PLANS) {
-    return { status: "failed", error: `acpx synthesis returned ${parsed.plans.length} plans (max ${SYNTHESIS_MAX_PLANS})` };
+    return { status: "failed", error: `model synthesis returned ${parsed.plans.length} plans (max ${SYNTHESIS_MAX_PLANS})` };
   }
   return { status: "ok", plans: parsed.plans };
 }
@@ -1112,7 +1100,7 @@ export function buildSynthesisPrompt(
 }
 
 /**
- * Strict raw-acpx parser: the model must return exactly
+ * Strict raw-model parser: the model must return exactly
  * `{"plans": [...]}` — narrow staged change plans only. Anything else
  * (missing key, non-array, a `candidates`/`edits` key carrying full
  * records, a non-object) is malformed and fails closed. Returns the
@@ -1135,9 +1123,9 @@ export function parseAcpxSynthesisResult(raw) {
  */
 
 /**
- * Production synthesis: acpx-only text-only proposer, fail-closed.
+ * Production synthesis: model-only text-only proposer, fail-closed.
  * The model returns a strict bounded stdout payload `{"plans": [...]}`;
- * no workspace/cwd is passed to the invocation and no ACPX filesystem
+ * no workspace/cwd is passed to the invocation and no model filesystem
  * change is authoritative. Validated plans are materialized
  * deterministically by code under existing
  * stateDir/synthesis-workspace (no model-controlled path target); the
@@ -1149,7 +1137,7 @@ export function parseAcpxSynthesisResult(raw) {
  * compilerImplication/stagedArtifact/diff. Suppression and final-record
  * validation happen only on annotated finals downstream.
  */
-export function synthesizeWithAcpx(
+export function synthesizeWithModel(
   ledger,
   {
     evidenceIndex = new Map(),
@@ -1157,7 +1145,7 @@ export function synthesizeWithAcpx(
     soulSnapshot = "",
     soulSha256 = "",
     rejections = [],
-    invoke = acpxSynthesisInvoke,
+    invoke = modelSynthesisInvoke,
     stateDir = null,
     runId = null,
     promptsDir,

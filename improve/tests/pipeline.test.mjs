@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 
 import { runPipeline } from "../src/pipeline.js";
-import { synthesizeWithAcpx } from "../src/synthesize.js";
+import { synthesizeWithModel } from "../src/synthesize.js";
 import { consolidateLedger } from "../src/consolidate.js";
 import { buildMockFinalAnnotation } from "../src/annotate.js";
 
@@ -129,7 +129,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const proposal = await runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-PIPE1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
@@ -208,7 +208,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const proposal = await runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-PIPE-CLOSED",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
@@ -228,7 +228,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const proposal = await runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-PIPE2",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "failed", error: "boom-consolidate" }),
@@ -272,7 +272,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     };
     // EDIT-ONLY: JSON plans alone never yield durable edits; with an
     // unwritable stateDir (no observable workspace) synthesis fails closed.
-    const synth = synthesizeWithAcpx(ledger, {
+    const synth = synthesizeWithModel(ledger, {
       evidenceIndex: new Map(),
       invoke: ({ ledger: led }) => ({ status: "ok", plans: [planForLedger(led)] }),
       stateDir: badState,
@@ -294,7 +294,7 @@ describe("pipeline production wiring (injectable invokes, no real acpx)", () => 
     const proposal = await runPipeline({
       home,
       stateDir,
-      analyzer: "acpx",
+      analyzer: "model",
       runId: "run-NOFAB1",
       analyzeInvoke: () => ({ status: "ok", evidence: gapEvidence() }),
       consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),

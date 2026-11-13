@@ -12,8 +12,8 @@ and is expected to FAIL until the implementation lands:
    from measured workspace changes, not annotation invented artifacts.
 4. synthesis cannot durably write repo/SOUL/skills/Hermes, and apply is sole
    durable writer.
-5. ACPX synthesis is text-only deterministic materialization under
-   stateDir/synthesis-workspace (no synthesis workspace cwd); generic ACPX
+5. Model synthesis is text-only deterministic materialization under
+   stateDir/synthesis-workspace (no synthesis workspace cwd); generic model
    invocation behavior preserved.
 """
 
@@ -287,19 +287,19 @@ class SynthesisContainmentTests(unittest.TestCase):
             self.assertTrue((root / "exp" / "authored").exists())
 
 
-class AcpxWorkspaceCwdTests(unittest.TestCase):
-    def test_acpx_synthesis_is_text_only_deterministic_materialization(self) -> None:
-        """ACPX synthesis is text-only; deterministic code materializes validated plans."""
-        acpx_src = (REPO_ROOT / "improve" / "src" / "acpx-text.js").read_text(encoding="utf-8")
+class ModelCallTextOnlyTests(unittest.TestCase):
+    def test_model_synthesis_is_text_only_deterministic_materialization(self) -> None:
+        """Model calls are text-only; deterministic code materializes validated plans."""
+        model_src = (REPO_ROOT / "improve" / "src" / "model-call.js").read_text(encoding="utf-8")
         synth_src = (REPO_ROOT / "improve" / "src" / "synthesize.js").read_text(encoding="utf-8")
         # Text-only deterministic materialization: synthesis never passes a
         # workspace cwd; validated plans materialize by code under
         # stateDir/synthesis-workspace.
         self.assertIn("text-only", synth_src.lower(), "synthesize must declare text-only proposer")
         self.assertIn("materializevalidatedplans", synth_src.lower(), "deterministic code must materialize validated plans")
-        # Generic ACPX invocation behavior preserved (non-synthesis callers may
-        # still use an explicit workspace cwd).
-        self.assertIn("workspace", acpx_src.lower(), "acpx-text must retain generic workspace cwd support")
+        # No model call of any role runs with a workspace or a cwd.
+        self.assertIn("model calls are text-only: workspace/cwd must not be passed", model_src)
+        self.assertNotIn("tools", model_src.split("export function buildChatRequest", 1)[1].split("}\n}", 1)[0])
         # Existing invocation behavior preserved: analyzer/mock entry still works.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

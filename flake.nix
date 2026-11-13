@@ -82,11 +82,9 @@
       packages = forEachSupportedSystem (
         { pkgs }:
         let
-          acpx = pkgs.callPackage ./packages/acpx/package.nix { };
           caPython = pkgs.python314.withPackages (python-pkgs: [ python-pkgs.python-dotenv ]);
         in
         {
-          inherit acpx;
           langfuse-review-queue = pkgs.writeShellApplication {
             name = "langfuse-review-queue";
             runtimeInputs = [ pkgs.python314 ];
@@ -103,7 +101,6 @@
             runtimeInputs = [
               caPython
               pkgs.nodejs
-              acpx
             ];
             text = ''
               export PYTHONPATH=${self}
@@ -239,6 +236,33 @@
               default = 15;
               description = "Analyzed Hermes sessions needed on each side before a change is judged.";
             };
+            llm.baseUrl = lib.mkOption {
+              type = lib.types.str;
+              example = "http://127.0.0.1:8080/v1";
+              description = ''
+                OpenAI-compatible endpoint for the improvement pass. Each stage is one
+                tool-free chat completion; nothing is executed on the model's behalf.
+              '';
+            };
+            llm.model = lib.mkOption {
+              type = lib.types.str;
+              example = "qwen-3.6-35b-a3b";
+              description = "Model for every stage unless overridden in llm.roleModels.";
+            };
+            llm.roleModels = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              example = {
+                synthesis = "a-larger-model";
+                annotate = "a-larger-model";
+              };
+              description = "Per-stage model overrides: analysis, consolidate, synthesis, annotate.";
+            };
+            llm.apiKeyFile = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "File holding a bearer key, for a hosted endpoint. Use an inference-only key.";
+            };
             improve.harnesses = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ "hermes" ];
@@ -268,7 +292,13 @@
               Unit.Description = "CA headless improvement pass over Hermes sessions";
               Service = {
                 Type = "oneshot";
-                Environment = [ "HERMES_HOME=${cfg.hermesHome}" ];
+                Environment = [
+                  "HERMES_HOME=${cfg.hermesHome}"
+                  "CA_LLM_BASE_URL=${cfg.llm.baseUrl}"
+                  "CA_LLM_MODEL=${cfg.llm.model}"
+                ]
+                ++ lib.mapAttrsToList (role: model: "CA_LLM_MODEL_${lib.toUpper role}=${model}") cfg.llm.roleModels
+                ++ lib.optional (cfg.llm.apiKeyFile != null) "CA_LLM_API_KEY_FILE=${cfg.llm.apiKeyFile}";
                 ExecStart = lib.escapeShellArgs (
                   [
                     "${cfg.improvePackage}/bin/ca-improve"
@@ -329,7 +359,6 @@
                 cudaSupport = false;
               })
               pkgs.nodejs
-              (pkgs.callPackage ./packages/acpx/package.nix { })
               ai-data-extractor.packages.${pkgs.stdenv.hostPlatform.system}.default
             ];
           };

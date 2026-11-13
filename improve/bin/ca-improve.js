@@ -52,7 +52,7 @@ async function main() {
     const home = flagValue(rest, "--home") || undefined;
     const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
     const since = flagValue(rest, "--since") || "30d";
-    const analyzer = flagValue(rest, "--analyzer") || "acpx";
+    const analyzer = flagValue(rest, "--analyzer") || "model";
     const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
     const posturePath = flagValue(rest, "--posture-path") || null;
     let minGapEvidence;
