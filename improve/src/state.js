@@ -1,37 +1,63 @@
-// XDG private state for the CA improvement runtime. Everything the
-// runtime persists (cursor/run state, evidence, folded ledger, proposal,
-// rejections) lives here — never in the CA repo.
+// Private state for the CA improvement runtime. Everything the runtime
+// persists (cursor, evidence, ledger, open gaps, prompts, model cache,
+// proposal) lives under the --state-dir Python passes; never in the repo.
 
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-
-/** Root of all CA runtime state; mirrors core/living_soul.py::ca_home. */
-export function caHome() {
-  if (process.env.CA_HOME) return path.resolve(process.env.CA_HOME);
-  const base = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-  return path.join(base, "cognitive-assistant");
-}
-
-export function defaultStateDir() {
-  return path.join(caHome(), "improve");
-}
-
-/** Accepted-record lineage; never in the repo. */
-export function defaultExperienceRoot() {
-  return path.join(caHome(), "experience");
-}
+import { createHash } from "node:crypto";
 
 export function initStateDir(stateDir) {
-  fs.mkdirSync(stateDir, { recursive: true });
   fs.mkdirSync(path.join(stateDir, "evidence"), { recursive: true });
   fs.mkdirSync(path.join(stateDir, "prompts"), { recursive: true });
-  fs.mkdirSync(path.join(stateDir, "staging"), { recursive: true });
 }
 
 export function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+/** Parsed JSON, or null when the file is absent or not JSON. */
+export function readJson(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/** Sortable, second-resolution stamp used for run and proposal ids. */
+export function timestampId(prefix, now = new Date()) {
+  return `${prefix}-${now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+}
+
+export function shortHash(text) {
+  return createHash("sha256").update(String(text)).digest("hex").slice(0, 12);
+}
+
+export function slugify(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "untitled";
+}
+
+/** A file-name-safe rendering of an untrusted id. */
+function safeName(text) {
+  return String(text || "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "unknown";
+}
+
+/** Where one session's analysis is kept; separators in the id cannot leave evidence/. */
+export function evidenceFile(stateDir, transcriptId) {
+  return path.join(stateDir, "evidence", `${String(transcriptId).replace(/[/\\]/g, "_")}.json`);
+}
+
+/** Gap identity: the same observation text, ignoring case and spacing. */
+export function normalizeQuote(text) {
+  return String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 /**
@@ -43,17 +69,24 @@ export function writeProposal(stateDir, proposal) {
   const file = path.join(stateDir, "proposal.json");
   const previous = readJson(file);
   if (previous && !previous.appliedAt && previous.id && previous.id !== proposal.id) {
-    writeJson(path.join(stateDir, "proposals", `${String(previous.id).replace(/[^A-Za-z0-9._-]/g, "_")}.json`), previous);
+    writeJson(path.join(stateDir, "proposals", `${safeName(previous.id)}.json`), previous);
   }
   writeJson(file, proposal);
 }
 
-export function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
+/**
+ * Archive one rendered model prompt as <stateDir>/prompts/<runId>__<name>.md
+ * (0600) with a .json sidecar naming the run and stage or session.
+ */
+export function persistPrompt(stateDir, { runId, name, prompt, meta = {} }) {
+  const dir = path.join(stateDir, "prompts");
+  fs.mkdirSync(dir, { recursive: true });
+  const base = `${safeName(runId)}__${safeName(name)}`;
+  const promptFile = path.join(dir, `${base}.md`);
+  fs.writeFileSync(promptFile, prompt, { encoding: "utf8", mode: 0o600 });
+  const sidecar = { version: 1, runId: String(runId), name: String(name), ...meta, promptFile: `${base}.md`, createdAt: new Date().toISOString() };
+  fs.writeFileSync(path.join(dir, `${base}.json`), `${JSON.stringify(sidecar, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  return promptFile;
 }
 
 /** A session id is only unique inside one harness store. */
@@ -61,46 +94,44 @@ export function checkpointKey(transcript) {
   return `${String(transcript.harness)}:${String(transcript.id)}`;
 }
 
-/**
- * Read the durable successful-analysis checkpoint. Version 1 cursor files
- * contained only raw ids; retain those as a conservative migration fallback.
- */
+/** harness:id -> session mtime (or null) for every successfully processed session. */
 export function readSessionCheckpoint(stateDir) {
-  const cursor = readJson(path.join(stateDir, "cursor.json")) || {};
-  const processed = cursor.version === 2 && cursor.processed && typeof cursor.processed === "object"
-    ? cursor.processed
-    : {};
-  const legacyIds = cursor.version === 2
-    ? new Set()
-    : new Set(Array.isArray(cursor.analyzedIds) ? cursor.analyzedIds.map(String) : []);
-  return { processed, legacyIds };
+  const cursor = readJson(path.join(stateDir, "cursor.json"));
+  return cursor?.version === 2 && cursor.processed && typeof cursor.processed === "object" ? cursor.processed : {};
 }
 
 /** Successful evidence is the recurrence corpus; raw sessions stay behind the cursor. */
 export function readEvidenceRecords(stateDir) {
-  const evidenceDir = path.join(stateDir, "evidence");
-  try {
-    return fs
-      .readdirSync(evidenceDir)
-      .filter((name) => name.endsWith(".json"))
-      .sort()
-      .map((name) => readJson(path.join(evidenceDir, name)))
-      .filter((record) => record && record.status === "ok");
-  } catch {
-    return [];
-  }
+  const dir = path.join(stateDir, "evidence");
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .sort()
+    .map((name) => readJson(path.join(dir, name)))
+    .filter((record) => record?.status === "ok");
 }
 
-/**
- * Central minGapEvidence floor validation (single source of truth).
- * Both the JS CLI and the direct runPipeline/synthesize API boundaries
- * call this so run and synthesize match. Throws fail-closed on
- * non-integer or <2.
- */
-export function assertMinGapEvidence(value, label = 'minGapEvidence') {
+/** Rows Python appends on reject. A malformed line is skipped; the file stays for audit. */
+export function readRejections(stateDir) {
+  const file = path.join(stateDir, "rejections.jsonl");
+  if (!fs.existsSync(file)) return [];
+  const out = [];
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+export function assertMinGapEvidence(value, label = "minGapEvidence") {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 2) {
-    throw new Error(label + ' must be an integer >= 2 (got ' + JSON.stringify(value) + ')');
+    throw new Error(`${label} must be an integer >= 2 (got ${JSON.stringify(value)})`);
   }
   return n;
 }

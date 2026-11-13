@@ -57,7 +57,8 @@ in
 ## Regeneration Workflow
 
 The repo runs as one unified pipeline parameterized by a layer profile
-(`existential` or `operational`) for profile-specific build steps.
+(`existential` or `operational`) for profile-specific build steps. Model and
+provider setup is in [docs/Getting-Started.md](docs/Getting-Started.md).
 
 ```bash
 # Existential profile
@@ -76,34 +77,31 @@ python -m core --profile operational build-tool-specs
 python -m core enhance-skill
 python -m core build-translation-layer
 python -m core build-alignment-spec
+
+# Everything after ask-questions, for every profile
+python -m core update
 ```
 
 Question answering retrieves from configured QMD collections. Existential uses
 `Journal` and `Personal`; operational uses `Base`, `Consulting`, and `Customers`.
 Raw source notes are not copied into this repository.
 
-`build-skills` reads the active profile's latest `human_profile*.md`, but writes
-to the unified skill store. Cross-system consumers should read skills only from
-`workspaces/skills` or `lib.artifacts.skills.*`, not from profile artifact
-directories.
+`build-skills` reads the profile's `human_profile.md` and writes only to
+`workspaces/skills/<profile>/<skill-name>/SKILL.md`, removing skills in that
+profile folder that the profile no longer declares. Cross-system consumers
+should read skills only from `workspaces/skills` or `lib.artifacts.skills.*`,
+not from profile artifact directories. Imported skills live under purpose
+categories such as `workspaces/skills/workflow/<skill-name>/SKILL.md`.
 
-Generated canonical skills land at:
-`workspaces/skills/<profile>/<skill-name>/SKILL.md`
-
-`build-translation-layer` reads both profile artifacts and produces the
-orchestrator translation layer: the interaction posture inference and the
-durable orchestrator soul. Outputs land at:
-`workspaces/alignment/artifacts/INTERACTION_POSTURE.md`
-`workspaces/alignment/artifacts/SOUL.md`
+`build-translation-layer` reads both profile artifacts plus the runtime
+lineage and produces the interaction posture and the bootstrap SOUL:
 
 ```text
 workspaces/skills/<profile>/<skill-name>/SKILL.md
 workspaces/alignment/artifacts/INTERACTION_POSTURE.md
 workspaces/alignment/artifacts/SOUL.md
+workspaces/alignment/artifacts/absorbed.json
 ```
-
-Use profile folders when the generator does not yet have a better stable
-category. Do not write generated skills into opaque folders like `group-1`.
 
 ## Alignment Spec
 
@@ -113,9 +111,31 @@ The alignment command sits above both profiles. It reads unified skills from
 ```bash
 # Build the spec (requires build-skills to have been run)
 python -m core build-alignment-spec
-
 ```
 
 Regenerate the spec whenever skills change. See
-[`profiles/alignment/README.md`](profiles/alignment/README.md) for architecture
-and details.
+[docs/Alignment-Artifacts.md](docs/Alignment-Artifacts.md) and
+[`profiles/alignment/README.md`](profiles/alignment/README.md).
+
+## Living SOUL and Improvement Loop
+
+The repo builds the bootstrap SOUL. What Hermes runs is the living SOUL under
+CA home (`$CA_HOME`, default `$XDG_DATA_HOME/cognitive-assistant`): the
+bootstrap plus experience records learned from real sessions.
+
+```bash
+python -m core improve-run                   # analyze sessions, propose records (TTY)
+python -m core improve-apply                 # review; accepted records rebuild the living SOUL
+python -m core soul status                   # generations and verdicts
+```
+
+See [docs/Improvement-Loop.md](docs/Improvement-Loop.md) and
+[docs/Living-SOUL.md](docs/Living-SOUL.md). The full docs index is
+[docs/README.md](docs/README.md).
+
+## Tests
+
+```bash
+nix develop --command python -m unittest discover -s tests -v
+nix develop --command bash -c 'cd improve && npm test'
+```

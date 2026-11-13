@@ -1,179 +1,90 @@
 #!/usr/bin/env python3
-"""Profile-aware health checks for the unified pipeline."""
+"""Profile health check: prompts, inputs, provider access and QMD, without calling a model."""
 
 from __future__ import annotations
 
+import importlib
+import shutil
+import string
 from pathlib import Path
 from typing import List
 
-from core.config import ROOT_DIR, Config
-from core.prompt_creator import get_prompt_creator_providers
-from core.prompt_loader import load_prompt_for_profile
-from lib.health import (
-    check_prompt_files as shared_check_prompt_files,
-    check_provider_setup,
-    check_qmd_command,
-    check_script_imports,
-)
-from lib.llm import create_client
+from core import llm, paths, prompt_creator
+from core.config import LayerProfile
 
-
-SCRIPT_MODULES = [
-    "core.config",
-    "core.prompt_loader",
+STAGE_MODULES = (
+    "core.ingest_corpus",
+    "core.question_asker",
     "core.prompt_creator",
     "core.skills_creator",
+    "core.tool_specs_creator",
     "core.skill_enhancer",
-    "core.question_asker",
-    "core.health_check",
     "core.translation_layer_creator",
     "core.alignment_spec",
-]
+)
 
 
-# Sample placeholder values used to verify each prompt template renders.
-_PLACEHOLDER_FIXTURES = {
-    "synthesis_prompt": "sample synthesis",
-    "question": "sample question",
-    "category": "sample category",
-    "goal": "sample goal",
-    "element": "sample element",
-    "context": "sample context",
-    "existing_answer": "sample existing answer",
-    "bio_content": "sample bio",
-    "grouped_bio_content": "<skill_group name=\"group-1\">sample bio</skill_group>",
-    "supported_tools": "- `memory.md`: Memory agent",
-    "seed_documents": "sample seed",
-    "profile_sources": "<profile_source layer=\"existential\">sample</profile_source>",
-    "interaction_posture": "sample interaction posture",
-    "translation_layer": "sample translation layer",
-    "catalog": "{\"role-taker\": {}}",
-    "context_registry": "{\"entries\": []}",
-    "human_source_registry": "{\"sources\": []}",
-    "stakeholder_registry": "{\"entries\": []}",
-    "synthetic_perspective_registry": "{\"entries\": []}",
-    "provenance_policy": "{\"sources\": []}",
-    "profile_evidence_registry": "{\"entries\": []}",
-    "domain_tiers": "{\"medium\": {}}",
-    "trigger_vocabulary": "[\"uncertainty\"]",
-    "agent_definition": "{\"id\": \"agent\"}",
-    "skill_material": "<skill slug=\"sample\">sample</skill>",
-    "skills_content": "<skill slug=\"sample\">sample</skill>",
-}
+def check_template(path: Path) -> List[str]:
+    """A prompt template must exist, be non-empty and parse as a format string."""
+    if not path.exists():
+        return [f"Missing prompt file: {path}"]
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return [f"Prompt file is empty: {path}"]
+    try:
+        for _, field, _, _ in string.Formatter().parse(text):
+            if field is not None and not field.isidentifier():
+                return [f"Prompt {path.name} has a non-keyword placeholder {{{field}}}"]
+    except ValueError as exc:
+        return [f"Prompt {path.name} is not a valid template: {exc}"]
+    return []
 
 
-def _render_template(template: str, placeholders: List[str]) -> None:
-    """Render a template with the configured placeholder fixtures."""
-    fixture = {name: _PLACEHOLDER_FIXTURES.get(name, "sample") for name in placeholders}
-    template.format(**fixture)
+def check_prompts(profile: LayerProfile) -> List[str]:
+    templates = [profile.prompts_dir / filename for filename in profile.prompt_files.values()]
+    templates += sorted(paths.ALIGNMENT_PROMPTS_DIR.glob("*.md"))
+    return [issue for template in templates for issue in check_template(template)]
 
 
-def check_prompt_rendering(config: Config) -> List[str]:
-    """Verify all profile-declared prompt templates render with their placeholders."""
-    issues: List[str] = []
-    profile = config.profile
-
-    render_specs = {
-        "initial_template": ["context"],
-        "ensemble_synthesis_template": ["candidate_profiles"],
-        "skills_creation_template": ["grouped_bio_content"],
-        "qmd_query_template": profile.qmd_prompt_placeholders,
-        "tool_specs_creation_template": [
-            "bio_content",
-            "supported_tools",
-            "seed_documents",
-        ],
-    }
-
-    for prompt_name, placeholders in render_specs.items():
-        if not config.prompts.has(prompt_name):
-            continue
+def check_imports() -> List[str]:
+    issues = []
+    for module in STAGE_MODULES:
         try:
-            template = getattr(config.prompts, prompt_name)
-            _render_template(template, placeholders)
+            importlib.import_module(module)
         except Exception as exc:
-            issues.append(f"Failed to render {prompt_name}: {exc}")
-
+            issues.append(f"Failed to import {module}: {exc}")
     return issues
 
 
-def check_required_paths(config: Config) -> List[str]:
-    """Verify required project files and directories exist."""
-    issues = config.validate_question_answering()
-    if not config.paths.PROMPT_RUNTIME_DIR.exists():
-        issues.append(
-            f"Prompt runtime directory not found: {config.paths.PROMPT_RUNTIME_DIR}"
-        )
-    return issues
-
-
-# Alignment prompts live outside the profile system; render them separately
-# so health checks cover the restored translation-layer seeds.
-_ALIGNMENT_PROMPT_FIXTURES = {
-    "interaction_posture_seed.md": ["profile_sources"],
-    "soul_seed.md": ["profile_sources", "interaction_posture", "lineage"],
-    "seed.md": ["skills_content"],
-}
-
-
-def check_alignment_prompt_rendering() -> List[str]:
-    """Verify alignment prompts render with their declared placeholders."""
-    issues: List[str] = []
-    prompts_dir = ROOT_DIR / "profiles" / "alignment" / "prompts"
-    for filename, placeholders in _ALIGNMENT_PROMPT_FIXTURES.items():
-        prompt_path = prompts_dir / filename
-        if not prompt_path.exists():
-            issues.append(f"Missing alignment prompt: {prompt_path}")
-            continue
+def check_providers() -> List[str]:
+    issues = [issue for provider in prompt_creator.PROVIDERS for issue in llm.missing_config(provider)]
+    for package in ("anthropic", "openai"):
         try:
-            template = prompt_path.read_text(encoding="utf-8")
-            fixture = {
-                name: _PLACEHOLDER_FIXTURES.get(name, "sample")
-                for name in placeholders
-            }
-            template.format(**fixture)
-        except Exception as exc:
-            issues.append(f"Failed to render {filename}: {exc}")
+            importlib.import_module(package)
+        except ImportError as exc:
+            issues.append(f"Missing Python package '{package}': {exc}")
     return issues
 
 
-def run_health_checks(config: Config) -> List[str]:
-    """Run all non-network health checks for a profile and return any issues."""
-    issues: List[str] = []
-    issues.extend(
-        shared_check_prompt_files(
-            prompt_files=config.profile.prompt_files,
-            prompt_runtime_dir=config.profile.prompts_dir,
-            load_prompt=lambda name: load_prompt_for_profile(config.profile, name),
-        )
-    )
-    issues.extend(check_prompt_rendering(config))
-    issues.extend(check_required_paths(config))
-    issues.extend(check_alignment_prompt_rendering())
-    issues.extend(check_script_imports(SCRIPT_MODULES))
-    issues.extend(
-        check_provider_setup(
-            config=config,
-            create_client=create_client,
-            providers=get_prompt_creator_providers(),
-        )
-    )
-    issues.extend(
-        check_qmd_command()
-    )
-    return issues
+def run_health_checks(profile: LayerProfile) -> List[str]:
+    issues = check_prompts(profile)
+    if not profile.questions_csv.exists():
+        issues.append(f"Questions CSV not found at {profile.questions_csv}")
+    if not profile.qmd_collections:
+        issues.append(f"No QMD collections configured for profile '{profile.name}'")
+    issues += check_imports()
+    issues += check_providers()
+    if shutil.which("qmd") is None:
+        issues.append("QMD command not found on PATH: qmd")
+    return list(dict.fromkeys(issues))
 
 
-def run(config: Config) -> int:
-    """CLI entry point. Returns 0 on success, 1 on any issues."""
-    issues = run_health_checks(config)
+def run(profile: LayerProfile) -> int:
+    issues = run_health_checks(profile)
     if issues:
-        print(f"Health check failed for profile '{config.profile.name}':")
+        print(f"Health check failed for profile '{profile.name}':")
         for issue in issues:
             print(f"- {issue}")
         return 1
-    print(f"Health check passed for profile '{config.profile.name}'.")
+    print(f"Health check passed for profile '{profile.name}'.")
     return 0
-
-
-__all__ = ["run", "run_health_checks"]

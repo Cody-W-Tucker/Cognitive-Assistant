@@ -7,7 +7,6 @@ remain in Langfuse.
 from __future__ import annotations
 
 import base64
-import argparse
 import json
 import os
 from dataclasses import dataclass
@@ -17,6 +16,9 @@ from urllib.request import Request, urlopen
 
 
 SCORE_NAMES = ("requested_mode", "delivered_mode", "route_fit", "route_gap")
+
+
+PAGE_LIMIT = 100
 
 
 class LangfuseError(RuntimeError):
@@ -32,11 +34,12 @@ class ReviewConfig:
 
     @classmethod
     def from_env(cls) -> "ReviewConfig":
+        defaults = cls()
         return cls(
-            url=os.environ.get("LANGFUSE_BASE_URL", "https://cloud.langfuse.com").rstrip("/"),
-            pending_cap=int(os.environ.get("LANGFUSE_PENDING_CAP", "20")),
-            per_run=int(os.environ.get("LANGFUSE_PER_RUN", "8")),
-            page_size=int(os.environ.get("LANGFUSE_PAGE_SIZE", "100")),
+            url=os.environ.get("LANGFUSE_BASE_URL", defaults.url).rstrip("/"),
+            pending_cap=int(os.environ.get("LANGFUSE_PENDING_CAP", defaults.pending_cap)),
+            per_run=int(os.environ.get("LANGFUSE_PER_RUN", defaults.per_run)),
+            page_size=int(os.environ.get("LANGFUSE_PAGE_SIZE", defaults.page_size)),
         )
 
 
@@ -46,7 +49,6 @@ class LangfuseClient:
         self._headers = {"Authorization": f"Basic {token}", "Content-Type": "application/json"}
         self.base_url = base_url.rstrip("/")
         self.opener = opener or urlopen
-        self._injected_opener = opener is not None
 
     def request(self, method: str, path: str, query: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
@@ -55,8 +57,7 @@ class LangfuseClient:
         request = Request(url, method=method, headers=self._headers)
         if body is not None:
             request.data = json.dumps(body).encode()
-        opened = self.opener(request) if self._injected_opener else self.opener(request, timeout=45)
-        with opened as response:
+        with self.opener(request, timeout=45) as response:
             if response.status < 200 or response.status >= 300:
                 raise LangfuseError(f"Langfuse {method} {path} returned {response.status}")
             return json.loads(response.read())
@@ -91,11 +92,11 @@ class LangfuseClient:
         page = 1
         result: list[dict[str, Any]] = []
         while True:
-            response = self.request("GET", path, {"page": page, "limit": 100})
+            response = self.request("GET", path, {"page": page, "limit": PAGE_LIMIT})
             data = response.get("data", [])
             result.extend(data)
             meta = response.get("meta", {})
-            if not data or page >= int(meta.get("totalPages", page + (1 if len(data) == 100 else 0))):
+            if not data or page >= int(meta.get("totalPages", page + (1 if len(data) == PAGE_LIMIT else 0))):
                 return result
             page += 1
 
@@ -136,7 +137,7 @@ def group_scores(scores: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict[s
     return {job_id: group for job_id, group in groups.items() if job_id not in conflicting_jobs}
 
 
-def _candidate(group: dict[str, dict[str, Any]]) -> tuple[str, str] | None:
+def _candidate(group: dict[str, dict[str, Any]]) -> tuple[str, str, float] | None:
     if set(group) != set(SCORE_NAMES):
         return None
     requested = _value(group["requested_mode"]["score"])
@@ -145,7 +146,10 @@ def _candidate(group: dict[str, dict[str, Any]]) -> tuple[str, str] | None:
         fit = float(_value(group["route_fit"]["score"]))
     except (TypeError, ValueError):
         return None
-    kind = "control" if requested == delivered and fit >= 0.8 else "same" if requested == delivered and fit < 0.5 else "mismatch" if requested != delivered and fit < 0.7 else None
+    if requested == delivered:
+        kind = "control" if fit >= 0.8 else "same" if fit < 0.5 else None
+    else:
+        kind = "mismatch" if fit < 0.7 else None
     return (group["requested_mode"]["observation_id"], kind, fit) if kind else None
 
 
@@ -266,16 +270,3 @@ def run(dry_run: bool = False) -> int:
     selected = refill(LangfuseClient(public, secret, config.url), config=config, dry_run=dry_run)
     print(f"Dry-run candidates: {len(selected)} observation(s)" if dry_run else f"Queued {len(selected)} observation(s)")
     return 0
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Refill the Langfuse CA routing review queue.")
-    parser.add_argument("--dry-run", action="store_true", help="Report candidates without creating queue items.")
-    return run(dry_run=parser.parse_args().dry_run)
-
-
-__all__ = ["LangfuseClient", "LangfuseError", "ReviewConfig", "group_scores", "refill", "run"]
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

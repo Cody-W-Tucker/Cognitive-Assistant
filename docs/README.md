@@ -1,28 +1,20 @@
-# Cody-W-Tucker-Cognitive-Assistant-DeepWiki
+# Cognitive Assistant documentation
 
-## Content Index
+Start with the Overview, then Getting Started. Each topic has one page.
 
-- [Overview](Overview.md)
-- [Getting-Started](Getting-Started.md)
-- [Repository-Layout](Repository-Layout.md)
-- [Core-Pipeline-Architecture](Core-Pipeline-Architecture.md)
-- [CLI-and-Command-Reference](CLI-and-Command-Reference.md)
-- [Configuration-System](Configuration-System.md)
-- [Data-Ingestion](Data-Ingestion.md)
-- [Projection-Experiments](Projection-Experiments.md)
-- [Question-Answering-and-Prompt-Creation](Question-Answering-and-Prompt-Creation.md)
-- [Layer-Profiles](Layer-Profiles.md)
-- [Existential-Profile](Existential-Profile.md)
-- [Operational-Profile](Operational-Profile.md)
-- [Alignment-Profile](Alignment-Profile.md)
-- [Workspaces-and-Generated-Artifacts](Workspaces-and-Generated-Artifacts.md)
-- [Skills-System](Skills-System.md)
-- [Alignment-Artifacts-SOUL,-Archetype,-and-Alignment-Spec](Alignment-Artifacts-SOUL,-Archetype,-and-Alignment-Spec.md)
-- [LLM-Integration-Layer](LLM-Integration-Layer.md)
-- [LLM-Abstraction-(lib-llm.py)](LLM-Abstraction-(lib-llm.py).md)
-- [Building-the-Alignment-Spec](Building-the-Alignment-Spec.md)
-- [Testing-and-Health-Checks](Testing-and-Health-Checks.md)
-- [Health-Check-System](Health-Check-System.md)
-- [Test-Suite](Test-Suite.md)
-- [Nix-Packaging-and-Distribution](Nix-Packaging-and-Distribution.md)
-- [Glossary](Glossary.md)
+| Page | What it covers |
+| --- | --- |
+| [Overview](Overview.md) | What CA builds, the bootstrap/runtime split, repository layout, glossary |
+| [Getting Started](Getting-Started.md) | Dev shell, model configuration, first build, health check, running the tests |
+| [CLI and Command Reference](CLI-and-Command-Reference.md) | Every `python -m core` command: flags, inputs, outputs |
+| [Layer Profiles](Layer-Profiles.md) | `LayerProfile`, the existential and operational profiles, corpus ingestion, question answering, adding a profile |
+| [Skills System](Skills-System.md) | The skill store, `build-skills`, `enhance-skill`, imported skills |
+| [Alignment Artifacts](Alignment-Artifacts.md) | Bootstrap SOUL, interaction posture, `absorbed.json`, alignment spec |
+| [Workspaces and Generated Artifacts](Workspaces-and-Generated-Artifacts.md) | Where every file lives: repo workspaces and CA home runtime state |
+| [Improvement Loop](Improvement-Loop.md) | `improve-run` / `improve-apply` / `improve-synthesize`, the Node runtime, the journal |
+| [Living SOUL](Living-SOUL.md) | Generations, outcome check, auto adopt/revert, rebootstrap, Home Manager wiring |
+| [Nix Packaging and Distribution](Nix-Packaging-and-Distribution.md) | Flake packages, modules, `lib.artifacts`, dev shell |
+| [Projection Experiments](Projection-Experiments.md) | Langfuse review queue and A/B experiment workflow |
+
+Related READMEs outside `docs/`: `profiles/README.md`,
+`profiles/alignment/README.md`, `workspaces/skills/README.md`.

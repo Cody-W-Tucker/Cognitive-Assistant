@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Living SOUL: a deterministic runtime build of bootstrap SOUL + lineage.
 
-The repo produces the *bootstrap* SOUL from source data. At runtime the CA
-state dir owns everything that changes afterwards:
+The repo produces the *bootstrap* SOUL from source data. At runtime CA home
+owns everything that changes afterwards:
 
-    <ca_home>/experience/authored/<id>.md   accepted change records (lineage)
-    <ca_home>/experience/reverted.jsonl     records withdrawn after adoption
     <ca_home>/soul/compose.json             wrapper text paths set by the deployer
     <ca_home>/soul/generations/NNNN.md      every compiled SOUL, never edited
     <ca_home>/soul/generations/NNNN.json    its inputs (bootstrap sha, record ids)
@@ -24,27 +22,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from core import experience, journal, paths
+from core.paths import atomic_write, soul_dir
+
 ABSORBED_FILENAME = "absorbed.json"
 LEARNED_HEADING = "## Learned in use"
-
-
-def ca_home() -> Path:
-    """Root of all CA runtime state (``$CA_HOME`` or XDG data dir)."""
-    override = os.environ.get("CA_HOME")
-    if override:
-        return Path(override).expanduser()
-    base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
-    return Path(base) / "cognitive-assistant"
-
-
-def soul_dir() -> Path:
-    return ca_home() / "soul"
 
 
 def generations_dir() -> Path:
@@ -55,12 +41,10 @@ def current_path() -> Path:
     return soul_dir() / "current.md"
 
 
-def bootstrap_soul_path() -> Path:
-    """The SOUL this checkout or package was bootstrapped with."""
-    override = os.environ.get("CA_BOOTSTRAP_SOUL")
-    if override:
-        return Path(override).expanduser()
-    return REPO_ROOT / "workspaces" / "alignment" / "artifacts" / "SOUL.md"
+def running_soul_path() -> Path:
+    """The SOUL Hermes is running: the living SOUL once compiled, else the bootstrap."""
+    current = current_path()
+    return current if current.exists() else paths.BOOTSTRAP_SOUL_PATH
 
 
 def _sha256(text: str) -> str:
@@ -76,94 +60,6 @@ def absorbed_ids(bootstrap: Path) -> Set[str]:
     return {str(record_id) for record_id in data.get("records", [])}
 
 
-def reverted_ids(experience_root: Path) -> Set[str]:
-    """Record ids withdrawn after adoption (kept in lineage as negative evidence)."""
-    path = experience_root / "reverted.jsonl"
-    ids: Set[str] = set()
-    if not path.exists():
-        return ids
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            ids.add(str(json.loads(line)["record"]))
-        except (ValueError, KeyError, TypeError):
-            continue
-    return ids
-
-
-def parse_authored_source(text: str) -> Dict[str, str]:
-    """Split an authored record into front matter fields, title and instruction body."""
-    meta: Dict[str, str] = {}
-    rest = text
-    if text.startswith("---\n"):
-        header, _, rest = text[4:].partition("\n---\n")
-        for line in header.splitlines():
-            key, sep, value = line.partition(":")
-            if sep:
-                meta[key.strip()] = value.strip()
-    title = meta.get("title", "")
-    body_lines: List[str] = []
-    seen_heading = False
-    for line in rest.splitlines():
-        if not seen_heading:
-            if line.startswith("# "):
-                title = title or line[2:].strip()
-                seen_heading = True
-            continue
-        if line.startswith("## "):
-            break
-        body_lines.append(line)
-    return {**meta, "title": title, "instruction": "\n".join(body_lines).strip()}
-
-
-def active_records(experience_root: Path, bootstrap: Path) -> List[Dict[str, str]]:
-    """Accepted records not absorbed by the bootstrap and not reverted, oldest first."""
-    authored = experience_root / "authored"
-    if not authored.is_dir():
-        return []
-    skip = absorbed_ids(bootstrap) | reverted_ids(experience_root)
-    records = []
-    for path in sorted(authored.glob("*.md")):
-        record = parse_authored_source(path.read_text(encoding="utf-8"))
-        record.setdefault("id", path.stem)
-        if record["id"] in skip or not record["instruction"]:
-            continue
-        records.append(record)
-    records.sort(key=lambda record: (record.get("created", ""), record["id"]))
-    return records
-
-
-def lineage_for_bootstrap(experience_root: Optional[Path] = None) -> Dict:
-    """Every record ever adopted or withdrawn, for a rebootstrap from source data.
-
-    A rebootstrap does not inherit the previous SOUL, so it sees all accepted
-    records (including ones an earlier bootstrap absorbed) with their evidence,
-    plus withdrawn records as changes that were tried and reverted.
-    """
-    from core import experience
-
-    root = experience_root or experience.experience_root()
-    authored = root / "authored"
-    withdrawn = reverted_ids(root)
-    adopted_blocks: List[str] = []
-    withdrawn_blocks: List[str] = []
-    adopted_ids: List[str] = []
-    paths = sorted(authored.glob("*.md")) if authored.is_dir() else []
-    for path in paths:
-        text = path.read_text(encoding="utf-8").strip()
-        record_id = parse_authored_source(text).get("id") or path.stem
-        if record_id in withdrawn:
-            withdrawn_blocks.append(f'<record id="{record_id}" status="withdrawn">\n{text}\n</record>')
-        else:
-            adopted_ids.append(record_id)
-            adopted_blocks.append(f'<record id="{record_id}" status="adopted">\n{text}\n</record>')
-    if not adopted_blocks and not withdrawn_blocks:
-        return {"text": "(no lineage: nothing has been adopted in use yet)", "records": []}
-    return {"text": "\n\n".join(adopted_blocks + withdrawn_blocks), "records": adopted_ids}
-
-
 def write_absorbed(bootstrap: Path, record_ids: List[str]) -> Path:
     """Declare which lineage records this bootstrap took into account."""
     path = bootstrap.parent / ABSORBED_FILENAME
@@ -171,12 +67,16 @@ def write_absorbed(bootstrap: Path, record_ids: List[str]) -> Path:
         "records": sorted(record_ids),
         "note": "Lineage records this bootstrap SOUL was built with; the living SOUL leaves them out.",
     }
-    _atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return path
 
 
+def _compose_config_path() -> Path:
+    return soul_dir() / "compose.json"
+
+
 def read_compose_config() -> Dict[str, Optional[str]]:
-    path = soul_dir() / "compose.json"
+    path = _compose_config_path()
     if not path.exists():
         return {"prefix": None, "suffix": None}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -185,8 +85,8 @@ def read_compose_config() -> Dict[str, Optional[str]]:
 
 def write_compose_config(prefix: Optional[str], suffix: Optional[str]) -> Path:
     """Record the deployer's wrapper files so every later compile uses the same ones."""
-    path = soul_dir() / "compose.json"
-    _atomic_write(path, json.dumps({"prefix": prefix, "suffix": suffix}, indent=2, sort_keys=True) + "\n")
+    path = _compose_config_path()
+    atomic_write(path, json.dumps({"prefix": prefix, "suffix": suffix}, indent=2, sort_keys=True) + "\n")
     return path
 
 
@@ -212,21 +112,6 @@ def compose(bootstrap_text: str, records: List[Dict[str, str]], prefix: str = ""
     return "\n\n".join(parts) + "\n"
 
 
-def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp-")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        os.replace(tmp_name, path)
-    except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-
-
 def activations() -> List[Dict]:
     """Ordered (at, generation) history of which generation Hermes was running."""
     path = soul_dir() / "activations.jsonl"
@@ -246,10 +131,7 @@ def _point_current(generation_file: Path) -> None:
     previous = current_generation()
     link = current_path()
     tmp = link.with_name(f".current-{os.getpid()}")
-    try:
-        tmp.unlink()
-    except FileNotFoundError:
-        pass
+    tmp.unlink(missing_ok=True)
     os.symlink(os.path.relpath(generation_file, link.parent), tmp)
     os.replace(tmp, link)
     if not previous or previous.get("generation") != number:
@@ -273,22 +155,13 @@ def current_generation() -> Optional[Dict]:
     return json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else None
 
 
-def _journal(event_type: str, payload: Dict) -> None:
-    from core import improve
-
-    improve._journal_note(ca_home() / "improve", event_type, payload)
-
-
-def compile_soul(*, reason: str = "compile", experience_root: Optional[Path] = None) -> Dict:
+def compile_soul(*, reason: str = "compile") -> Dict:
     """Build the living SOUL from its inputs; new generation only when the output changes."""
-    from core import experience
-
-    bootstrap = bootstrap_soul_path()
+    bootstrap = paths.BOOTSTRAP_SOUL_PATH
     bootstrap_text = bootstrap.read_text(encoding="utf-8")
     if not bootstrap_text.strip():
         raise RuntimeError(f"bootstrap SOUL is empty: {bootstrap}")
-    root = experience_root or experience.experience_root()
-    records = active_records(root, bootstrap)
+    records = experience.active(exclude=absorbed_ids(bootstrap))
     config = read_compose_config()
     text = compose(
         bootstrap_text,
@@ -301,9 +174,9 @@ def compile_soul(*, reason: str = "compile", experience_root: Optional[Path] = N
     if current and current.get("sha256") == sha:
         _point_current(generations_dir() / f"{current['generation']:04d}.md")
         return {**current, "changed": False}
-    existing = list_generations()
-    number = (max((g["generation"] for g in existing), default=0)) + 1
+    number = max((g["generation"] for g in list_generations()), default=0) + 1
     record_ids = [record["id"] for record in records]
+    previous_ids = (current or {}).get("records", [])
     bootstrap_sha = _sha256(bootstrap_text)
     meta = {
         "generation": number,
@@ -315,21 +188,21 @@ def compile_soul(*, reason: str = "compile", experience_root: Optional[Path] = N
         # What changed relative to the generation it replaces; the outcome
         # check attributes a regression to exactly these records.
         "parent": current["generation"] if current else None,
-        "added": [r for r in record_ids if not current or r not in current.get("records", [])],
-        "removed": [r for r in (current or {}).get("records", []) if r not in record_ids],
+        "added": [r for r in record_ids if r not in previous_ids],
+        "removed": [r for r in previous_ids if r not in record_ids],
         "bootstrapChanged": bool(current) and current.get("bootstrapSha256") != bootstrap_sha,
     }
     generation_file = generations_dir() / f"{number:04d}.md"
-    _atomic_write(generation_file, text)
-    _atomic_write(generation_file.with_suffix(".json"), json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    atomic_write(generation_file, text)
+    atomic_write(generation_file.with_suffix(".json"), json.dumps(meta, indent=2, sort_keys=True) + "\n")
     _point_current(generation_file)
-    _journal(
+    journal.record(
         "soul_compiled",
         {
             "generation": number,
             "output_ref": sha,
-            "bootstrap_ref": meta["bootstrapSha256"],
-            "record_ids": meta["records"],
+            "bootstrap_ref": bootstrap_sha,
+            "record_ids": record_ids,
             "reason": reason[:80],
         },
     )
@@ -343,20 +216,13 @@ def rollback(generation: int) -> Dict:
         raise RuntimeError(f"no generation {generation} under {generations_dir()}")
     _point_current(target)
     meta = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
-    _journal("soul_rolled_back", {"generation": generation, "output_ref": meta["sha256"]})
+    journal.record("soul_rolled_back", {"generation": generation, "output_ref": meta["sha256"]})
     return meta
 
 
 def revert_records(record_ids: List[str], reason: str) -> Dict:
     """Withdraw adopted records (kept in lineage) and compile without them."""
-    from core import experience
-
-    path = experience.experience_root() / "reverted.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with open(path, "a", encoding="utf-8") as handle:
-        for record_id in record_ids:
-            handle.write(json.dumps({"at": at, "record": record_id, "reason": reason}, sort_keys=True) + "\n")
+    experience.withdraw(record_ids, reason)
     return compile_soul(reason=f"revert {', '.join(record_ids)}"[:80])
 
 
@@ -365,10 +231,7 @@ def link_into(hermes_home: Path) -> Path:
     link = Path(hermes_home) / "SOUL.md"
     link.parent.mkdir(parents=True, exist_ok=True)
     tmp = link.with_name(f".SOUL.md-{os.getpid()}")
-    try:
-        tmp.unlink()
-    except FileNotFoundError:
-        pass
+    tmp.unlink(missing_ok=True)
     os.symlink(current_path(), tmp)
     os.replace(tmp, link)
     return link

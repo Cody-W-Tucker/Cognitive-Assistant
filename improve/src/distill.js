@@ -60,7 +60,7 @@ const BOILERPLATE = [
   /^Caveat: The messages below were generated/,
 ];
 
-export function isBoilerplate(text) {
+function isBoilerplate(text) {
   const trimmed = String(text ?? "").trim();
   if (!trimmed) return true;
   return BOILERPLATE.some((re) => re.test(trimmed));

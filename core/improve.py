@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""Narrow Python boundary to the CA improvement JS runtime.
+"""The improvement pass: run the Node runtime, review its proposal, adopt records.
 
-The runtime lives in ``improve/`` (Node, zero dependencies). This module is
-the only caller: argv + environment in, JSON on stdout out. It never imports
-model clients and never touches transcript stores itself.
+The runtime in ``improve/`` (Node, zero dependencies) discovers sessions,
+analyzes them and writes a proposal under ``<ca_home>/improve``. This module
+launches it (argv in, one JSON proposal on stdout), applies reviewed
+decisions, and runs the autonomous judge/revert/adopt step.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
-from core import experience
+from core import experience, journal, living_soul, outcome, paths
+from core.paths import INTERACTION_POSTURE_PATH, REPO_ROOT, atomic_write, improve_dir
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_BIN = REPO_ROOT / "improve" / "bin" / "ca-improve.js"
 
+VERDICTS = ("accepted", "rejected", "deferred")
 REJECT_REASONS = (
     "too-narrow",
     "too-broad",
@@ -32,306 +36,104 @@ REJECT_REASONS = (
 )
 
 
-class _StateLock:
-    """Exclusive state lock around improvement mutation.
+def _proposal_path() -> Path:
+    return improve_dir() / "proposal.json"
 
-    Uses fcntl.flock on a state-local ``.apply.lock`` file. A concurrent
-    holder makes the second apply fail instead of writing twice. Platforms
-    without fcntl proceed unlocked.
+
+def _runtime(command: str, flags: List[str], *, tui: bool = False) -> Dict:
+    """Run one runtime command and return the proposal it prints.
+
+    With ``tui`` the runtime paints progress on the inherited stderr.
     """
-
-    def __init__(self, state_dir: Path) -> None:
-        self._path = Path(state_dir) / ".apply.lock"
-        self._handle = None
-
-    def __enter__(self) -> "_StateLock":
-        try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            handle = open(self._path, "a+", encoding="utf-8")
-        except OSError:
-            self._handle = None
-            return self
-        try:
-            import fcntl as _fcntl
-        except ImportError:
-            self._handle = handle
-            return self
-        try:
-            _fcntl.flock(handle.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
-        except OSError as exc:
-            handle.close()
-            raise RuntimeError(
-                f"another improve-apply holds {self._path}; retry when it finishes"
-            ) from exc
-        self._handle = handle
-        return self
-
-    def __exit__(self, *exc: object) -> bool:
-        try:
-            if self._handle is not None:
-                try:
-                    import fcntl as _fcntl
-
-                    _fcntl.flock(self._handle.fileno(), _fcntl.LOCK_UN)
-                except Exception:
-                    pass
-                self._handle.close()
-        except Exception:
-            pass
-        return False
-
-
-def _journal_note(state_dir: Path, event_type: str, payload: Dict) -> None:
-    """Best-effort journal append; never breaks the improvement runtime."""
-    try:
-        from core import journal as _journal
-
-        safe: Dict = {}
-        for key, value in payload.items():
-            if isinstance(value, list):
-                safe[key] = _journal.sanitize_sources(value) if key in ("sources", "source_refs") else [v for v in value if isinstance(v, (str, int, float, bool))][:60]
-            elif isinstance(value, (str, int, float, bool)):
-                text = str(value) if isinstance(value, str) else value
-                safe[key] = (text[:200] if isinstance(text, str) else text)
-            elif isinstance(value, dict):
-                safe[key] = {}
-        _journal.append_event(state_dir, event_type, safe)
-    except Exception:
-        pass
-
-
-def _journal_run_events(state_dir: Path, proposal: Dict, analyzer: str = "", resume: bool = False) -> None:
-    """Record actual run/proposal lifecycle into the private lineage journal."""
-    try:
-        proposal_id = str(proposal.get("id", "?"))[:200]
-        stats = proposal.get("stats", {}) if isinstance(proposal.get("stats"), dict) else {}
-        transcripts = stats.get("transcripts", 0) if isinstance(stats, dict) else 0
-        edits = proposal.get("edits", []) if isinstance(proposal.get("edits"), list) else []
-        payload_run: Dict = {"run_id": proposal_id, "transcript_count": int(transcripts or 0)}
-        if analyzer:
-            payload_run["analyzer"] = str(analyzer)[:40]
-        if resume:
-            payload_run["resume"] = True
-        _journal_note(state_dir, "run_completed", payload_run)
-        _journal_note(state_dir, "proposal_created", {"proposal_id": proposal_id, "edit_count": len(edits)})
-    except Exception:
-        pass
-
-
-def node_bin() -> str:
-    """Return the Node binary, or raise with the Nix dev-shell hint."""
-    found = shutil.which("node")
-    if found:
-        return found
-    raise RuntimeError(
-        "node not found on PATH; run under the repo Nix dev shell "
-        "(nix develop --command ...) which provides nodejs"
-    )
-
-
-def default_soul_path() -> Path:
-    """The SOUL Hermes is running: the living SOUL once compiled, else the bootstrap."""
-    from core import living_soul
-
-    current = living_soul.current_path()
-    return current if current.exists() else living_soul.bootstrap_soul_path()
-
-
-def default_state_dir() -> Path:
-    """Return the private state dir for the improve runtime (under CA home)."""
-    from core import living_soul
-
-    return living_soul.ca_home() / "improve"
-
-
-def _home_args(home: Optional[Path]) -> List[str]:
-    """Scope discovery under ``home`` only when explicitly requested.
-
-    Omitting --home keeps ambient HERMES_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME,
-    which is how a deployed Hermes store outside ``~/.hermes`` is found.
-    """
-    return ["--home", str(home)] if home is not None else []
-
-
-def _harness_args(harnesses: Optional[List[str]]) -> List[str]:
-    args: List[str] = []
-    for harness in harnesses or []:
-        args.extend(["--harness", harness])
-    return args
-
-
-def discover_transcripts(
-    *,
-    home: Optional[Path],
-    cwd: Path,
-    state_dir: Path,
-    since: str = "30d",
-    harnesses: Optional[List[str]] = None,
-) -> Dict:
-    """Discover global transcripts via the JS runtime; CWD-independent."""
-    cmd = [
-        node_bin(),
+    node = shutil.which("node")
+    if not node:
+        raise RuntimeError("node not found on PATH; run under the repo Nix dev shell, which provides nodejs")
+    argv = [
+        node,
         str(RUNTIME_BIN),
-        "discover",
-        *_home_args(home),
+        command,
         "--state-dir",
-        str(state_dir),
-        "--since",
-        since,
-        *_harness_args(harnesses),
+        str(improve_dir()),
+        "--soul-path",
+        str(living_soul.running_soul_path()),
+        *flags,
     ]
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=None if tui else subprocess.PIPE, text=True, check=False)
     if proc.returncode != 0:
-        raise RuntimeError(f"ca-improve discover failed: {proc.stderr.strip()}")
-    return json.loads(proc.stdout)
+        raise RuntimeError(f"ca-improve {command} failed: {(proc.stderr or '').strip()}")
+    proposal = json.loads(proc.stdout)
+    journal.record(
+        "run_completed",
+        {
+            "run_id": str(proposal.get("id", "?")),
+            "transcript_count": int(proposal.get("stats", {}).get("transcripts", 0)),
+            "resume": command == "synthesize",
+        },
+    )
+    journal.record("proposal_created", {"proposal_id": str(proposal.get("id", "?")), "edit_count": len(proposal.get("edits", []))})
+    return proposal
 
 
-def run_headless(
+def _write_experience_context() -> Path:
+    """The records Hermes is running with (not withdrawn, not absorbed by the bootstrap),
+    as the analysis prompt shows them."""
+    records = experience.active(exclude=living_soul.absorbed_ids(paths.BOOTSTRAP_SOUL_PATH))
+    text = "\n\n".join(
+        f'<record id="{record["id"]}">\n# {record["title"]}\n\n{record["instruction"]}\n</record>' for record in records
+    )
+    path = improve_dir() / "experience-context.md"
+    atomic_write(path, (text or "(none yet: nothing has been adopted in use)") + "\n")
+    return path
+
+
+def run(
     *,
-    home: Optional[Path],
-    cwd: Path,
-    state_dir: Optional[Path] = None,
+    tui: bool = False,
+    home: Optional[Path] = None,
     since: str = "30d",
     analyzer: str = "model",
-    soul_path: Optional[Path] = None,
     min_gap_evidence: int = 2,
     harnesses: Optional[List[str]] = None,
 ) -> Dict:
-    """Run the headless improvement pass; returns the proposal dict.
+    """Discover and analyze new sessions, then propose records. Writes only under CA home.
 
-    All runtime state lands under ``state_dir`` (default XDG). The pass never
-    writes into the CA repo and never deploys to Hermes.
+    ``home`` scopes discovery to one directory; without it the runtime finds
+    stores via HERMES_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME.
     """
-    resolved_state = state_dir or default_state_dir()
-    resolved_soul = soul_path or default_soul_path()
-    cmd = [
-        node_bin(),
-        str(RUNTIME_BIN),
-        "run",
-        "--headless",
-        *_home_args(home),
-        "--state-dir",
-        str(resolved_state),
+    flags = [
+        "--tui" if tui else "--headless",
+        "--experience-file",
+        str(_write_experience_context()),
+        "--posture-path",
+        str(INTERACTION_POSTURE_PATH),
         "--since",
         since,
         "--analyzer",
         analyzer,
         "--min-gap-evidence",
         str(min_gap_evidence),
-        "--soul-path",
-        str(resolved_soul),
-        *_harness_args(harnesses),
     ]
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"ca-improve run failed: {proc.stderr.strip()}")
-    proposal = json.loads(proc.stdout)
-    _journal_run_events(resolved_state, proposal, analyzer=analyzer)
-    return proposal
+    if home is not None:
+        flags += ["--home", str(home)]
+    for harness in harnesses or []:
+        flags += ["--harness", harness]
+    return _runtime("run", flags, tui=tui)
 
 
-def run_tui(
-    *,
-    home: Optional[Path],
-    cwd: Path,
-    state_dir: Optional[Path] = None,
-    since: str = "30d",
-    analyzer: str = "model",
-    soul_path: Optional[Path] = None,
-    min_gap_evidence: int = 2,
-    harnesses: Optional[List[str]] = None,
-) -> Dict:
-    """Run live stderr progress while preserving stdout's one JSON proposal."""
-    resolved_state = state_dir or default_state_dir()
-    resolved_soul = soul_path or default_soul_path()
-    cmd = [
-        node_bin(), str(RUNTIME_BIN), "run", "--tui", *_home_args(home),
-        "--state-dir", str(resolved_state), "--since", since, "--analyzer", analyzer,
-        "--min-gap-evidence", str(min_gap_evidence),
-        "--soul-path", str(resolved_soul),
-        *_harness_args(harnesses),
-    ]
-    # Inherit stderr: the Node view must paint the actual terminal. stdout is
-    # captured solely for the proposal handoff to the Python review route.
-    proc = subprocess.run(cmd, cwd=str(cwd), stdout=subprocess.PIPE, text=True, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError("ca-improve TUI run failed")
-    proposal = json.loads(proc.stdout)
-    _journal_run_events(resolved_state, proposal, analyzer=analyzer)
-    return proposal
+def synthesize_resume(*, min_gap_evidence: int = 2) -> Dict:
+    """Propose again from evidence already on disk, without discovering or analyzing sessions."""
+    return _runtime("synthesize", ["--min-gap-evidence", str(min_gap_evidence)])
 
 
-def synthesize_resume(
-    *,
-    state_dir: Optional[Path] = None,
-    min_gap_evidence: int = 2,
-    soul_path: Optional[Path] = None,
-    cwd: Optional[Path] = None,
-) -> Dict:
-    """Resume-only synthesis over persisted successful evidence + ledger.
-
-    Loads ``evidence/`` + ``ledger.json``/``open-gaps.json`` from ``state_dir``
-    (default XDG), consolidates only if required, checks the
-    eligibility/evidence floors, then runs fixed raw-stdout production
-    synthesis -> workspace measure -> annotation -> fresh proposal JSON.
-
-    Never invokes discovery/export/model analysis. Absent/incomplete/corrupt
-    state fails closed with an actionable error. Never writes the CA repo or
-    Hermes; apply remains the sole durable experience writer.
-    """
-    resolved_state = state_dir or default_state_dir()
-    resolved_soul = soul_path or default_soul_path()
-    cmd = [
-        node_bin(),
-        str(RUNTIME_BIN),
-        "synthesize",
-        "--state-dir",
-        str(resolved_state),
-        "--min-gap-evidence",
-        str(min_gap_evidence),
-        "--soul-path",
-        str(resolved_soul),
-    ]
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd or Path.cwd()),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"ca-improve synthesize failed: {proc.stderr.strip() or proc.stdout.strip()}"
-        )
-    proposal = json.loads(proc.stdout)
-    _journal_run_events(resolved_state, proposal, resume=True)
-    return proposal
+def read_proposal() -> Dict:
+    path = _proposal_path()
+    if not path.exists():
+        raise RuntimeError("no proposal to apply; run `python -m core improve-run --headless` first")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def read_proposal(state_dir: Path) -> Dict:
-    """Read the headless proposal from private state, or raise."""
-    proposal_path = state_dir / "proposal.json"
-    if not proposal_path.exists():
-        raise RuntimeError(
-            "no proposal to apply; run `python -m core improve-run --headless` first"
-        )
-    return json.loads(proposal_path.read_text(encoding="utf-8"))
-
-
-def parse_decisions(values: List[str], edit_ids: List[str]) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Parse a decisions vector like ["e1=accepted", "e2=rejected:too-narrow"]."""
+def parse_decisions(values: List[str]) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Parse ``["e1=accepted", "e2=rejected:too-narrow"]`` into (verdicts, reject reasons)."""
     decisions: Dict[str, str] = {}
     reasons: Dict[str, str] = {}
     for value in values:
@@ -340,16 +142,12 @@ def parse_decisions(values: List[str], edit_ids: List[str]) -> Tuple[Dict[str, s
                 raise RuntimeError(f"bad decision {token!r}; want <edit>=accepted|rejected[:reason]")
             edit_id, _, verdict = token.partition("=")
             verdict, _, reason = verdict.partition(":")
-            if edit_id not in edit_ids:
-                raise RuntimeError(f"decision names unknown edit {edit_id!r} (edits: {', '.join(edit_ids)})")
             if edit_id in decisions:
                 raise RuntimeError(f"decision names {edit_id!r} twice")
             if verdict not in ("accepted", "rejected"):
                 raise RuntimeError(f"bad verdict {verdict!r} for {edit_id!r}")
             if reason and (verdict != "rejected" or reason not in REJECT_REASONS):
-                raise RuntimeError(
-                    f"bad reason {reason!r} for {edit_id!r} (reasons: {', '.join(REJECT_REASONS)})"
-                )
+                raise RuntimeError(f"bad reason {reason!r} for {edit_id!r} (reasons: {', '.join(REJECT_REASONS)})")
             decisions[edit_id] = verdict
             if reason:
                 reasons[edit_id] = reason
@@ -357,379 +155,282 @@ def parse_decisions(values: List[str], edit_ids: List[str]) -> Tuple[Dict[str, s
 
 
 def review_in_terminal(proposal: Dict) -> Dict[str, str]:
-    """Backpass-like terminal TUI: full evidence/record/diff per candidate.
-
-    Stdlib only (no heavy TUI dependency): sectioned full-text review with
-    per-candidate navigation. Shows every evidence item untruncated, the full
-    candidate experience record, the full staged generated artifact, and the
-    staged diff. Headless runs never call this; they emit JSON on stdout.
-    """
+    """Show each candidate in full (evidence, record) and ask accept/reject."""
     if not sys.stdin.isatty():
-        raise RuntimeError(
-            "proposal is unreviewed: pass --decisions or run in a terminal for review"
-        )
+        raise RuntimeError("proposal is unreviewed: pass --decisions or run in a terminal for review")
     edits = proposal.get("edits", [])
-    total = len(edits)
     decisions: Dict[str, str] = {}
     for index, edit in enumerate(edits, start=1):
+        record = edit.get("record") or {}
         print(f"\n{'=' * 72}")
-        print(f"Candidate {index}/{total} === {edit['id']}: {edit.get('title', '')} ===")
+        print(f"Candidate {index}/{len(edits)} === {edit['id']}: {edit.get('title', '')} ===")
         print(f"{'=' * 72}")
         print(f"kind: {edit.get('kind', '')}")
         print(f"rationale: {edit.get('rationale', '')}")
-        instructions = edit.get("instructions", [])
-        if instructions:
-            print("--- instructions ---")
-            for instruction in instructions:
-                print(f"  * {instruction}")
-        evidence = edit.get("evidence", [])
-        print(f"--- evidence ({len(evidence)} items, untruncated) ---")
+        print("--- candidate record ---")
+        for field in ("id", "title", "body", "clusterId", "counterevidence", "compilerImplication"):
+            print(f"    {field}: {record.get(field, '')}")
+        print(f"    sources: {', '.join(record.get('sources', []))}")
+        evidence = record.get("evidence", [])
+        print(f"    evidence ({len(evidence)}):")
         for item in evidence:
-            print(f"  - ({item.get('source', '?')}) [{item.get('polarity', '?')}]")
-            print(f"    text: {item.get('text', '')}")
-            if item.get("effect"):
-                print(f"    effect: {item.get('effect', '')}")
-            if item.get("moment"):
-                print(f"    moment: {item.get('moment', '')}")
-        record = edit.get("record", {}) or {}
-        print("--- candidate experience record (full) ---")
-        print(f"    id: {record.get('id', '')}")
-        print(f"    title: {record.get('title', '')}")
-        print(f"    body: {record.get('body', '')}")
-        print(f"    sources: {', '.join(record.get('sources', []) or [])}")
-        if record.get("clusterId"):
-            print(f"    cluster: {record.get('clusterId', '')}")
-        for item in record.get("evidence", []) or []:
             print(f"    - ({item.get('source', '?')}) {item.get('text', '')}")
-        counterevidence = record.get("counterevidence") or edit.get("counterevidence") or "none observed"
-        print(f"    counterevidence: {counterevidence}")
-        implication = (
-            record.get("compilerImplication")
-            or edit.get("compilerImplication")
-            or "compiler appends this record to the experience block."
-        )
-        print(f"    compilerImplication: {implication}")
-        print("--- staged generated artifact (full) ---")
-        print(edit.get("stagedArtifact", ""))
-        print("--- staged diff per candidate (full) ---")
-        print(edit.get("diff", ""))
         print(f"{'=' * 72}")
         while True:
-            answer = input(f"{edit['id']} [accept/reject/skip]? ").strip().lower()
+            answer = input(f"{edit['id']} [accept/reject]? ").strip().lower()
             if answer in ("accept", "a"):
                 decisions[edit["id"]] = "accepted"
                 break
             if answer in ("reject", "r"):
                 decisions[edit["id"]] = "rejected"
                 break
-            if answer in ("skip", "s", ""):
-                print(
-                    f"{edit['id']} skip treated as rejected:"
-                    " skip does not satisfy the required human decision"
-                )
-                decisions[edit["id"]] = "rejected"
-                break
     return decisions
+
+
+@contextmanager
+def _apply_lock() -> Iterator[None]:
+    """Fail a second concurrent apply instead of letting both write."""
+    path = improve_dir() / ".apply.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RuntimeError(f"another improve-apply holds {path}; retry when it finishes") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _check_decisions(edits: List[Dict], decisions: Dict[str, str], reasons: Dict[str, str]) -> None:
+    edit_ids = [edit["id"] for edit in edits]
+    for edit_id in list(decisions) + list(reasons):
+        if edit_id not in edit_ids:
+            raise RuntimeError(f"decision names unknown edit {edit_id!r} (edits: {', '.join(edit_ids)})")
+    undecided = [edit_id for edit_id in edit_ids if edit_id not in decisions]
+    if undecided:
+        raise RuntimeError(f"proposal is unreviewed: no decision for {', '.join(undecided)}")
+    for edit in edits:
+        verdict = decisions[edit["id"]]
+        if verdict not in VERDICTS:
+            raise RuntimeError(f"bad verdict {verdict!r} for {edit['id']!r}")
+        annotation = (edit.get("annotation") or {}).get("verdict")
+        if annotation not in ("keep", "drop", "revert"):
+            raise RuntimeError(f"edit {edit['id']} has no final annotation; only annotated records can be applied")
+        if verdict == "accepted":
+            if annotation != "keep":
+                raise RuntimeError(f"edit {edit['id']} cannot be accepted (annotation verdict is {annotation!r}, want 'keep')")
+            if not experience.is_complete(edit.get("record") or {}):
+                raise RuntimeError(f"edit {edit['id']} record is incomplete; want every field in {experience.RECORD_FIELDS}")
 
 
 def apply(
     *,
-    state_dir: Optional[Path] = None,
-    experience_root: Optional[Path] = None,
     decisions: Optional[Dict[str, str]] = None,
-    reject_reasons: Optional[Dict[str, str]] = None,
+    reasons: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
     expected_proposal_id: Optional[str] = None,
-    allow_partial: bool = False,
     reason: Optional[str] = None,
 ) -> Dict:
-    """Apply gate: the sole writer of accepted experience records.
+    """Record a reviewed proposal: write accepted records, log rejections, rebuild the living SOUL.
 
-    Refuses a missing or unreviewed proposal. Acceptance atomically writes
-    only the approved experience authored source + staged generated artifact;
-    rejections are recorded in private state. Never deploys to Hermes and
-    never patches SOUL.
+    Every edit needs a verdict. ``deferred`` edits are neither written nor
+    rejected, so a later run can propose them again on fresh evidence.
+    Without ``decisions`` the proposal is reviewed in the terminal.
     """
-    resolved_state = state_dir or default_state_dir()
-    proposal = read_proposal(resolved_state)
-    if expected_proposal_id is not None and proposal.get("id") != expected_proposal_id:
+    proposal = read_proposal()
+    proposal_id = proposal.get("id", "?")
+    if expected_proposal_id is not None and proposal_id != expected_proposal_id:
         raise RuntimeError(
-            f"proposal on disk is {proposal.get('id', '?')}, not {expected_proposal_id};"
+            f"proposal on disk is {proposal_id}, not {expected_proposal_id};"
             " a newer run replaced the one you reviewed. Review the current proposal."
         )
     if proposal.get("appliedAt"):
         raise RuntimeError(
-            f"proposal {proposal.get('id', '?')} was already applied"
-            f" ({proposal.get('appliedAt')}); run improve-run again for a fresh one"
+            f"proposal {proposal_id} was already applied ({proposal['appliedAt']}); run improve-run again for a fresh one"
         )
     edits = proposal.get("edits", [])
     if not edits:
-        return {"accepted": [], "rejected": [], "written": [], "dry_run": dry_run}
-    edit_ids = [edit["id"] for edit in edits]
-
-    resolved = dict(decisions) if decisions else review_in_terminal(proposal)
-    reasons = dict(reject_reasons or {})
-    # Accept the CLI vector form "rejected:<reason>" as a decision value.
-    for edit_id, verdict in list(resolved.items()):
-        name, _, reason = verdict.partition(":")
-        if reason:
-            if name != "rejected" or reason not in REJECT_REASONS:
-                raise RuntimeError(
-                    f"bad decision {verdict!r} for {edit_id!r}"
-                    f" (reasons: {', '.join(REJECT_REASONS)})"
-                )
-            resolved[edit_id] = name
-            reasons.setdefault(edit_id, reason)
-    for edit_id in resolved:
-        if edit_id not in edit_ids:
-            raise RuntimeError(
-                f"decision names unknown edit {edit_id!r} (edits: {', '.join(edit_ids)})"
-            )
-    for edit_id in reasons:
-        if edit_id not in edit_ids:
-            raise RuntimeError(
-                f"rejection reason names unknown edit {edit_id!r} (edits: {', '.join(edit_ids)})"
-            )
-    undecided = [edit_id for edit_id in edit_ids if edit_id not in resolved]
-    if undecided and allow_partial:
-        # Auto mode adopts one record at a time. The rest are neither written
-        # nor rejected, so a later run can propose them again on fresh evidence.
-        edits = [edit for edit in edits if edit["id"] in resolved]
-        edit_ids = [edit["id"] for edit in edits]
-        undecided = []
-    if undecided:
-        raise RuntimeError(
-            f"proposal is unreviewed: no decision for {', '.join(undecided)}"
-        )
-    for edit_id, verdict in resolved.items():
-        if verdict not in ("accepted", "rejected"):
-            raise RuntimeError(f"bad verdict {verdict!r} for {edit_id!r}")
-
-    root = experience_root or experience.experience_root()
-    accepted = [e for e in edit_ids if resolved[e] == "accepted"]
-    rejected = [e for e in edit_ids if resolved[e] == "rejected"]
-    # Apply consumes only final annotated records: every edit must carry an
-    # annotate verdict, and accepted edits must be annotation keeps with a
-    # complete final record. Synth plans never reach here.
-    for edit in edits:
-        annotation = edit.get("annotation") or {}
-        verdict = annotation.get("verdict")
-        if verdict not in ("keep", "drop", "revert"):
-            raise RuntimeError(
-                f"edit {edit.get('id', '?')} has no final annotation;"
-                " staged change plans cannot reach apply without annotate"
-            )
-        if resolved.get(edit["id"]) == "accepted" and verdict != "keep":
-            raise RuntimeError(
-                f"edit {edit.get('id', '?')} cannot be accepted"
-                f" (annotation verdict is {verdict!r}, want 'keep')"
-            )
-        if resolved.get(edit["id"]) == "accepted":
-            record = edit.get("record") or {}
-            for field in ("id", "title", "body", "sources", "clusterId", "evidence", "counterevidence", "compilerImplication"):
-                if not record.get(field):
-                    raise RuntimeError(
-                        f"edit {edit.get('id', '?')} annotation final record"
-                        f" is missing {field}; annotation is the sole full-record origin"
-                    )
-    written: List[str] = []
-    if not dry_run:
-        with _StateLock(resolved_state):
-            current = read_proposal(resolved_state)
-            if current.get("id") != proposal.get("id") or current.get("appliedAt"):
-                raise RuntimeError(
-                    f"proposal {proposal.get('id', '?')} changed or was applied while"
-                    " waiting; review the current proposal"
-                )
-            backups: Dict[Path, Optional[bytes]] = {}
-
-            def _backup(path: Path) -> None:
-                if path not in backups:
-                    backups[path] = path.read_bytes() if path.exists() else None
-
-            def _restore() -> None:
-                for path, data in backups.items():
-                    try:
-                        if data is not None:
-                            path.parent.mkdir(parents=True, exist_ok=True)
-                            path.write_bytes(data)
-                        else:
-                            try:
-                                path.unlink()
-                            except OSError:
-                                pass
-                    except OSError:
-                        pass
-
-            pending_rejections: List[str] = []
-            try:
-                for edit in edits:
-                    if resolved[edit["id"]] == "accepted":
-                        record = edit["record"]
-                        authored_target = experience.authored_dir(root) / f"{record['id']}.md"
-                        staged_target = experience.staged_dir(root) / f"{record['id']}.md"
-                        _backup(authored_target)
-                        _backup(staged_target)
-                        try:
-                            authored_path = experience.write_authored_source(
-                                root, record, edit, proposal.get("id", "?")
-                            )
-                            staged_path = experience.write_staged_artifact(
-                                root, record["id"], edit["stagedArtifact"]
-                            )
-                        except BaseException:
-                            raise
-                        written.extend([str(authored_path), str(staged_path)])
-                    elif resolved[edit["id"]] == "rejected":
-                        record = edit.get("record", {}) or {}
-                        rejection = {
-                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                            "proposal": proposal.get("id", "?"),
-                            "edit": edit["id"],
-                            "reason": reasons.get(edit["id"], "other"),
-                            "title": record.get("title") or edit.get("title", ""),
-                            "clusterId": record.get("clusterId", ""),
-                            "recordId": record.get("id", ""),
-                            "sources": list(record.get("sources", []) or []),
-                        }
-                        pending_rejections.append(json.dumps(rejection) + "\n")
-                if pending_rejections:
-                    rejections_path = resolved_state / "rejections.jsonl"
-                    rejections_path.parent.mkdir(parents=True, exist_ok=True)
-                    _backup(rejections_path)
-                    with open(rejections_path, "a", encoding="utf-8") as handle:
-                        for line in pending_rejections:
-                            handle.write(line)
-                proposal["reviewed"] = True
-                proposal["appliedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-                proposal["decisions"] = resolved
-                tmp_path = resolved_state / "proposal.json.tmp"
-                tmp_path.write_text(json.dumps(proposal, indent=2) + "\n", encoding="utf-8")
-                os.replace(tmp_path, resolved_state / "proposal.json")
-                for edit in edits:
-                    record = edit.get("record", {}) if isinstance(edit.get("record"), dict) else {}
-                    if resolved[edit["id"]] == "accepted":
-                        from core import journal as _journal
-
-                        _journal_note(
-                            resolved_state,
-                            "experience_accepted",
-                            {
-                                "proposal_id": str(proposal.get("id", "?"))[:200],
-                                "edit_id": str(edit["id"])[:200],
-                                "record_id": str(record.get("id", ""))[:200],
-                                "sources": _journal.sanitize_sources(record.get("sources", [])),
-                            },
-                        )
-                        _journal_note(
-                            resolved_state,
-                            "artifact_compiled",
-                            {
-                                "proposal_id": str(proposal.get("id", "?"))[:200],
-                                "edit_id": str(edit["id"])[:200],
-                                "record_id": str(record.get("id", ""))[:200],
-                            },
-                        )
-                    elif resolved[edit["id"]] == "rejected":
-                        _journal_note(
-                            resolved_state,
-                            "proposal_rejected",
-                            {
-                                "proposal_id": str(proposal.get("id", "?"))[:200],
-                                "edit_id": str(edit["id"])[:200],
-                                "reason": str(reasons.get(edit["id"], "other"))[:40],
-                            },
-                        )
-            except BaseException:
-                _restore()
-                written = []
-                raise
-    generation = None
-    if accepted and not dry_run and experience_root is None:
-        # The runtime store changed, so the living SOUL is rebuilt from
-        # bootstrap + lineage (never from the previous generation).
-        from core import living_soul
-
-        generation = living_soul.compile_soul(reason=reason or f"accepted {proposal.get('id', '?')}")
-    return {
-        "accepted": accepted,
-        "rejected": rejected,
-        "written": written,
+        return {"accepted": [], "rejected": [], "written": [], "dry_run": dry_run, "generation": None}
+    decisions = dict(decisions) if decisions is not None else review_in_terminal(proposal)
+    reasons = dict(reasons or {})
+    _check_decisions(edits, decisions, reasons)
+    accepted = [edit for edit in edits if decisions[edit["id"]] == "accepted"]
+    rejected = [edit for edit in edits if decisions[edit["id"]] == "rejected"]
+    result = {
+        "accepted": [edit["id"] for edit in accepted],
+        "rejected": [edit["id"] for edit in rejected],
+        "written": [],
         "dry_run": dry_run,
-        "generation": generation,
+        "generation": None,
+    }
+    if dry_run:
+        return result
+    with _apply_lock():
+        current = read_proposal()
+        if current.get("id") != proposal_id or current.get("appliedAt"):
+            raise RuntimeError(f"proposal {proposal_id} changed or was applied while waiting; review the current proposal")
+        _write_decisions(proposal, accepted, rejected, decisions, reasons, result["written"])
+    for edit in accepted:
+        journal.record(
+            "experience_accepted",
+            {
+                "proposal_id": proposal_id,
+                "edit_id": edit["id"],
+                "record_id": edit["record"]["id"],
+                "sources": journal.sanitize_sources(edit["record"]["sources"]),
+            },
+        )
+    for edit in rejected:
+        journal.record(
+            "proposal_rejected",
+            {"proposal_id": proposal_id, "edit_id": edit["id"], "reason": reasons.get(edit["id"], "other")},
+        )
+    if accepted:
+        result["generation"] = living_soul.compile_soul(reason=reason or f"accepted {proposal_id}")
+    return result
+
+
+def _rejection_row(at: str, proposal_id: str, edit_id: str, reason: str, record: Dict) -> Dict:
+    """One rejections.jsonl row; the runtime suppresses a candidate matching its cluster or
+    title unless the candidate cites sessions the rejection did not."""
+    return {
+        "at": at,
+        "proposal": proposal_id,
+        "edit": edit_id,
+        "reason": reason,
+        "title": record.get("title", ""),
+        "clusterId": record.get("clusterId", ""),
+        "recordId": record.get("id", ""),
+        "sources": list(record.get("sources", [])),
     }
 
 
+def _append_rejections(rows: List[Dict]) -> None:
+    path = improve_dir() / "rejections.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+
+def _write_decisions(
+    proposal: Dict,
+    accepted: List[Dict],
+    rejected: List[Dict],
+    decisions: Dict[str, str],
+    reasons: Dict[str, str],
+    written: List[str],
+) -> None:
+    """Write records, rejections and the applied proposal, or restore every file touched.
+
+    A half-applied proposal would leave records the next SOUL compile adopts
+    with no review on record, so a failure puts everything back.
+    """
+    rejections_path = improve_dir() / "rejections.jsonl"
+    touched = [experience.record_path(edit["record"]["id"]) for edit in accepted] + [rejections_path, _proposal_path()]
+    backups = {path: path.read_bytes() if path.exists() else None for path in touched}
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        for edit in accepted:
+            written.append(str(experience.write(edit["record"], edit, proposal.get("id", "?"))))
+        _append_rejections(
+            [
+                _rejection_row(
+                    now,
+                    proposal.get("id", "?"),
+                    edit["id"],
+                    reasons.get(edit["id"], "other"),
+                    {**(edit.get("record") or {}), "title": (edit.get("record") or {}).get("title") or edit.get("title", "")},
+                )
+                for edit in rejected
+            ]
+        )
+        applied = {**proposal, "reviewed": True, "appliedAt": now, "decisions": decisions}
+        atomic_write(_proposal_path(), json.dumps(applied, indent=2) + "\n")
+    except BaseException:
+        for path, data in backups.items():
+            if data is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(data)
+        written.clear()
+        raise
+
+
 def _auto_candidate(proposal: Dict) -> Optional[Dict]:
-    """First edit the annotation stage kept with a complete final record."""
-    required = ("id", "title", "body", "sources", "clusterId", "evidence", "counterevidence", "compilerImplication")
-    for edit in proposal.get("edits", []) or []:
-        annotation = edit.get("annotation") or {}
+    """First edit the annotation stage kept with a complete record that was never withdrawn."""
+    withdrawn = experience.reverted_ids()
+    for edit in proposal.get("edits", []):
         record = edit.get("record") or {}
-        if annotation.get("verdict") == "keep" and all(record.get(field) for field in required):
+        if (
+            (edit.get("annotation") or {}).get("verdict") == "keep"
+            and experience.is_complete(record)
+            and record["id"] not in withdrawn
+        ):
             return edit
     return None
 
 
-def auto_cycle(
-    *,
-    state_dir: Optional[Path] = None,
-    proposal: Dict,
-    min_sessions: int = 15,
-    z_threshold: float = 1.645,
-) -> Dict:
+def auto_cycle(*, proposal: Dict, min_sessions: int = 15, z_threshold: float = 1.645) -> Dict:
     """One autonomous step after a headless run: judge, revert, or adopt one change.
 
     1. Judge the active generation against its parent (core.outcome).
     2. revert -> withdraw the records it added and compile without them.
     3. pending -> adopt nothing; one change is under test at a time.
-    4. keep/settled -> once the active generation has ``min_sessions`` of its
-       own (the baseline the next change is judged against), adopt the best
+    4. keep -> once the active generation has ``min_sessions`` of its own
+       (the baseline the next change is judged against), adopt the first
        kept record from this run's proposal.
     """
-    from core import living_soul, outcome
-
-    resolved_state = state_dir or default_state_dir()
     if living_soul.current_generation() is None:
         living_soul.compile_soul(reason="auto: initial")
-    verdict = outcome.evaluate(resolved_state, min_sessions=min_sessions, z_threshold=z_threshold)
-    result: Dict = {"verdict": verdict, "action": "none", "generation": None}
+    verdict = outcome.evaluate(min_sessions=min_sessions, z_threshold=z_threshold)
+    result: Dict = {"verdict": verdict, "action": "none", "generation": None, "records": []}
+    current = living_soul.current_generation()["generation"]
     if verdict["verdict"] == "revert":
         added = list(verdict.get("added", []))
-        meta = living_soul.revert_records(added, reason=f"miss rate rose (z={verdict.get('z')})")
+        reason = f"miss rate rose (z={verdict.get('z')})"
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        rows = []
+        for record_id in added:
+            stored = experience.read(record_id)
+            record = {
+                "id": record_id,
+                "title": stored.get("title", ""),
+                "clusterId": stored.get("cluster", ""),
+                "sources": [s.strip() for s in stored.get("sources", "").split(",") if s.strip()],
+            }
+            rows.append(_rejection_row(now, stored.get("proposal", "?"), "auto-revert", "reverted", record))
+        _append_rejections(rows)
+        meta = living_soul.revert_records(added, reason=reason)
         result.update(action="revert", records=added, generation=meta["generation"])
     elif verdict["verdict"] == "pending":
         result["action"] = "wait"
-    elif (
-        outcome.session_outcomes(resolved_state)
-        .get(living_soul.current_generation()["generation"], {})
-        .get("sessions", 0)
-        < min_sessions
-    ):
+    elif outcome.session_outcomes().get(current, {}).get("sessions", 0) < min_sessions:
         result["action"] = "baseline"
     else:
         candidate = _auto_candidate(proposal)
         if candidate is not None and not proposal.get("appliedAt"):
+            decisions = {edit["id"]: "deferred" for edit in proposal["edits"]}
+            decisions[candidate["id"]] = "accepted"
             applied = apply(
-                state_dir=resolved_state,
-                decisions={candidate["id"]: "accepted"},
+                decisions=decisions,
                 expected_proposal_id=proposal.get("id"),
-                allow_partial=True,
                 reason=f"auto-apply {candidate['record']['id']}"[:80],
             )
             result.update(
                 action="adopt",
                 records=[candidate["record"]["id"]],
-                generation=(applied.get("generation") or {}).get("generation"),
+                generation=(applied["generation"] or {}).get("generation"),
             )
-    _journal_note(
-        resolved_state,
+    journal.record(
         "auto_cycle",
         {
             "verdict": str(verdict.get("verdict")),
             "kind": result["action"],
             "generation": result["generation"],
-            "record_ids": result.get("records", []),
+            "record_ids": result["records"],
         },
     )
     return result

@@ -1,289 +1,93 @@
-# CLI And Command Reference
+# CLI and Command Reference
 
-The pipeline is invoked with `python -m core`.
+Entry point: `python -m core [--profile <name>] <command>` (the `ca` Nix
+package is the same CLI). `python -m core <command> --help` prints the flags.
+The parser lives in `core/cli.py`.
 
-| Command | Scope | Purpose |
+Stages check their requirements before doing anything: a missing API key,
+input file or unsupported profile prints `Error: <command>: configuration
+issues found` with the list, and exits 1. A stage that fails while running
+prints `Error: <command>: <reason>` and exits 1.
+
+## Profile stages (need `--profile`)
+
+| Command | Reads | Writes |
 | --- | --- | --- |
-| `ingest-corpus` | operational | Normalize configured intake exports into ready JSONL packets. |
-| `ask-questions` | profile | Retrieve QMD evidence and synthesize answers with the configured direct LLM. |
-| `build-prompts` | profile | Build profile artifacts from the latest QMD answer CSV. |
-| `build-skills` | profile | Generate canonical skills from `human_profile.md`. |
-| `build-tool-specs` | operational | Generate operational tool specifications. |
-| `build-translation-layer` | shared | Generate `INTERACTION_POSTURE.md` and `SOUL.md`. |
-| `build-alignment-spec` | shared | Generate the alignment specification. |
-| `health-check` | profile | Validate prompts, provider configuration, and QMD availability. |
-| `improve-run` | global | Manual TTY route by default: prints `collect samples`, `calculate loss`, `aggregate gradients`, `gradient descent`, then directs review/apply; never applies/deploys. |
-| `improve-run --headless` | global | Headless improvement pass: discover/collect/distill/analyze/fold/synthesize into an XDG-state proposal; stdout is exactly one JSON object, no progress (status on stderr). |
-| `improve-synthesize` | global | Resume-only synthesis over persisted evidence/ledger: consolidate only if required, check floors, then fixed raw-stdout production synthesis -> workspace measure -> annotation -> fresh proposal JSON; never discovers/analyzes; absent/incomplete/corrupt state fails closed. |
-| `improve-apply` | global | Review gate for a proposal: the sole writer of experience records. |
-| `journal-compact` | global | Regenerate journal views (`current.json`/`bootstrap.md`) from append-only `events.jsonl`; tolerates missing/malformed lines. |
+| `ingest-corpus` | `workspaces/<p>/data/intake/` | `workspaces/<p>/data/ready/<source>/*.jsonl`, `ready/preprocessing_manifest_<ts>.json` |
+| `ask-questions` | `profiles/<p>/questions.csv`, QMD collections | `workspaces/<p>/data/questions_with_answers_qmd_<ts>.csv` |
+| `build-prompts` | newest answers CSV | `workspaces/<p>/artifacts/human_profile.md`, `profile_candidate_<provider>.md` |
+| `build-skills [--bio PATH]` | `human_profile.md` (or `--bio`), existing skills | `workspaces/skills/<p>/<slug>/SKILL.md` |
+| `build-tool-specs [--bio PATH]` | `human_profile.md`, seed specs in `profiles/<p>/prompts/` | `workspaces/<p>/artifacts/tool_specs/*.md` |
+| `health-check` | prompts, questions, environment | nothing |
 
-There is no `ingest-substrate` or `verify-alignment` command.
+- `ingest-corpus` is only enabled for profiles with `has_corpus_ingest`
+  (operational); `build-tool-specs` only for profiles with `supported_tools`
+  (operational). Other profiles get a configuration error, never a silent
+  no-op.
+- `ask-questions` fails closed: if QMD is missing, returns nothing, or reports
+  an index older than 14 days or a missing collection, the run stops before
+  calling a model. Questions whose model call fails three times stay empty and
+  the command exits 1 after saving what it answered.
+- `build-prompts` sends the same prompt to xAI, Anthropic and OpenAI, keeps
+  each draft as `profile_candidate_<provider>.md`, and has Anthropic merge them
+  into `human_profile.md`.
+- `build-skills` creates each skill the profile declares on first build and
+  refines the existing `SKILL.md` afterwards. It then deletes any directory in
+  `workspaces/skills/<p>/` that the profile does not declare; other groups are
+  never touched. See [Skills System](Skills-System.md).
+- `build-tool-specs` expects exactly the declared tool files back, each with
+  `## Mission`, `## Use This Tool For`, `## Decision Rules` and `## Avoid`;
+  spec files no longer declared are removed.
 
-## Recursive Improvement (`improve-run` / `improve-apply`)
+## Cross-profile commands
 
-The CA-native improvement runtime (`improve/`, Node, zero dependencies)
-adapts the Backpass backward-pass shape (Backpass MIT (c) 2026 Kun Chen,
-https://github.com/kunchenguid/backpass commit
-0268201c3896f45d3002de0d439b6cefccb39063 tag backpass-v0.1.32; see
-`improve/LICENSE.NOTICE` for adapted source mappings) to one narrow contract: sessions may propose durable
-**experience records**, never direct SOUL/memory/skill patches.
+| Command | What it does |
+| --- | --- |
+| `list-profiles` | Print registered profile names |
+| `build-translation-layer` | Build `INTERACTION_POSTURE.md`, then the bootstrap `SOUL.md` from both human profiles plus the runtime lineage, and write `absorbed.json`. See [Alignment Artifacts](Alignment-Artifacts.md) |
+| `build-alignment-spec` | Build `alignment_spec.md` from every skill in the store |
+| `update [--skip-tool-specs]` | For `--profile` (or every profile): `build-prompts`, `build-skills`, `build-tool-specs` when supported; then `build-translation-layer` and `build-alignment-spec`. Stops at the first failure |
+| `enhance-skill [--skill SLUG] [--hermes-path PATH] [--apply]` | Compare store skills with newer Hermes copies, preview the diff, and with `--apply` merge them with a model call |
+| `review-queue [--dry-run]` | Refill the Langfuse review queue. See [Projection Experiments](Projection-Experiments.md) |
 
-Pipeline: `discover` (global transcript stores) -> `collect` -> `distill`
-(deterministic) -> `analyze` (one model call per trace, injectable/mockable) -> `fold`
-(deterministic, `minGapEvidence` floor) -> `consolidate` (one judged model
-call, mechanical merge, fail-soft to lexical) -> `synthesize` (mock
-deterministic or production model call, fail-closed) -> `stage` (deterministic
-private staging; synth output is a staged change plan, never final) ->
-`measure` (deterministic stable measured IDs/deltas, coverage-or-revert per
-measurement) -> `annotate-preface` then `annotate` (fresh logical invocations,
-strict final validation, fail-closed) -> proposal (final annotated candidates
-only via the terminal review/apply gate).
+Output paths for the cross-profile stages are fixed in `core/paths.py`; there
+are no `--output` or `--seed-dir` flags.
 
-Analysis prompt (checked in, CA-native): `improve/prompts/analysis.md` audits one distilled personal/coding-agent
-trace against the active CA SOUL baseline
-(`workspaces/alignment/artifacts/SOUL.md`), the interaction posture
-(`workspaces/alignment/artifacts/INTERACTION_POSTURE.md`), and accepted
-experience records (`workspaces/experience/authored|staged`). Contract:
-strict JSON `{positive, negative, gaps, changed_context,
-usedRawTranscript}`; every observation carries a verbatim trace quote;
-negatives distinguish current-guidance `non-compliance` from
-guidance-caused `harm`; gaps are recurring-use experience-record
-candidates, never direct SOUL edits; the raw transcript is out of scope
-(`usedRawTranscript` is always false). Rendering lives in the zero-dependency
-`improve/src/prompts.js` (Backpass `src/prompts.js` shape): prompts load
-relative to the runtime (never CWD), `{{PLACEHOLDER}}` substitution is strict
-(missing, unused, and unexpected/non-`UPPER_SNAKE` tokens fail loudly), and
-the self-session sentinel `<!-- ca-improve:self-session -->` is prepended
-FIRST by the loader, not baked into the file.
+## Improvement loop and living SOUL
 
-Private state (never CA repo state): `$XDG_DATA_HOME/cognitive-assistant/improve/`
-(`cursor.json` run state, `evidence/`, `ledger.json` folded ledger,
-`proposal.json`, `rejections.jsonl`, plus `prompts/<runId>__<transcriptId>.md`
-with a `.json` sidecar naming the run/session relation for every rendered
-model prompt, both mode `0600` where supported). Raw transcripts and prompts
-never land in git state or the repo -- only the distilled trace travels
-inside the rendered prompt in private state. Both `improve-run` routes use the
+Runtime state lives under CA home (`$CA_HOME`, default
+`$XDG_DATA_HOME/cognitive-assistant`); commands also read bootstrap artifacts
+and session stores, and `soul link` writes the Hermes SOUL symlink. There are
+no `--state-dir` or `--soul-path` flags. Details:
+[Improvement Loop](Improvement-Loop.md) and [Living SOUL](Living-SOUL.md).
 
-Supported adapters (global stores, CWD-independent): Hermes
-(`$HERMES_HOME/state.db`, default `~/.hermes/state.db`, read-only), Claude
-Code (`~/.claude/projects`), Codex (`~/.codex/sessions`), OpenCode
-(`~/.local/share/opencode/opencode.db`, read-only). Explicitly excluded
-in this slice: Pi, Grok and Cursor (CLI and IDE) -- their stores are never
-read; requesting them is an error. Pi sessions are machine/automation work
-and must not be analyzed. The runtime's own sessions (sentinel
-`<!-- ca-improve:self-session -->`, or sessions rooted under its state
-dir) are self-excluded before analysis.
+`improve-run` flags:
 
-Store selection: ambient `HERMES_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
-are honored unless `CA_IMPROVE_HOME` scopes every store under one home (used
-for hermetic runs). `improve-run --harness hermes` (repeatable) scans only the
-named harnesses and fails the run when a named store is missing or unreadable;
-without `--harness` every adapter is scanned and missing stores are skipped.
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--headless` | off | Print exactly one JSON proposal on stdout; without it the run needs a TTY and shows live progress on stderr |
+| `--since` | `30d` | Only sessions newer than this (`12h`, `2w`, `all`) |
+| `--analyzer` | `model` | `model` (configured endpoint) or `mock` (no model calls) |
+| `--min-gap-evidence` | `2` | Distinct sessions a gap needs before it can become a candidate (integer >= 2) |
+| `--harness NAME` | all | Scan only this harness (repeatable); a named harness whose store is missing fails the run |
+| `--auto` | off | With `--headless`: judge the change under test, then revert, wait, or adopt one record |
+| `--min-sessions` | `15` | `--auto`: analyzed sessions needed on each side before judging |
 
-Runtime state: everything that changes after bootstrap lives under CA home
-(`$CA_HOME`, default `$XDG_DATA_HOME/cognitive-assistant/`): `improve/`
-(runtime state and journal), `experience/` (accepted records, the lineage) and
-`soul/` (living SOUL generations). Analysis reads the living SOUL once one is
-compiled, else the bootstrap SOUL. See `docs/Living-SOUL.md`.
+`CA_IMPROVE_HOME`, when set, scopes every session store under that one home
+directory (used for hermetic runs).
 
-Model calls: every stage (analysis, consolidation, synthesis, annotation) is
-one tool-free OpenAI-compatible chat completion made by
-`improve/bin/model-call.js` (`improve/src/model-call.js`). No agent harness,
-no tools, no workspace, no shell; the reply is parsed strictly as data and
-code assigns every path and field. Configuration is environment only:
+| Command | What it does |
+| --- | --- |
+| `improve-synthesize [--min-gap-evidence N]` | Propose again from saved evidence and ledger; no discovery or analysis |
+| `improve-apply [--proposal ID --decisions "e1=accepted e2=rejected:too-narrow"] [--dry-run]` | Review the current proposal: write accepted records, log rejections, compile the living SOUL. Without `--decisions` it asks in the terminal |
+| `journal-compact` | Rebuild `journal/current.json` and `journal/bootstrap.md` from `events.jsonl` |
+| `soul compile [--prefix-file F] [--suffix-file F] [--reason TEXT]` | Build a new living SOUL generation if its inputs changed |
+| `soul status` | Bootstrap path, active generation, history with verdicts |
+| `soul rollback N` | Point `current.md` at generation N |
+| `soul link HERMES_HOME` | Make `HERMES_HOME/SOUL.md` a symlink to the living SOUL |
 
-- `CA_LLM_BASE_URL` -- endpoint base, e.g. `http://nas:8081/v1` (required)
-- `CA_LLM_MODEL` -- model for every stage; `CA_LLM_MODEL_<ROLE>` overrides one
-  (`ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE`)
-- `CA_LLM_API_KEY_FILE` -- optional bearer key file for a hosted endpoint
-
-Requests use temperature 0, seed 0 and JSON-only output. Each validated reply
-is cached in `<state>/model-cache/<sha256 of request>.txt`, so an unchanged
-prompt is never sent twice. Network errors, 429 and 5xx are retried twice
-within the stage deadline (a shared endpoint may be swapping models). A run
-fails closed before analysis when no endpoint is configured.
-
-Private state (never CA repo state): `$XDG_DATA_HOME/cognitive-assistant/improve/`
-(`cursor.json` run state, `evidence/`, `ledger.json` folded ledger,
-`proposal.json`, `rejections.jsonl`). Both `improve-run` routes use the
-exact existing CA JS pipeline/state/proposal path
-(`improve/bin/ca-improve.js run --headless` via `core/improve.py::run_headless`)
-and write only there: they never modify tracked files, never apply, and
-never touch live Hermes (stores are opened read-only; nothing is deployed).
-Default `improve-run` (manual/TTY route) prints exactly `collect samples`,
-`calculate loss`, `aggregate gradients`, `gradient descent`, then directs
-review with `improve-apply`. `improve-run --headless` prints exactly one JSON
-proposal object on stdout with no progress; status goes to stderr only.
-
-`improve-apply` is the sole gate. It refuses a missing proposal
-(`improve-run` first) or an unreviewed one (every edit needs an explicit
-`accepted` / `rejected[:reason]` decision, via `--decisions` or the
-minimal terminal review). `--decisions` must be paired with
-`--proposal <id>` naming the proposal that was read; if a later run replaced
-it, apply refuses. A run that replaces an unapplied proposal first archives it
-to `proposals/<id>.json`. Concurrent applies are refused by an exclusive
-state lock. Acceptance atomically writes only the approved
-experience authored source (`<CA home>/experience/authored/<id>.md`) and
-the staged generated artifact (`<CA home>/experience/staged/<id>.md`),
-then compiles a new living SOUL generation;
-rejections are recorded in state. It never deploys to Hermes and never
-patches SOUL -- SOUL stays the read-only baseline, while
-`core/experience.py::compile_experience_block` (hooked into
-`prompt_creator.load_dataset_context`) compiles accepted staged
-experience into downstream builds.
-
-## Active SOUL contextualization (`improve-run` / `improve-synthesize`)
-
-Both improvement passes require the active SOUL baseline
-(`workspaces/alignment/artifacts/SOUL.md`, resolved from the repo root
-independent of CWD). `--soul-path` explicitly overrides the default;
-otherwise the canonical default is used. The snapshot is read-only:
-a nonexistent, unreadable, or empty SOUL fails closed before
-synthesis/annotation/proposal with an actionable error. The bounded
-snapshot text (first 4000 chars) plus its stable sha256 flow into the
-synthesis (`improve/prompts/synthesis.md`) and annotation
-(`improve/prompts/annotate.md`) prompts, which require baseline
-non-conflict and explicit tension/counterevidence. The proposal carries
-`soul: {path, sha256, chars}` provenance; SOUL is never written.
-Candidate records stay additive experience only -- no textual SOUL patch
-claims.
-
-## Resume-only synthesis (`improve-synthesize`)
-
-`python -m core improve-synthesize --state-dir <dir> [--min-gap-evidence N] [--soul-path SOUL.md]`
-reuses persisted successful evidence (`state/evidence/*.json`) and thefolded ledger (`state/ledger.json` + `state/open-gaps.json`) without any
-discovery, export, or model analysis: no transcript discovery, no OpenCode
-export, no per-trace analyze. It consolidates only if required (the same
-`<2 gaps` skip / mock-free production path as `improve-run`), checks the
-eligibility/evidence floors (`>=min-gap-evidence` distinct sessions per
-eligible cluster), then runs fixed raw-stdout production synthesis
-(`synthesizeWithModel` text-only, no workspace/cwd passed; deterministic code materializes validated plans under `synthesis-workspace`) ->
-workspace measure (`measured-changes.json`) -> fresh
-`annotate-preface` then `annotate` -> fresh reviewable `proposal.json`
-(`reviewed: false`, `appliedAt: null`). Absent/incomplete/corrupt state
-(zero ok evidence, missing `ledger.json`, non-array clusters, zero
-eligible clusters) fails closed with an actionable stderr error naming
-the state dir and the `improve-run --headless` rebuild step. Headless
-stdout is exactly one JSON proposal object; status goes to stderr only.
-Like `improve-run`, it never writes tracked repo files or live Hermes and
-never applies: `improve-apply` remains the sole durable experience
-writer.
-
-The Nix flake exposes `ca-improve` (headless package) and
-`nixosModules.ca-improve` (systemd **user** service + timer running the
-headless pass weekly; applying stays manual).
-
-## Consolidation contract (`improve/prompts/consolidate.md`)
-
-Adapted from the Backpass operational source
-(`src/prompts/consolidate.md` at commit 0268201; see
-`improve/LICENSE.NOTICE`): one bounded model call sees the full open gap
-set and merges entries that describe the same underlying gap. Runs only when
-`>=2` eligible/open gaps exist; otherwise the run keeps deterministic lexical
-identity with a visible note and makes no model call. The mock analyzer never
-makes the model call here. The rendered prompt is persisted privately as
-`prompts/<runId>__consolidate.md` plus a `.json` sidecar carrying run/stage
-identifying metadata (`runId`, `stage: consolidate`), both `0600` where
-supported. The model returns `{"merges": [[ids], ...]}`; the single final
-object is extracted by `improve/src/model-call.js` (the whole reply, one
-optional ```json fence, or the outermost braces; top-level arrays/scalars and
-prose fail) before stage parsing validates
-strictly (existing IDs only, `>=2` distinct IDs per group, unique membership
-across groups; malformed groups and unknown IDs are dropped, shrinking a
-group below two drops it). Each role's model comes from `CA_LLM_MODEL` or its `CA_LLM_MODEL_<ROLE>` override. Distillation stays local. The merge itself is mechanical: union distinct
-session sources (never double-count a session), preserve per-source quote
-provenance, keep the shortest instruction as canonical, and re-check the
-`minGapEvidence` floor. model call failure or invalid output degrades to the
-deterministic lexical current result with a visible proposal/run note
-(`proposal.notes` + `proposal.consolidation.note`); it never aborts the run.
-
-## Synthesis contract (`improve/prompts/synthesis.md`)
-
-Adapted from the Backpass operational sources (`src/prompts/synthesis.md` +
-`src/prompts/annotate.md` at commit 0268201; see `improve/LICENSE.NOTICE`)
-but CA-native (Option 2 text-only): the model is a text-only proposer returning
-exactly `{"plans": [...]}` on stdout with narrow provisional plans only
-(`clusterId` + untrusted `provisionalIntent` + `provisionalSources` with
-`>=2` distinct eligible sessions), never final `title`/`body`/`evidence`/
-quote mappings/`counterevidence`/`compilerImplication`/staged artifact/diff
-and never filesystem targets (`file`/`path`/`workspace`/`cwd`). The prompt
-never asks to inspect or edit a workspace and never describes an edit turn.
-Annotation is the sole full-record author; staged plans carry no
-record/evidence. The prompt states explicitly: propose only plans -- never live
-files, tracked files, SOUL, posture, skills, or Hermes -- and the plan is
-not authoritative pre-apply (the terminal review/apply gate consumes only
-annotated finals). Production runs make one tool-free model call with the
-strict synthesis parser (`improve/src/synthesis-parser.js`), a bounded payload (max 20000 chars, max
-16 plans, max 500 intent chars), and strict provenance validation against the
-eligible ledger (reject malformed, unknown/ineligible clusters, <2 distinct
-known sources, authoritative final fields, path-like or unexpected fields,
-duplicate/unsafe ids). No workspace/cwd is passed to the production
-invocation and no model-made filesystem change is authoritative: deterministic code
-writes only validated plans as Markdown under existing
-`stateDir/synthesis-workspace` (no model-controlled path target), then the
-existing measure -> annotate -> proposal chain observes those files. The mock path is deterministic
-`synthesizePlans` with no real calls, still reviewable, with no synthetic
-provenance or fallback candidate. Production failure
-(model call error or zero valid plans) fails closed: no plans plus a visible
-proposal note (`proposal.notes` +
-`proposal.synthesis.note`). `minGapEvidence` (integer >= 2) is validated
-centrally (`assertMinGapEvidence`) at the JS CLI and at the direct
-`runPipeline`/`runSynthesizeResume`/`synthesizeWithModel` boundaries so run
-and synthesize match. Prior rejections (`state/rejections.jsonl`) render
-into `{{REJECTIONS}}`; synthesis itself does not suppress -- suppression
-applies downstream on annotated finals unless the final carries higher
-evidence (more distinct sessions) or genuinely new evidence (an unseen session
-id). The rendered synthesis prompt is persisted privately as
-`prompts/<runId>__synthesis.md` plus a `.json` sidecar (`stage: synthesis`),
-both `0600` where supported.
-
-## Annotate-preface contract (`improve/prompts/annotate-preface.md`)
-
-CA-native preface with no direct Backpass counterpart (see
-`improve/LICENSE.NOTICE`), one of five prompt roles (`analysis`,
-`consolidate`, `synthesis`, `annotate-preface`, `annotate`): it frames the
-narrow private staged change plans (with measured plan context from
-deterministic stage/measure) that already exist
-and opens the fresh logical annotate session. Placeholders `{{COUNT}}`,
-`{{STAGED_SUMMARY}}`, `{{RUN_ID}}` render the staged-existing set through the
-existing strict loader/renderer (`improve/src/prompts.js`), sentinel FIRST and
-never baked into the file. The preface outcome is revert-only readiness
-metadata (`{"ready": true}`) via a real model call
-(`modelAnnotatePrefaceInvoke`, strict extraction): it never annotates, never authors
-records/evidence, and never edits live files,
-tracked files, SOUL, posture, skills, or Hermes. An empty staged set stays
-sequenced as annotate-preface then annotate. Rendered as
-`prompts/<runId>__annotate-preface.md` plus a `.json` sidecar
-(`stage: annotate-preface`), both `0600` where supported.
-
-## Annotate contract (`improve/prompts/annotate.md`)
-
-Adapted from the Backpass operational source (`src/prompts/annotate.md` at
-commit 0268201; see `improve/LICENSE.NOTICE`) but CA-native: strict JSON
-annotations over the narrow private staged change plans with measured plan
-context. Each staged plan gets exactly one
-annotation -- coverage (`keep`/`drop`) or explicit `revert` when measurement
-does not support it. Annotation is the sole full durable-record author: every
-`keep` authors the complete record (`title`, `body` at most 2000 chars,
-`clusterId`, `sources` with `>=2` distinct sessions, exact session-bound
-verbatim `evidence`, `counterevidence` or literal `none observed`,
-`compilerImplication`), resting on exact source quote/session binding
-(a verbatim `text` quote copied exactly from the staged eligible evidence rows
-with its `source` session id; paraphrases and swapped sessions fail), plus required
-`counterevidence` (strongest contrary observation or literal `none observed`)
-and `compilerImplication` on the staged record. Prohibited operations are
-explicit: never live files, tracked files, SOUL, posture, skills, or Hermes;
-the proposal stays non-authoritative until the human apply gate consumes only
-annotated finals. Production makes one model call (real `modelAnnotateInvoke`,
-strict single-object extraction) with strict final validation and
-fail-closed (staging marked via `staging/annotate.failed`,
-candidates cleared, no final proposal edits); the mock path is deterministic
-final annotation with no real calls, still reviewable. The terminal
-review/apply gate consumes only final annotated candidates. Placeholders `{{COUNT}}`,
-`{{STAGED_CANDIDATES}}`, `{{RUN_ID}}` render through the existing strict
-loader/renderer, sentinel FIRST. Rendered as
-`prompts/<runId>__annotate.md` plus a `.json` sidecar (`stage: annotate`),
-both `0600` where supported. All five prompt roles (`analysis`,
-`consolidate`, `synthesis`, `annotate-preface`, `annotate`) load via
-`improve/src/prompts.js` with strict `{{PLACEHOLDER}}` substitution.
+Decision syntax: each token is `<edit-id>=accepted` or
+`<edit-id>=rejected[:reason]`, reasons `too-narrow`, `too-broad`,
+`already-covered`, `not-evidenced`, `unsafe`, `other`. `--decisions` can be
+repeated and must be paired with `--proposal <id>`; every edit needs a
+decision.

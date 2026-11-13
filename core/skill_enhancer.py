@@ -8,46 +8,22 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from core import llm
 from core.skill_engine import (
     body_without_frontmatter,
-    find_canonical_skill,
+    find_skill,
     generate_hermes_enhancement,
-    repo_root,
+    iter_skills,
     validate_skill_slug,
 )
-from lib.config import APIConfig, DEFAULT_PROVIDER, validate_provider_config
-from lib.llm import close_client_async, create_client
-
 
 DEFAULT_HERMES_SKILLS_DIR = Path("/var/lib/hermes/.hermes/skills")
 GENERATED_START = "<!-- skill-enhancer: generated start -->"
 GENERATED_END = "<!-- skill-enhancer: generated end -->"
-SKIP_EXIT_CODE = 2
-
-
-def _repo_root() -> Path:
-    return repo_root()
-
-
-def _validate_skill_name(skill_name: str) -> None:
-    validate_skill_slug(skill_name)
 
 
 def _discover_workspace_skill_names() -> list[str]:
-    skill_names: set[str] = set()
-    root = _repo_root() / "workspaces" / "skills"
-    if not root.exists():
-        return []
-
-    for skill_file in root.glob("*/*/SKILL.md"):
-        skill_name = skill_file.parent.name
-        try:
-            _validate_skill_name(skill_name)
-        except ValueError:
-            continue
-        skill_names.add(skill_name)
-
-    return sorted(skill_names)
+    return sorted({path.parent.name for path in iter_skills()})
 
 
 def _candidate_skill_files(
@@ -58,10 +34,11 @@ def _candidate_skill_files(
     candidate_files: list[Path] = []
 
     if hermes_path is not None:
-        if hermes_path.name == "SKILL.md":
-            candidate_files.append(hermes_path)
+        # A path to one skill (its directory or SKILL.md) only stands for that skill.
+        skill_dir = hermes_path.parent if hermes_path.name == "SKILL.md" else hermes_path
+        if skill_dir.name == skill_name:
+            candidate_files.append(skill_dir / "SKILL.md")
         candidate_files.append(hermes_path / skill_name / "SKILL.md")
-        candidate_files.append(hermes_path / "SKILL.md")
         candidate_dirs.append(hermes_path)
 
     candidate_dirs.append(DEFAULT_HERMES_SKILLS_DIR)
@@ -226,138 +203,57 @@ def _merge_or_backup_write(
     return backup_path
 
 
-async def _enhance_async(
-    api: APIConfig,
-    *,
-    skill_name: str,
-    hermes_content: str,
-    local_content: str,
-    diff: str,
-    enhancement_context: str,
-) -> str:
-    handle = create_client(
-        api,
-        provider=DEFAULT_PROVIDER,
-        model=api.get_model(provider=DEFAULT_PROVIDER),
-        async_mode=True,
-    )
-    try:
-        return await generate_hermes_enhancement(
-            handle=handle,
-            skill_name=skill_name,
-            hermes_content=hermes_content,
-            local_content=local_content,
-            diff=diff,
-            context=enhancement_context,
-            temperature=api.TEMPERATURE,
-            max_output_tokens=api.MAX_COMPLETION_TOKENS,
-        )
-    finally:
-        await close_client_async(handle)
-
-
-def _run_single_skill(skill_name: str, hermes_path: Path | None, apply: bool) -> int:
-    """Locate one Hermes source skill and generate or preview an enhanced canonical skill."""
-    try:
-        _validate_skill_name(skill_name)
-    except ValueError as error:
-        print(f"Error: {error}", file=sys.stderr)
-        return 1
-
-    local_skill_path = find_canonical_skill(skill_name)
-    if local_skill_path is None:
-        return SKIP_EXIT_CODE
-
+def _run_single_skill(skill_name: str, hermes_path: Path | None, apply: bool) -> str:
+    """Preview or apply one skill's enhancement: "updated", "skipped" or "failed"."""
+    validate_skill_slug(skill_name)
+    local_skill_path = find_skill(skill_name)
     hermes_skill_path = _locate_hermes_skill(skill_name, hermes_path)
-    if hermes_skill_path is None:
-        return SKIP_EXIT_CODE
-
+    if local_skill_path is None or hermes_skill_path is None:
+        return "skipped"
+    if not _is_hermes_newer(hermes_skill_path, local_skill_path):
+        return "skipped"
     hermes_content = hermes_skill_path.read_text(encoding="utf-8")
     local_content = local_skill_path.read_text(encoding="utf-8")
-
-    if not _is_hermes_newer(hermes_skill_path, local_skill_path):
-        return SKIP_EXIT_CODE
-
     content_diff = _unified_diff(
         hermes_content=body_without_frontmatter(hermes_content).lstrip(),
         local_content=body_without_frontmatter(local_content).lstrip(),
         hermes_path=hermes_skill_path,
         local_skill_path=local_skill_path,
     )
-    if not content_diff or not _has_hermes_side_changes(content_diff):
-        return SKIP_EXIT_CODE
-
-    enhancement_context = _artifact_context(hermes_skill_path, local_skill_path)
-
-    print(
-        _format_preview(
-            skill_name=skill_name,
-            diff=content_diff,
-            apply=apply,
-        )
-    )
-
+    if not _has_hermes_side_changes(content_diff):
+        return "skipped"
+    print(_format_preview(skill_name=skill_name, diff=content_diff, apply=apply))
     if not apply:
-        return 0
-
-    api = APIConfig()
-    issues = validate_provider_config(api, DEFAULT_PROVIDER)
-    if issues:
-        print("Error: Configuration issues found")
-        for issue in issues:
-            print(f"- {issue}")
-        return 1
-
-    local_skill_path.parent.mkdir(parents=True, exist_ok=True)
+        return "updated"
     try:
         enhanced_content = asyncio.run(
-            _enhance_async(
-                api,
+            generate_hermes_enhancement(
                 skill_name=skill_name,
                 hermes_content=hermes_content,
                 local_content=local_content,
                 diff=content_diff,
-                enhancement_context=enhancement_context,
+                context=_artifact_context(hermes_skill_path, local_skill_path),
             )
         )
-        backup_path = _merge_or_backup_write(
-            local_skill_path,
-            local_content,
-            enhanced_content,
-        )
+        backup_path = _merge_or_backup_write(local_skill_path, local_content, enhanced_content)
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-
+        print(f"Error: {skill_name}: {exc}", file=sys.stderr)
+        return "failed"
     if backup_path is not None:
         print(f"Info: Backed up previous canonical skill: {backup_path}")
     print(f"Wrote enhanced canonical skill: {local_skill_path}")
-    return 0
+    return "updated"
+
+
+def requirements(apply: bool) -> list[str]:
+    return llm.missing_config(llm.DEFAULT_PROVIDER) if apply else []
 
 
 def run(skill_name: str | None = None, hermes_path: Path | None = None, apply: bool = False) -> int:
-    """Preview or enhance one named skill, or all discovered workspace skills."""
-    if skill_name is not None:
-        exit_code = _run_single_skill(skill_name, hermes_path, apply)
-        return 0 if exit_code == SKIP_EXIT_CODE else exit_code
-
-    skill_names = _discover_workspace_skill_names()
-    if not skill_names:
-        return 0
-
-    failures = 0
-    found_updates = 0
-    for index, discovered_skill_name in enumerate(skill_names, start=1):
-        exit_code = _run_single_skill(discovered_skill_name, hermes_path, apply)
-        if exit_code == 0:
-            found_updates += 1
-        elif exit_code != SKIP_EXIT_CODE:
-            failures += 1
-
-    if found_updates > 0 and not apply:
-        print()
-        print(f"Would change {found_updates} skill(s).")
-
-    if found_updates == 0:
-        return 0
-    return 1 if failures else 0
+    """Preview or enhance one named skill, or every skill in the store."""
+    names = [skill_name] if skill_name is not None else _discover_workspace_skill_names()
+    outcomes = [_run_single_skill(name, hermes_path, apply) for name in names]
+    updated = outcomes.count("updated")
+    if updated and not apply:
+        print(f"\nWould change {updated} skill(s).")
+    return 1 if "failed" in outcomes else 0

@@ -7,22 +7,20 @@ with the configured direct LLM client, and writes it into a timestamped CSV.
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 import re
 import shutil
 import subprocess
 import sys
-import time
 from datetime import datetime
-from typing import Any
+from typing import List
 
 import pandas as pd
 
-from core.config import Config
-from lib.config import DEFAULT_PROVIDER
-from lib.llm import LLMHandle, create_client, generate_text
-
+from core import llm
+from core.config import ANSWER_COLUMNS, QUESTION_COLUMNS, TIMESTAMP_FORMAT, LayerProfile
 
 QMD_COMMAND = "qmd"
 QMD_RESULT_LIMIT = 6
@@ -30,45 +28,20 @@ QMD_PASSAGE_LIMIT = 1200
 QMD_STALE_AFTER_DAYS = 14
 
 
-def _build_prompt(
-    config: Config,
-    question: str,
-    *,
-    category: str,
-    goal: str,
-    element: str,
-    retrieved_passages: str,
-) -> str:
-    return config.prompts.qmd_query_template.format(
-        synthesis_prompt=config.prompts.synthesis_prompt,
-        category=category,
-        goal=goal,
-        element=element,
-        question=question,
-        retrieved_passages=retrieved_passages,
-    )
+class RetrievalUnavailable(RuntimeError):
+    """QMD cannot supply current evidence, so the question must not be answered."""
 
 
-def _qmd_freshness(collections: list[str]) -> str:
-    """Describe QMD index freshness without making a failed check invisible."""
+def _check_freshness(collections: list[str]) -> None:
+    """Raise unless every collection is indexed and the index is recent."""
     try:
-        result = subprocess.run(
-            [QMD_COMMAND, "status"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
+        result = subprocess.run([QMD_COMMAND, "status"], capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"Retrieval freshness unavailable: {exc}"
-
+        raise RetrievalUnavailable(f"QMD status failed: {exc}") from exc
     if result.returncode != 0:
-        detail = result.stderr.strip() or "QMD status command failed"
-        return f"Retrieval freshness unavailable: {detail}"
-
-    selected = set(collections)
+        raise RetrievalUnavailable(result.stderr.strip() or "QMD status command failed")
     found: set[str] = set()
-    index_age: int | None = None
+    age_days: float | None = None
     for line in result.stdout.splitlines():
         collection_match = re.match(r"\s*(.+?)\s+\(qmd://[^/]+/\)", line)
         if collection_match:
@@ -76,36 +49,20 @@ def _qmd_freshness(collections: list[str]) -> str:
         index_match = re.match(r"\s*Updated:\s*(\d+)([hd])\s+ago", line, re.I)
         if index_match:
             value, unit = index_match.groups()
-            index_age = int(value) if unit.lower() == "d" else 0
-
-    missing = sorted(selected - found)
+            age_days = int(value) if unit.lower() == "d" else int(value) / 24
+    missing = sorted(set(collections) - found)
     if missing:
-        return "Retrieval freshness unavailable: missing QMD collections: " + ", ".join(missing)
-    if index_age is None:
-        return (
-            "Retrieval freshness unavailable: QMD status did not report the index update age."
-        )
-    if index_age > QMD_STALE_AFTER_DAYS:
-        return (
-            f"Retrieval may be stale: QMD index was last updated {index_age} days ago."
-        )
-    return "Retrieval index freshness is within the configured window."
+        raise RetrievalUnavailable("missing QMD collections: " + ", ".join(missing))
+    if age_days is None:
+        raise RetrievalUnavailable("QMD status did not report the index update age")
+    if age_days > QMD_STALE_AFTER_DAYS:
+        raise RetrievalUnavailable(f"QMD index was last updated {age_days:g} days ago")
 
 
-def _format_passages(results: list[Any], collections: list[str], freshness: str) -> str:
-    """Format a bounded, cited evidence block from QMD JSON result records."""
-    passages: list[str] = [f"Retrieval status: {freshness}"]
-    valid_results = [result for result in results if isinstance(result, dict)]
-    if not valid_results:
-        passages.append(
-            "No QMD passages were retrieved from collections: "
-            + ", ".join(collections)
-            + "."
-        )
-        return "\n\n".join(passages)
-
-    passages.append("Retrieved passages (cite labels are for grounding only):")
-    for position, result in enumerate(valid_results[:QMD_RESULT_LIMIT], start=1):
+def _format_passages(results: list[dict]) -> str:
+    """A bounded, cited evidence block from QMD JSON result records."""
+    passages: list[str] = ["Retrieved passages (cite labels are for grounding only):"]
+    for position, result in enumerate(results[:QMD_RESULT_LIMIT], start=1):
         title = str(result.get("title") or "Untitled")
         source = str(result.get("file") or "unknown source")
         line = result.get("line")
@@ -120,187 +77,100 @@ def _format_passages(results: list[Any], collections: list[str], freshness: str)
 
 
 def _retrieve_passages(question: str, collections: list[str]) -> str:
-    """Retrieve bounded QMD passages, preserving retrieval failures as evidence state."""
+    """Cited QMD passages for one question; raises when there is no current evidence."""
     if shutil.which(QMD_COMMAND) is None:
-        return "Retrieval unavailable: QMD command not found on PATH."
-
-    command = [
-        QMD_COMMAND,
-        "query",
-        "--format",
-        "json",
-        "--no-rerank",
-        "-n",
-        str(QMD_RESULT_LIMIT),
-    ]
+        raise RetrievalUnavailable("QMD command not found on PATH")
+    command = [QMD_COMMAND, "query", "--format", "json", "--no-rerank", "-n", str(QMD_RESULT_LIMIT)]
     for collection in collections:
         command.extend(["-c", collection])
     command.append(question)
-
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
+        result = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"Retrieval unavailable: {exc}"
+        raise RetrievalUnavailable(str(exc)) from exc
     if result.returncode != 0:
-        detail = result.stderr.strip() or "QMD query command failed"
-        return f"Retrieval unavailable: {detail}"
+        raise RetrievalUnavailable(result.stderr.strip() or "QMD query command failed")
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        return f"Retrieval unavailable: QMD returned invalid JSON: {exc}"
+        raise RetrievalUnavailable(f"QMD returned invalid JSON: {exc}") from exc
     if not isinstance(payload, list):
-        return "Retrieval unavailable: QMD JSON response was not a result list."
-    return _format_passages(payload, collections, _qmd_freshness(collections))
+        raise RetrievalUnavailable("QMD JSON response was not a result list")
+    results = [item for item in payload if isinstance(item, dict)]
+    if not results:
+        raise RetrievalUnavailable("no QMD passages were retrieved from collections: " + ", ".join(collections))
+    return _format_passages(results)
 
 
-def _ask_with_retry(
-    handle: LLMHandle,
-    config: Config,
-    prompt: str,
-    *,
-    label: str,
-    max_retries: int = 3,
-    base_delay: int = 1,
-) -> str:
-    """Send a synthesized prompt to the configured direct LLM with retries."""
-    response = ""
-    for attempt in range(max_retries):
+async def _answer(prompt: str, *, attempts: int = 3) -> str | None:
+    """The model's answer on one line, or None after ``attempts`` failures (rate limits are common)."""
+    for attempt in range(attempts):
         try:
-            response = generate_text(
-                handle,
-                user_prompt=prompt,
-                temperature=config.api.TEMPERATURE,
-                max_output_tokens=config.api.get_max_completion_tokens(
-                    provider=handle.provider
-                ),
-            )
-            return response
+            return re.sub(r"\s+", " ", await llm.complete(prompt, label="answer")).strip()
         except Exception as exc:
-            response = f"Error: {exc}"
-            if attempt < max_retries - 1:
-                delay = base_delay * (2**attempt)
-                print(
-                    f"Warning: {label} LLM call failed, retrying in {delay}s "
-                    f"(attempt {attempt + 1}/{max_retries})"
-                )
-                time.sleep(delay)
-    return f"Failed after {max_retries} retries: {response}"
+            print(f"Warning: answer failed ({exc}) (attempt {attempt + 1}/{attempts})", file=sys.stderr)
+            if attempt < attempts - 1:
+                await asyncio.sleep(2**attempt)
+    return None
 
 
-def _write_dataframe(df: pd.DataFrame, path, config: Config) -> None:
-    df.to_csv(
-        str(path),
-        index=False,
-        sep=config.csv.DELIMITER,
-        quotechar=config.csv.QUOTECHAR,
-        quoting=csv.QUOTE_MINIMAL,
-    )
+def requirements(profile: LayerProfile) -> List[str]:
+    issues = llm.missing_config(llm.DEFAULT_PROVIDER)
+    if not profile.questions_csv.exists():
+        issues.append(f"Questions CSV not found at {profile.questions_csv}")
+    if not profile.qmd_collections:
+        issues.append(f"No QMD collections configured for profile '{profile.name}'")
+    return issues
 
 
-def run(config: Config) -> int:
-    """Run the question-asking loop for the given profile."""
-    issues = config.validate_question_answering()
-    if issues:
-        print("Error: Configuration issues found")
-        for issue in issues:
-            print(f"- {issue}")
-        return 1
-
-    handle = create_client(config.api, provider=DEFAULT_PROVIDER)
-    print("Info: QMD collections")
-    for collection in config.profile.qmd_collections:
-        print(f"- {collection}")
-
-    mode_label = config.profile.name
-
-    questions_file = config.paths.QUESTIONS_CSV
-    print(f"Info: Reading questions from {questions_file}")
-    df = pd.read_csv(questions_file)
-
-    for col in config.csv.ANSWER_COLUMNS:
+async def build(profile: LayerProfile) -> None:
+    """Answer every question questions.csv leaves unanswered into a new timestamped CSV; failures stay empty."""
+    print("Info: QMD collections: " + ", ".join(profile.qmd_collections))
+    df = pd.read_csv(profile.questions_csv)
+    for col in ANSWER_COLUMNS:
         if col not in df.columns:
             df[col] = pd.NA
-
-    timestamp = datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
-    output_filename = config.output.QUESTIONS_WITH_ANSWERS_PATTERN.format(
-        timestamp=timestamp
-    )
-    output_file = config.paths.DATA_DIR / output_filename
-
-    question_sets = list(zip(config.csv.QUESTION_COLUMNS, config.csv.ANSWER_COLUMNS))
-
-    total_questions = sum(
-        row.isna()[answer_col]
-        for _, row in df.iterrows()
-        for _, answer_col in question_sets
-    )
-    processed_count = 0
-
-    print(
-        f"\nInfo: Starting to process {total_questions} questions with "
-        f"QMD-backed direct LLM responses"
-    )
-
-    for index, row in df.iterrows():
-        category = str(row.get("Category", ""))
-        goal = str(row.get("Goal", ""))
-        element = str(row.get("Element", ""))
-
-        for question_col, answer_col in question_sets:
-            if question_col not in df.columns or not row.isna()[answer_col]:
-                continue
-
-            query = str(row[question_col])
-            print(f"Info: Processing with QMD + LLM ({mode_label}): {query[:60]}...")
-
-            retrieved_passages = _retrieve_passages(
-                query, config.profile.qmd_collections
-            )
-            if (
-                retrieved_passages.startswith("Retrieval unavailable:")
-                or "No QMD passages were retrieved" in retrieved_passages
-                or "Retrieval freshness unavailable:" in retrieved_passages
-                or "Retrieval may be stale:" in retrieved_passages
-            ):
-                print(f"Error: Cannot answer without current QMD evidence: {retrieved_passages}", file=sys.stderr)
-                return 1
-
-            prompt = _build_prompt(
-                config,
-                query,
-                category=category,
-                goal=goal,
-                element=element,
-                retrieved_passages=retrieved_passages,
-            )
-
-            response = _ask_with_retry(handle, config, prompt, label=mode_label)
-
-            if response.startswith("Error:") or response.startswith("Failed after"):
-                cleaned_response = response
-            else:
-                cleaned_response = re.sub(
-                    r"\s+", " ", response.replace("\n", " ")
-                ).strip()
-
-            df.at[index, answer_col] = cleaned_response
-
-            processed_count += 1
-            print(f"Info: Processed {processed_count}/{total_questions} questions")
-            _write_dataframe(df, output_file, config)
-
-    _write_dataframe(df, output_file, config)
-    print(
-        f"\nInfo: Completed processing {processed_count} questions; "
-        f"saved to {output_file}"
-    )
-    return 0
-
-
-__all__ = ["run"]
+    output = profile.answers_path(datetime.now().strftime(TIMESTAMP_FORMAT))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    pending = [
+        (index, question_col, answer_col)
+        for index, row in df.iterrows()
+        for question_col, answer_col in zip(QUESTION_COLUMNS, ANSWER_COLUMNS)
+        if question_col in df.columns and pd.notna(row[question_col]) and pd.isna(row[answer_col])
+    ]
+    print(f"Info: Answering {len(pending)} questions with QMD evidence")
+    if pending:
+        try:
+            if shutil.which(QMD_COMMAND) is None:
+                raise RetrievalUnavailable("QMD command not found on PATH")
+            _check_freshness(profile.qmd_collections)
+        except RetrievalUnavailable as exc:
+            raise RuntimeError(f"Cannot answer without current QMD evidence: {exc}") from exc
+    failed = 0
+    for done, (index, question_col, answer_col) in enumerate(pending, start=1):
+        row = df.loc[index]
+        question = str(row[question_col])
+        print(f"Info: {question[:60]}...")
+        try:
+            passages = _retrieve_passages(question, profile.qmd_collections)
+        except RetrievalUnavailable as exc:
+            raise RuntimeError(f"Cannot answer without current QMD evidence: {exc}") from exc
+        prompt = profile.prompt("qmd_query_template").format(
+            synthesis_prompt=profile.prompt("synthesis_prompt"),
+            category=str(row.get("Category", "")),
+            goal=str(row.get("Goal", "")),
+            element=str(row.get("Element", "")),
+            question=question,
+            retrieved_passages=passages,
+        )
+        answer = await _answer(prompt)
+        if answer is None:
+            failed += 1
+        else:
+            df.at[index, answer_col] = answer
+        df.to_csv(output, index=False, quoting=csv.QUOTE_MINIMAL)
+        print(f"Info: Processed {done}/{len(pending)} questions")
+    df.to_csv(output, index=False, quoting=csv.QUOTE_MINIMAL)
+    print(f"Info: Saved answers to {output}")
+    if failed:
+        raise RuntimeError(f"{failed} question(s) could not be answered and were left empty in {output.name}")

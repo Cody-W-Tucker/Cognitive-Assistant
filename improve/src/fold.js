@@ -3,17 +3,7 @@
 // narrowed: cluster near-duplicate gap sightings across sessions, apply the
 // minGapEvidence floor, emit a compact folded ledger. No model involved.
 
-import { createHash } from "node:crypto";
-
-import { assertMinGapEvidence } from "./state.js";
-
-function normalizeQuote(text) {
-  return String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 300);
-}
-
-function shortHash(text) {
-  return createHash("sha256").update(text).digest("hex").slice(0, 12);
-}
+import { assertMinGapEvidence, normalizeQuote, shortHash } from "./state.js";
 
 /**
  * @param {object[]} evidenceRecords — analyzer output (status "ok" entries used)

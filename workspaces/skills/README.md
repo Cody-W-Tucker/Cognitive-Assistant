@@ -6,9 +6,9 @@ Structure:
 workspaces/skills/<category>/<skill_name>/SKILL.md
 ```
 
-Categories are one-level, purpose-based slugs. Generated skills use the skill's `category` frontmatter when present, otherwise `source_group`, otherwise `general`.
+Groups are one level deep. `build-skills` writes generated skills to `workspaces/skills/<profile>/<skill_name>/SKILL.md` and removes any skill in that profile folder the profile no longer declares, so hand-placed or imported skills belong in a purpose category (`core`, `workflow`, `operator`, `communication`, `domain`), never in a profile folder. Slugs must be unique across groups.
 
-New skills, Skill Enhancer, and alignment generation target this store. `workspaces/skills/<category>/<skill_name>/SKILL.md` is the generated skill workflow; profile artifact directories are not skill outputs.
+Skill Enhancer and alignment generation read this store; profile artifact directories are not skill outputs. See `docs/Skills-System.md`.
 
 ## Required frontmatter
 
@@ -23,6 +23,8 @@ source_group: source-or-category-name
 compatibility: opencode
 ---
 ```
+
+`name` must equal the directory name and `compatibility` must be `opencode`; generated skills also carry `source_profile`. The body needs `## When To Use` and `## Do Not Use` sections.
 
 Use lowercase hyphenated slugs for skill directory names. Categories are one-level purpose buckets such as `core`, `workflow`, `operator`, `communication`, or `domain`.
 

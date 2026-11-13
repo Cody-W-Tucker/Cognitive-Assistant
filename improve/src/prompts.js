@@ -19,15 +19,11 @@ const DEFAULT_PROMPT_DIR = path.join(
 
 const cache = new Map();
 
-function resolvePromptDir(promptsDir) {
-  return promptsDir || DEFAULT_PROMPT_DIR;
-}
-
 function promptPath(name, promptsDir) {
   if (!/^[a-z0-9-]+$/.test(name)) {
     throw new Error(`invalid prompt name ${JSON.stringify(name)} (want [a-z0-9-]+)`);
   }
-  return path.join(path.resolve(resolvePromptDir(promptsDir)), `${name}.md`);
+  return path.join(path.resolve(promptsDir || DEFAULT_PROMPT_DIR), `${name}.md`);
 }
 
 /** Load a checked-in prompt by name, resolved relative to the runtime (not CWD). */
@@ -49,7 +45,7 @@ const TOKEN_PATTERN = /\{\{([A-Za-z0-9_]+)\}\}/g;
 const DECLARED_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 
 /** Unique {{TOKEN}} names in first-appearance order. */
-export function declaredPlaceholders(template) {
+function declaredPlaceholders(template) {
   const seen = [];
   for (const match of String(template).matchAll(TOKEN_PATTERN)) {
     if (!seen.includes(match[1])) seen.push(match[1]);
@@ -94,13 +90,6 @@ export function render(template, values) {
   }
   return text.replace(TOKEN_PATTERN, (match, key) => String(provided[key]));
 }
-
-/**
- * Re-exported so every prompt-facing caller keeps one import. The constant itself lives
- * in `src/sentinel.js`, which has no dependencies, because discovery's self-exclusion
- * check needs it without prompt loading.
- */
-export { SELF_SESSION_SENTINEL };
 
 /** Load, render, and prefix with the self-session sentinel FIRST. */
 export function renderPrompt(name, values, { promptsDir } = {}) {

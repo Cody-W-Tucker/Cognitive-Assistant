@@ -1,122 +1,85 @@
 #!/usr/bin/env node
-// CA improvement runtime CLI. Narrow JSON boundary for core/improve.py.
+// CA improvement runtime CLI, called by core/improve.py. Prints exactly one
+// JSON proposal on stdout; progress (--tui) and errors go to stderr.
 
-import { discoverTranscripts } from "../src/discovery.js";
 import { runPipeline } from "../src/pipeline.js";
-import { runSynthesizeResume } from "../src/synthesize-resume.js";
-import { defaultStateDir, assertMinGapEvidence } from "../src/state.js";
-import { defaultSoulPath } from "../src/soul.js";
-import { startTuiProcess } from "../src/tui.js";
+import { runSynthesizeResume } from "../src/resume.js";
+import { startTui } from "../src/tui.js";
 
-function flagValue(args, name) {
-  const index = args.indexOf(name);
-  if (index === -1) return null;
-  return args[index + 1] ?? null;
+const USAGE = `usage:
+  ca-improve run (--headless|--tui) --state-dir D --soul-path S [--experience-file E] [--posture-path P]
+                 [--since 30d] [--analyzer model|mock] [--min-gap-evidence N] [--home H] [--harness X]...
+  ca-improve synthesize --state-dir D --soul-path S [--min-gap-evidence N]`;
+
+function parseFlags(args) {
+  const flags = { harness: [] };
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--headless" || arg === "--tui") {
+      flags[arg.slice(2)] = true;
+      continue;
+    }
+    if (!arg.startsWith("--") || args[i + 1] === undefined) throw new Error(`unexpected argument ${JSON.stringify(arg)}`);
+    const name = arg.slice(2);
+    const value = args[(i += 1)];
+    if (name === "harness") flags.harness.push(value);
+    else flags[name] = value;
+  }
+  for (const required of ["state-dir", "soul-path"]) {
+    if (!flags[required]) throw new Error(`--${required} is required`);
+  }
+  return flags;
 }
 
 async function main() {
   const [, , command, ...rest] = process.argv;
-  if (command === "discover") {
-    const home = flagValue(rest, "--home") || undefined;
-    const stateDir = flagValue(rest, "--state-dir") || null;
-    const since = flagValue(rest, "--since") || "30d";
-    const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
-    try {
-      const result = discoverTranscripts({
-        // Absent --home keeps ambient HERMES_HOME/CLAUDE_CONFIG_DIR/CODEX_HOME;
-        // an explicit --home scopes every store under it (hermetic runs/tests).
-        home: home || undefined,
-        stateDir,
-        since,
-        harnesses: harnessFlags.length ? harnessFlags : null,
-        strict: harnessFlags.length > 0,
-      });
-      console.log(JSON.stringify(result));
-      return 0;
-    } catch (err) {
-      process.stderr.write(`ca-improve discover: ${err?.message || err}\n`);
-      return 2;
-    }
+  if (command !== "run" && command !== "synthesize") {
+    process.stderr.write(`ca-improve: unknown command "${command || ""}"\n${USAGE}\n`);
+    return 2;
   }
-  if (command === "run") {
-    const headless = rest.includes("--headless");
-    const tuiRequested = rest.includes("--tui");
-    if (!headless && !tuiRequested) {
-      process.stderr.write("ca-improve run: pass --headless (JSON only) or --tui (live stderr progress + JSON stdout)\n");
-      return 2;
+  let flags;
+  try {
+    flags = parseFlags(rest);
+    if (command === "run" && Boolean(flags.headless) === Boolean(flags.tui)) {
+      throw new Error("pass exactly one of --headless (JSON only) or --tui (live stderr progress + JSON stdout)");
     }
-    if (headless && tuiRequested) {
-      process.stderr.write("ca-improve run: --headless and --tui are mutually exclusive\n");
-      return 2;
-    }
-    const home = flagValue(rest, "--home") || undefined;
-    const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
-    const since = flagValue(rest, "--since") || "30d";
-    const analyzer = flagValue(rest, "--analyzer") || "model";
-    const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
-    const posturePath = flagValue(rest, "--posture-path") || null;
-    let minGapEvidence;
-    try {
-      minGapEvidence = assertMinGapEvidence(flagValue(rest, "--min-gap-evidence") || 2, 'ca-improve run: --min-gap-evidence');
-    } catch (err) {
-      process.stderr.write(`${err?.message || err}\n`);
-      return 2;
-    }
-    const harnessFlags = rest.filter((arg, i) => rest[i - 1] === "--harness");
-    const tui = tuiRequested ? startTuiProcess({ since, analyzer }) : null;
-    return runPipeline({
-      home: home || undefined,
-      stateDir,
-      since,
-      harnesses: harnessFlags.length ? harnessFlags : null,
-      strictHarnesses: harnessFlags.length > 0,
-      analyzer,
-      soulPath,
-      posturePath,
-      minGapEvidence,
-      progress: tui ? tui.event.bind(tui) : null,
-    }).then(
-      (proposal) => {
-        tui?.stop();
-        console.log(JSON.stringify(proposal));
-        return 0;
-      },
-      (err) => {
-        tui?.stop();
-        process.stderr.write(`ca-improve run: ${err?.stack || err?.message || err}\n`);
-        return 1;
-      },
-    );
+  } catch (err) {
+    process.stderr.write(`ca-improve ${command}: ${err.message}\n${USAGE}\n`);
+    return 2;
   }
-  if (command === "synthesize") {
-    const stateDir = flagValue(rest, "--state-dir") || defaultStateDir();
-    let minGapEvidence;
-    try {
-      minGapEvidence = assertMinGapEvidence(flagValue(rest, "--min-gap-evidence") || 2, 'ca-improve synthesize: --min-gap-evidence');
-    } catch (err) {
-      process.stderr.write(`${err?.message || err}\n`);
-      return 2;
-    }
-    const soulPath = flagValue(rest, "--soul-path") || defaultSoulPath();
-    const runId = flagValue(rest, "--run-id") || null;
-    return runSynthesizeResume({
-      stateDir,
-      minGapEvidence,
-      soulPath,
-      runId,
-    }).then(
-      (proposal) => {
-        console.log(JSON.stringify(proposal));
-        return 0;
-      },
-      (err) => {
-        process.stderr.write(`ca-improve synthesize: ${err?.message || err}\n`);
-        return 1;
-      },
-    );
+  const minGapEvidence = flags["min-gap-evidence"] ?? 2;
+  const since = flags.since || "30d";
+  const analyzer = flags.analyzer || "model";
+  const tui = flags.tui ? startTui({ since, analyzer }) : null;
+  try {
+    const proposal =
+      command === "run"
+        ? await runPipeline({
+            home: flags.home,
+            stateDir: flags["state-dir"],
+            soulPath: flags["soul-path"],
+            posturePath: flags["posture-path"] || null,
+            experiencePath: flags["experience-file"] || null,
+            since,
+            harnesses: flags.harness.length ? flags.harness : null,
+            strictHarnesses: flags.harness.length > 0,
+            analyzer,
+            minGapEvidence,
+            progress: tui?.event,
+          })
+        : await runSynthesizeResume({
+            stateDir: flags["state-dir"],
+            soulPath: flags["soul-path"],
+            minGapEvidence,
+          });
+    tui?.stop();
+    process.stdout.write(`${JSON.stringify(proposal)}\n`);
+    return 0;
+  } catch (err) {
+    tui?.stop();
+    process.stderr.write(`ca-improve ${command}: ${err.message}\n`);
+    return 1;
   }
-  process.stderr.write(`ca-improve: unknown command "${command || ""}" (expected: discover, run, synthesize)\n`);
-  return 2;
 }
 
 process.exitCode = await main();

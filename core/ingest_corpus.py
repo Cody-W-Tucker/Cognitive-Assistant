@@ -19,14 +19,13 @@ import csv
 import html
 import json
 import re
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 from zipfile import ZipFile
 
-from core.config import Config
+from core.config import TIMESTAMP_FORMAT, LayerProfile
 
 
 SCHEMA_VERSION = "2026-05-01.1"
@@ -45,10 +44,6 @@ class SourceResult:
     records_written: int
     records_skipped: int
     notes: list[str]
-
-
-def _now_timestamp(config: Config) -> str:
-    return datetime.now().strftime(config.output.TIMESTAMP_FORMAT)
 
 
 def _ensure_parent(path: Path) -> None:
@@ -158,22 +153,12 @@ def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> int:
     return count
 
 
-def _first_assistant_child(
-    node: dict[str, Any], messages: dict[str, dict[str, Any]]
-) -> dict[str, Any] | None:
-    for child_id in node.get("childrenIds", []):
-        child = messages.get(child_id)
-        if child and child.get("role") == "assistant":
-            return child
-    return None
-
-
 def _build_opencode_records(path: Path) -> tuple[list[dict[str, Any]], int]:
     records: list[dict[str, Any]] = []
     skipped = 0
 
     with path.open("r", encoding="utf-8") as file_handle:
-        for line_number, line in enumerate(file_handle, start=1):
+        for line in file_handle:
             payload = json.loads(line)
             messages = payload.get("messages", [])
             title = payload.get("title", "")
@@ -228,7 +213,7 @@ def _build_cursor_records(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def _flatten_open_webui_chat(
-    chat_item: dict[str, Any], source_file: str
+    chat_item: dict[str, Any]
 ) -> list[dict[str, Any]]:
     chat = chat_item.get("chat", {})
     history = chat.get("history", {})
@@ -280,7 +265,7 @@ def _build_open_webui_records(
             continue
 
         for chat_item in chat_items:
-            records.extend(_flatten_open_webui_chat(chat_item, path.name))
+            records.extend(_flatten_open_webui_chat(chat_item))
 
     snapshots = sorted(directory.glob("*.snapshot"))
     if snapshots:
@@ -419,7 +404,7 @@ def _next_openai_node(
 
 
 def _flatten_openai_conversation(
-    conversation: dict[str, Any], source_file: str
+    conversation: dict[str, Any]
 ) -> list[dict[str, Any]]:
     mapping = conversation.get("mapping", {})
     root = _first_openai_root(mapping)
@@ -458,7 +443,7 @@ def _build_openai_records(path: Path) -> tuple[list[dict[str, Any]], int]:
 
     for conversation in conversations:
         try:
-            records.extend(_flatten_openai_conversation(conversation, path.name))
+            records.extend(_flatten_openai_conversation(conversation))
         except Exception:
             skipped += 1
 
@@ -541,144 +526,64 @@ def _build_grok_records(
     return records, skipped, notes
 
 
-def _write_manifest(
-    config: Config, path: Path, results: list[SourceResult]
-) -> None:
-    manifest = {
-        "generated_at": datetime.now().isoformat(),
-        "intake_dir": str(config.paths.INTAKE_DIR),
-        "ready_dir": str(config.paths.READY_DIR),
-        "qmd_collections": config.profile.qmd_collections,
-        "schema_version": SCHEMA_VERSION,
-        "sources": [result.__dict__ for result in results],
-    }
-    _ensure_parent(path)
-    path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=True) + "\n",
-        encoding="utf-8",
-    )
+def _newest(intake_dir: Path, pattern: str) -> Path | None:
+    """The newest export matching ``pattern`` (exports carry a sortable timestamp)."""
+    found = sorted(intake_dir.glob(pattern))
+    return found[-1] if found else None
 
 
-def run(config: Config) -> int:
-    """Normalize configured intake sources for the active profile."""
-    if not config.profile.has_corpus_ingest:
-        print(
-            f"Error: profile '{config.profile.name}' does not enable corpus "
-            "ingestion"
-        )
-        return 1
+# (source, path under intake, builder, output file stem). A glob picks the newest export.
+SOURCES = (
+    ("opencode", "opencode_conversations_*.jsonl", _build_opencode_records, "interactions"),
+    ("cursor", "cursor_ultimate_*.jsonl", _build_cursor_records, "requests"),
+    ("open-webui", "open-webui", _build_open_webui_records, "interactions"),
+    ("perplexity", "perplexity/Search_History.csv", _build_perplexity_search_records, "search_queries"),
+    ("perplexity", "perplexity/Memory.csv", _build_perplexity_memory_records, "memory_items"),
+    ("perplexity", "perplexity/Conversations.csv", _build_perplexity_conversation_records, "conversations"),
+    ("openai", "OpenAI-Chat-export.zip", _build_openai_records, "interactions"),
+    ("grok", "grok_export.zip", _build_grok_records, "interactions"),
+)
 
-    timestamp = _now_timestamp(config)
-    intake_dir = config.paths.INTAKE_DIR
-    ready_dir = config.paths.READY_DIR
-    results: list[SourceResult] = []
 
-    opencode_path = intake_dir / "opencode_conversations_20260328_105151.jsonl"
-    if opencode_path.exists():
-        records, skipped = _build_opencode_records(opencode_path)
-        records = _summarize_repeated_records(records)
-        output_path = ready_dir / "opencode" / f"interactions_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, records)
-        results.append(
-            SourceResult("opencode", "processed", [str(output_path)], written, skipped, [])
-        )
+def requirements(profile: LayerProfile) -> list[str]:
+    if not profile.has_corpus_ingest:
+        return [f"profile '{profile.name}' does not enable corpus ingestion"]
+    return []
 
-    cursor_path = intake_dir / "cursor_ultimate_20260428_200712.jsonl"
-    if cursor_path.exists():
-        records, skipped = _build_cursor_records(cursor_path)
-        records = _summarize_repeated_records(records)
-        output_path = ready_dir / "cursor" / f"requests_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, records)
-        results.append(
-            SourceResult("cursor", "processed", [str(output_path)], written, skipped, [])
-        )
 
-    open_webui_dir = intake_dir / "open-webui"
-    if open_webui_dir.exists():
-        records, skipped, notes = _build_open_webui_records(open_webui_dir)
-        records = _summarize_repeated_records(records)
-        output_path = ready_dir / "open-webui" / f"interactions_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, records)
-        results.append(
-            SourceResult(
-                "open-webui", "processed", [str(output_path)], written, skipped, notes
-            )
-        )
-
-    perplexity_dir = intake_dir / "perplexity"
-    if perplexity_dir.exists():
-        output_files: list[str] = []
-        written_total = 0
-        skipped_total = 0
-
-        search_path = perplexity_dir / "Search_History.csv"
-        if search_path.exists():
-            records, skipped = _build_perplexity_search_records(search_path)
-            records = _summarize_repeated_records(records)
-            output_path = ready_dir / "perplexity" / f"search_queries_{timestamp}.jsonl"
-            written = _write_jsonl(output_path, records)
-            output_files.append(str(output_path))
-            written_total += written
-            skipped_total += skipped
-
-        memory_path = perplexity_dir / "Memory.csv"
-        if memory_path.exists():
-            records, skipped = _build_perplexity_memory_records(memory_path)
-            records = _summarize_repeated_records(records)
-            output_path = ready_dir / "perplexity" / f"memory_items_{timestamp}.jsonl"
-            written = _write_jsonl(output_path, records)
-            output_files.append(str(output_path))
-            written_total += written
-            skipped_total += skipped
-
-        conversations_path = perplexity_dir / "Conversations.csv"
-        if conversations_path.exists():
-            records, skipped = _build_perplexity_conversation_records(conversations_path)
-            records = _summarize_repeated_records(records)
-            output_path = ready_dir / "perplexity" / f"conversations_{timestamp}.jsonl"
-            written = _write_jsonl(output_path, records)
-            output_files.append(str(output_path))
-            written_total += written
-            skipped_total += skipped
-
-        results.append(
-            SourceResult(
-                "perplexity", "processed", output_files, written_total, skipped_total, []
-            )
-        )
-
-    openai_path = intake_dir / "OpenAI-Chat-export.zip"
-    if openai_path.exists():
-        records, skipped = _build_openai_records(openai_path)
-        records = _summarize_repeated_records(records)
-        output_path = ready_dir / "openai" / f"interactions_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, records)
-        results.append(
-            SourceResult("openai", "processed", [str(output_path)], written, skipped, [])
-        )
-
-    grok_path = intake_dir / "grok_export.zip"
-    if grok_path.exists():
-        records, skipped, notes = _build_grok_records(grok_path)
-        records = _summarize_repeated_records(records)
-        output_path = ready_dir / "grok" / f"interactions_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, records)
-        results.append(
-            SourceResult("grok", "processed", [str(output_path)], written, skipped, notes)
-        )
+async def build(profile: LayerProfile) -> None:
+    """Normalize every intake export present into ready/<source>/*.jsonl plus a manifest."""
+    timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
+    intake_dir = profile.data_dir / "intake"
+    ready_dir = profile.data_dir / "ready"
+    results: dict[str, SourceResult] = {}
+    for source, pattern, builder, stem in SOURCES:
+        path = _newest(intake_dir, pattern)
+        if path is None:
+            continue
+        records, skipped, *extra = builder(path)
+        output_path = ready_dir / source / f"{stem}_{timestamp}.jsonl"
+        written = _write_jsonl(output_path, _summarize_repeated_records(records))
+        result = results.setdefault(source, SourceResult(source, "processed", [], 0, 0, []))
+        result.output_files.append(str(output_path))
+        result.records_written += written
+        result.records_skipped += skipped
+        result.notes.extend(extra[0] if extra else [])
 
     manifest_path = ready_dir / f"preprocessing_manifest_{timestamp}.json"
-    _write_manifest(config, manifest_path, results)
+    _ensure_parent(manifest_path)
+    manifest = {
+        "generated_at": datetime.now().isoformat(),
+        "intake_dir": str(intake_dir),
+        "ready_dir": str(ready_dir),
+        "qmd_collections": profile.qmd_collections,
+        "schema_version": SCHEMA_VERSION,
+        "sources": [result.__dict__ for result in results.values()],
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
     print("Preprocessing complete")
-    for result in results:
-        print(
-            f"- {result.source}: {result.status} "
-            f"({result.records_written} written, {result.records_skipped} skipped)"
-        )
+    for result in results.values():
+        print(f"- {result.source}: {result.records_written} written, {result.records_skipped} skipped")
         for output_file in result.output_files:
             print(f"  - {output_file}")
-    return 0
-
-
-__all__ = ["run"]

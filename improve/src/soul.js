@@ -1,75 +1,24 @@
-// Required active-SOUL contextualization for the CA improvement pass.
-//
-// The canonical SOUL baseline resolves to the repo-root
-// workspaces/alignment/artifacts/SOUL.md independently of CWD; an explicit
-// --soul-path overrides it. Snapshots are read-only: missing, unreadable, or
-// empty SOUL fails closed before synthesis/annotation/proposal. Callers
-// receive bounded snapshot text plus a stable sha256 over the full file.
+// The active SOUL (the one Hermes runs) is read-only context for every
+// proposal. Missing or empty SOUL fails the run before anything is proposed.
 
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 
-import { caHome } from "./state.js";
+const SOUL_SNAPSHOT_MAX_CHARS = 4000;
 
-export const SOUL_SNAPSHOT_MAX_CHARS = 4000;
-export const SOUL_RELATIVE_PATH = path.join(
-  "workspaces",
-  "alignment",
-  "artifacts",
-  "SOUL.md",
-);
-
-/** Repo root resolved relative to the runtime, never CWD. */
-export function defaultRepoRoot() {
-  return path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-  );
-}
-
-/**
- * The SOUL Hermes runs: the living SOUL once compiled (CA state dir),
- * otherwise the bootstrap SOUL this runtime shipped with.
- */
-export function defaultSoulPath() {
-  const living = path.join(caHome(), "soul", "current.md");
-  if (fs.existsSync(living)) return living;
-  return path.join(defaultRepoRoot(), SOUL_RELATIVE_PATH);
-}
-
-/** Explicit path wins; absent flag resolves to the canonical default. */
-export function resolveSoulPath(explicit) {
-  if (explicit !== null && explicit !== undefined && String(explicit).trim() !== "") {
-    return path.resolve(String(explicit));
-  }
-  return defaultSoulPath();
-}
-
-/**
- * Read the SOUL snapshot (read-only). Fails closed when the file is
- * missing, unreadable, or empty/whitespace-only.
- *
- * @returns {{path, text, sha256, chars}} bounded text + full-file hash/chars
- */
-export function readSoulSnapshot(explicit) {
-  const resolved = resolveSoulPath(explicit);
+/** @returns {{path, text, sha256, chars}} bounded text plus full-file hash and length */
+export function readSoulSnapshot(soulPath) {
+  if (!soulPath) throw new Error("improve: --soul-path is required");
+  const resolved = path.resolve(String(soulPath));
   let full;
   try {
     full = fs.readFileSync(resolved, "utf8");
   } catch (err) {
-    throw new Error(
-      `improve: SOUL baseline unavailable at ${resolved} (${err?.message || err}); ` +
-        `refusing synthesis/annotation/proposal without the active baseline`,
-    );
+    throw new Error(`improve: SOUL baseline unavailable at ${resolved} (${err.message}); refusing to propose without the active baseline`);
   }
-  if (!full || !full.trim()) {
-    throw new Error(
-      `improve: SOUL baseline at ${resolved} is empty; ` +
-        `refusing synthesis/annotation/proposal without the active baseline`,
-    );
+  if (!full.trim()) {
+    throw new Error(`improve: SOUL baseline at ${resolved} is empty; refusing to propose without the active baseline`);
   }
   return {
     path: resolved,

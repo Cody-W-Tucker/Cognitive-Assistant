@@ -33,10 +33,11 @@ adapted from. Actual adapted source mappings in this slice:
   - improve/src/analyze.js <- Backpass src/analyze.js
   - improve/src/prompts.js <- Backpass src/prompts.js
   - improve/prompts/analysis.md <- Backpass src/prompts/analysis.md (operational source)
-  - improve/src/discovery.js <- Backpass src/discovery/index.js + src/discovery/adapters/{hermes,pi,claude,codex,opencode}.js
+  - improve/src/harnesses.js <- Backpass src/discovery/index.js + src/discovery/adapters/{hermes,claude,codex,opencode}.js
   - improve/src/distill.js <- Backpass src/distill.js
   - improve/src/fold.js <- Backpass src/fold.js
   - improve/src/sentinel.js <- Backpass src/sentinel.js
+  - improve/src/tui.js <- Backpass stderr-only live progress view
   - improve/src/synthesize.js <- Backpass src/synthesize.js + src/proposal.js
   - improve/src/consolidate.js <- Backpass src/consolidate.js + src/gap-ledger.js (mergeGapEntries)
   - improve/prompts/consolidate.md <- Backpass src/prompts/consolidate.md (operational source)
@@ -46,19 +47,20 @@ adapted from. Actual adapted source mappings in this slice:
     Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md
   - improve/prompts/annotate.md <- Backpass src/prompts/annotate.md (operational source)
     Upstream: https://github.com/kunchenguid/backpass/blob/backpass-v0.1.32/src/prompts/annotate.md
-  - improve/prompts/annotate-preface.md <- CA-native preface (no direct Backpass counterpart; staged-existing
-    framing that opens the fresh logical annotate session preceding the Backpass-annotate-derived annotate prompt)
 
 CA-native (not adapted from Backpass, excluded from the above):
 
-  - improve/src/pipeline.js (CA headless propose-only orchestration)
-  - improve/src/state.js (CA XDG private state: cursor/run state, evidence, ledger, proposal)
-  - improve/src/stage.js (CA deterministic private staging; staged change plan, terminal final proposal)
-  - improve/src/measure.js (CA deterministic measurement; stable measured IDs/deltas)
-  - improve/src/annotate.js (CA annotate-preface -> annotate sequencing with strict final validation, fail-closed)
-  - improve/bin/ca-improve.js (CA narrow JSON CLI boundary)
+  - improve/src/pipeline.js (run: discover, analyze, fold, consolidate, propose)
+  - improve/src/resume.js (synthesize: propose again from saved state)
+  - improve/src/propose.js (synthesis, annotation, rejection suppression, proposal)
+  - improve/src/annotate.js (annotation call and record validation)
+  - improve/src/model.js (tool-free chat completion boundary)
+  - improve/src/mock.js (deterministic stand-in for the model)
+  - improve/src/state.js (private state: cursor, evidence, ledger, prompts, proposal)
+  - improve/src/soul.js (read-only active SOUL snapshot)
+  - improve/bin/ca-improve.js (JSON CLI boundary)
 
-The CA runtime intentionally diverges: it trains only
-durable experience records (never SOUL/memory files directly), supports a
-narrow harness set (hermes, pi, claude, codex, opencode), and keeps all
-private state under XDG_DATA_HOME.
+The CA runtime intentionally diverges: it trains only durable experience
+records (never SOUL/memory files directly), supports a narrow harness set
+(hermes, claude, codex, opencode), and keeps all private state under the CA
+state directory.

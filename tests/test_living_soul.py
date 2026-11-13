@@ -10,7 +10,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from core import living_soul
+from core import journal, living_soul
+from core import paths
+from core.paths import improve_dir
 
 RECORD = """---
 id: {id}
@@ -46,11 +48,14 @@ class LivingSoulTests(unittest.TestCase):
         self.bootstrap = self.bootstrap_dir / "SOUL.md"
         self.bootstrap.write_text("# SOUL.md\n\nBootstrap voice.\n", encoding="utf-8")
         self.experience = self.home / "experience"
-        env = {"CA_HOME": str(self.home), "CA_BOOTSTRAP_SOUL": str(self.bootstrap)}
+        env = {"CA_HOME": str(self.home)}
         self._env = mock.patch.dict(os.environ, env)
         self._env.start()
+        self._soul = mock.patch.object(paths, "BOOTSTRAP_SOUL_PATH", self.bootstrap)
+        self._soul.start()
 
     def tearDown(self) -> None:
+        self._soul.stop()
         self._env.stop()
         self._tmp.cleanup()
 
@@ -59,7 +64,6 @@ class LivingSoulTests(unittest.TestCase):
         self.assertEqual(first["generation"], 1)
         self.assertTrue(first["changed"])
         current = living_soul.current_path()
-        self.assertTrue(current.is_symlink())
         self.assertEqual(current.read_text(encoding="utf-8"), "# SOUL.md\n\nBootstrap voice.\n")
         again = living_soul.compile_soul()
         self.assertFalse(again["changed"])
@@ -122,11 +126,10 @@ class LivingSoulTests(unittest.TestCase):
 
     def test_compile_journals_generation_without_soul_text(self) -> None:
         living_soul.compile_soul()
-        events = (self.home / "improve" / "journal" / "events.jsonl").read_text(encoding="utf-8")
-        event = json.loads(events.splitlines()[-1])
+        event = journal.read_events(improve_dir())[-1]
         self.assertEqual(event["type"], "soul_compiled")
         self.assertEqual(event["payload"]["generation"], 1)
-        self.assertNotIn("Bootstrap voice", events)
+        self.assertNotIn("Bootstrap voice", json.dumps(event))
 
 
 if __name__ == "__main__":

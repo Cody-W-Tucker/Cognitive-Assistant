@@ -25,4 +25,4 @@ CA currently generates the translation layer from profile artifacts and seed pro
 
 ## First stop condition
 
-One reviewed miss and one good counterexample move through: source observation → human annotation → reviewed dataset item → A/B experiment runs → inspectable keep/revert decision. Until that works, do not auto-promote scores to dataset cases or rewrite SOUL from annotations.
+One reviewed miss and one good counterexample move through: source observation -> human annotation -> reviewed dataset item -> A/B experiment runs -> inspectable keep/revert decision. Until that works, do not auto-promote scores to dataset cases or rewrite SOUL from annotations.
