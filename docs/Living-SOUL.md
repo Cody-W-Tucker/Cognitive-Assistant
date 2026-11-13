@@ -36,6 +36,32 @@ ca soul rollback <generation>
 ca soul link <hermes-home>
 ```
 
+## Outcome check and autonomous changes
+
+`improve-run --headless --auto` (what the Home Manager timer runs) makes one
+step per run:
+
+1. Analyze new Hermes sessions. Each evidence record carries `sessionAt`, and
+   `soul/activations.jsonl` maps that time to the generation that was live.
+2. Judge the active generation against the one it replaced. A session is a
+   *miss* when the analysis found a quote-backed harm or non-compliance
+   negative, or a gap. The verdict is `pending` until both generations have
+   `--min-sessions` analyzed Hermes sessions (default 15), then `revert` if the
+   miss rate rose with a one-sided two-proportion z above 1.645, else `keep`.
+   Verdicts are final and recorded in `soul/verdicts.jsonl` and the journal.
+3. `revert` withdraws the records that generation added (`reverted.jsonl`, kept
+   as lineage) and compiles without them. `pending` adopts nothing. `keep`
+   adopts the first record the annotation stage kept, as a new generation.
+
+So exactly one change is under test at a time, and every change is judged by
+what happened in sessions after it, scored by the same analysis prompt and
+model as the sessions before it. A generation from a new bootstrap is kept
+untested; rebootstrapping is the person's decision.
+
+What the metric does not control for: the mix of work changes from week to
+week, and the judge is an LLM. Quote binding keeps each miss traceable to a
+verbatim line of the session, and `ca soul status` shows every verdict.
+
 ## Rebootstrap
 
 Runs on the NAS when you choose to. It reads source data together with the

@@ -43,6 +43,8 @@ ALLOWED_TYPES = frozenset(
         "artifact_compiled",
         "soul_compiled",
         "soul_rolled_back",
+        "soul_verdict",
+        "auto_cycle",
     }
 )
 

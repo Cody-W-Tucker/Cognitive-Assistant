@@ -440,6 +440,8 @@ def apply(
     reject_reasons: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
     expected_proposal_id: Optional[str] = None,
+    allow_partial: bool = False,
+    reason: Optional[str] = None,
 ) -> Dict:
     """Apply gate: the sole writer of accepted experience records.
 
@@ -489,6 +491,12 @@ def apply(
                 f"rejection reason names unknown edit {edit_id!r} (edits: {', '.join(edit_ids)})"
             )
     undecided = [edit_id for edit_id in edit_ids if edit_id not in resolved]
+    if undecided and allow_partial:
+        # Auto mode adopts one record at a time. The rest are neither written
+        # nor rejected, so a later run can propose them again on fresh evidence.
+        edits = [edit for edit in edits if edit["id"] in resolved]
+        edit_ids = [edit["id"] for edit in edits]
+        undecided = []
     if undecided:
         raise RuntimeError(
             f"proposal is unreviewed: no decision for {', '.join(undecided)}"
@@ -642,7 +650,7 @@ def apply(
         # bootstrap + lineage (never from the previous generation).
         from core import living_soul
 
-        generation = living_soul.compile_soul(reason=f"accepted {proposal.get('id', '?')}")
+        generation = living_soul.compile_soul(reason=reason or f"accepted {proposal.get('id', '?')}")
     return {
         "accepted": accepted,
         "rejected": rejected,
@@ -650,3 +658,69 @@ def apply(
         "dry_run": dry_run,
         "generation": generation,
     }
+
+
+def _auto_candidate(proposal: Dict) -> Optional[Dict]:
+    """First edit the annotation stage kept with a complete final record."""
+    required = ("id", "title", "body", "sources", "clusterId", "evidence", "counterevidence", "compilerImplication")
+    for edit in proposal.get("edits", []) or []:
+        annotation = edit.get("annotation") or {}
+        record = edit.get("record") or {}
+        if annotation.get("verdict") == "keep" and all(record.get(field) for field in required):
+            return edit
+    return None
+
+
+def auto_cycle(
+    *,
+    state_dir: Optional[Path] = None,
+    proposal: Dict,
+    min_sessions: int = 15,
+    z_threshold: float = 1.645,
+) -> Dict:
+    """One autonomous step after a headless run: judge, revert, or adopt one change.
+
+    1. Judge the active generation against its parent (core.outcome).
+    2. revert -> withdraw the records it added and compile without them.
+    3. pending -> adopt nothing; one change is under test at a time.
+    4. keep/settled -> adopt the best kept record from this run's proposal.
+    """
+    from core import living_soul, outcome
+
+    resolved_state = state_dir or default_state_dir()
+    if living_soul.current_generation() is None:
+        living_soul.compile_soul(reason="auto: initial")
+    verdict = outcome.evaluate(resolved_state, min_sessions=min_sessions, z_threshold=z_threshold)
+    result: Dict = {"verdict": verdict, "action": "none", "generation": None}
+    if verdict["verdict"] == "revert":
+        added = list(verdict.get("added", []))
+        meta = living_soul.revert_records(added, reason=f"miss rate rose (z={verdict.get('z')})")
+        result.update(action="revert", records=added, generation=meta["generation"])
+    elif verdict["verdict"] == "pending":
+        result["action"] = "wait"
+    else:
+        candidate = _auto_candidate(proposal)
+        if candidate is not None and not proposal.get("appliedAt"):
+            applied = apply(
+                state_dir=resolved_state,
+                decisions={candidate["id"]: "accepted"},
+                expected_proposal_id=proposal.get("id"),
+                allow_partial=True,
+                reason=f"auto-apply {candidate['record']['id']}"[:80],
+            )
+            result.update(
+                action="adopt",
+                records=[candidate["record"]["id"]],
+                generation=(applied.get("generation") or {}).get("generation"),
+            )
+    _journal_note(
+        resolved_state,
+        "auto_cycle",
+        {
+            "verdict": str(verdict.get("verdict")),
+            "kind": result["action"],
+            "generation": result["generation"],
+            "record_ids": result.get("records", []),
+        },
+    )
+    return result

@@ -16,7 +16,7 @@ import { synthesizeCandidates, synthesizeWithAcpx, measuredIdsForPlan } from "./
 import { stageCandidates, buildFinalProposal } from "./stage.js";
 import { measureStaging } from "./measure.js";
 import { annotateStaging, applyRejectionSuppression, buildMockFinalAnnotation, acpxAnnotatePrefaceInvoke, acpxAnnotateInvoke } from "./annotate.js";
-import { checkpointKey, initStateDir, readEvidenceRecords, readSessionCheckpoint, writeJson, writeProposal, assertMinGapEvidence } from "./state.js";
+import { checkpointKey, initStateDir, readEvidenceRecords, readJson, readSessionCheckpoint, writeJson, writeProposal, assertMinGapEvidence } from "./state.js";
 import { readSoulSnapshot } from "./soul.js";
 import { prepareExperienceWorkspace, measureExperienceWorkspace } from "./experience-workspace.js";
 import { readOpencodeExportAsync } from "./opencode-export.js";
@@ -230,6 +230,9 @@ export async function runPipeline({
   let successful = 0;
   let failed = 0;
   let skipped = 0;
+  // Session time travels with the evidence so outcomes can be attributed to
+  // the living SOUL generation that was active when the session happened.
+  const sessionTimes = new Map(discovery.transcripts.map((t) => [String(t.id), t.mtimeMs ?? null]));
   const records = await analyzeTracesAsync(traces, {
     ...(invoke ? { invoke } : {}),
     stateDir,
@@ -240,7 +243,11 @@ export async function runPipeline({
     promptsDir,
     jobs,
     onRecord: (record) => {
-      writeJson(path.join(stateDir, "evidence", `${record.transcriptId}.json`), record);
+      const evidenceFile = path.join(stateDir, "evidence", `${record.transcriptId}.json`);
+      // A failed or skipped re-analysis never replaces earlier good evidence.
+      if (record.status === "ok" || readJson(evidenceFile)?.status !== "ok") {
+        writeJson(evidenceFile, { ...record, sessionAt: sessionTimes.get(String(record.transcriptId)) ?? null });
+      }
       completed += 1;
       if (record.status === "ok") successful += 1;
       else if (record.status === "skipped") skipped += 1;

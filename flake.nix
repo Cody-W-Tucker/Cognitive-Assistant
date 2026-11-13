@@ -225,6 +225,20 @@
               default = true;
               description = "Run the headless improvement pass on a timer.";
             };
+            improve.auto = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Adopt and revert changes without review: each run judges the change
+                under test by Hermes session miss rate, reverts it when sessions got
+                significantly worse, and otherwise adopts one kept record.
+              '';
+            };
+            improve.minSessions = lib.mkOption {
+              type = lib.types.ints.positive;
+              default = 15;
+              description = "Analyzed Hermes sessions needed on each side before a change is judged.";
+            };
             improve.harnesses = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ "hermes" ];
@@ -259,6 +273,11 @@
                   [
                     "${cfg.improvePackage}/bin/ca-improve"
                     "--headless"
+                  ]
+                  ++ lib.optionals cfg.improve.auto [
+                    "--auto"
+                    "--min-sessions"
+                    (toString cfg.improve.minSessions)
                   ]
                   ++ lib.concatMap (harness: [
                     "--harness"

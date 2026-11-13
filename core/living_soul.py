@@ -10,6 +10,7 @@ state dir owns everything that changes afterwards:
     <ca_home>/soul/generations/NNNN.md      every compiled SOUL, never edited
     <ca_home>/soul/generations/NNNN.json    its inputs (bootstrap sha, record ids)
     <ca_home>/soul/current.md               symlink to the active generation
+    <ca_home>/soul/activations.jsonl        when each generation became active
 
 A generation is a pure function of (wrapper, bootstrap SOUL, active records).
 It never reads the previous generation, so a change cannot compound on its own
@@ -226,7 +227,23 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
+def activations() -> List[Dict]:
+    """Ordered (at, generation) history of which generation Hermes was running."""
+    path = soul_dir() / "activations.jsonl"
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    return rows
+
+
 def _point_current(generation_file: Path) -> None:
+    number = int(generation_file.stem)
+    previous = current_generation()
     link = current_path()
     tmp = link.with_name(f".current-{os.getpid()}")
     try:
@@ -235,6 +252,10 @@ def _point_current(generation_file: Path) -> None:
         pass
     os.symlink(os.path.relpath(generation_file, link.parent), tmp)
     os.replace(tmp, link)
+    if not previous or previous.get("generation") != number:
+        row = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "generation": number}
+        with open(soul_dir() / "activations.jsonl", "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
 def list_generations() -> List[Dict]:
@@ -282,13 +303,21 @@ def compile_soul(*, reason: str = "compile", experience_root: Optional[Path] = N
         return {**current, "changed": False}
     existing = list_generations()
     number = (max((g["generation"] for g in existing), default=0)) + 1
+    record_ids = [record["id"] for record in records]
+    bootstrap_sha = _sha256(bootstrap_text)
     meta = {
         "generation": number,
         "sha256": sha,
-        "bootstrapSha256": _sha256(bootstrap_text),
-        "records": [record["id"] for record in records],
+        "bootstrapSha256": bootstrap_sha,
+        "records": record_ids,
         "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "reason": reason,
+        # What changed relative to the generation it replaces; the outcome
+        # check attributes a regression to exactly these records.
+        "parent": current["generation"] if current else None,
+        "added": [r for r in record_ids if not current or r not in current.get("records", [])],
+        "removed": [r for r in (current or {}).get("records", []) if r not in record_ids],
+        "bootstrapChanged": bool(current) and current.get("bootstrapSha256") != bootstrap_sha,
     }
     generation_file = generations_dir() / f"{number:04d}.md"
     _atomic_write(generation_file, text)
@@ -316,6 +345,19 @@ def rollback(generation: int) -> Dict:
     meta = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
     _journal("soul_rolled_back", {"generation": generation, "output_ref": meta["sha256"]})
     return meta
+
+
+def revert_records(record_ids: List[str], reason: str) -> Dict:
+    """Withdraw adopted records (kept in lineage) and compile without them."""
+    from core import experience
+
+    path = experience.experience_root() / "reverted.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with open(path, "a", encoding="utf-8") as handle:
+        for record_id in record_ids:
+            handle.write(json.dumps({"at": at, "record": record_id, "reason": reason}, sort_keys=True) + "\n")
+    return compile_soul(reason=f"revert {', '.join(record_ids)}"[:80])
 
 
 def link_into(hermes_home: Path) -> Path:

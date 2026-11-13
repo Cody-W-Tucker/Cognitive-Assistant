@@ -56,3 +56,39 @@ test("CA_HOME holds state and lineage; the living SOUL wins over bootstrap once 
     else process.env.CA_HOME = previous;
   }
 });
+
+test("evidence carries session time, and a failed re-analysis keeps earlier good evidence", async () => {
+  const { runPipeline } = await import("../src/pipeline.js");
+  const home = tmp();
+  const sessions = path.join(home, ".codex", "sessions");
+  fs.mkdirSync(sessions, { recursive: true });
+  const file = path.join(sessions, "2026-01-01T00-00-00Z.jsonl");
+  const lines = [
+    JSON.stringify({ role: "user", text: "bootstrap context please" }),
+    ...["read", "search", "test"].map((name) => JSON.stringify({ kind: "tool", name, input: { name } })),
+  ];
+  fs.writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
+  const stateDir = tmp();
+  const base = {
+    home,
+    stateDir,
+    analyzer: "mock",
+    consolidateInvoke: () => ({ status: "ok", result: { merges: [] } }),
+  };
+  await runPipeline({
+    ...base,
+    analyzeInvoke: () => ({ status: "ok", evidence: { status: "ok", positive: [], negative: [], gaps: [] } }),
+  });
+  const evidenceDir = path.join(stateDir, "evidence");
+  const [name] = fs.readdirSync(evidenceDir);
+  const first = readJson(path.join(evidenceDir, name));
+  assert.equal(first.status, "ok");
+  assert.equal(typeof first.sessionAt, "number");
+
+  // The session changes, gets re-discovered, and this time analysis fails.
+  fs.appendFileSync(file, `${JSON.stringify({ role: "user", text: "one more thing" })}\n`);
+  const later = new Date(Date.now() + 5000);
+  fs.utimesSync(file, later, later);
+  await runPipeline({ ...base, analyzeInvoke: () => ({ status: "failed", error: "acpx timed out" }) });
+  assert.equal(readJson(path.join(evidenceDir, name)).status, "ok");
+});

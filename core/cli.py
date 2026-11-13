@@ -201,6 +201,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Read-only SOUL baseline for synthesis context (default: workspaces/alignment/artifacts/SOUL.md).",
     )
     improve_run_parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="With --headless: judge the change under test, revert it if sessions got worse, else adopt one kept record.",
+    )
+    improve_run_parser.add_argument(
+        "--min-sessions",
+        type=int,
+        default=15,
+        help="--auto: sessions needed on each side before judging a change (default 15).",
+    )
+    improve_run_parser.add_argument(
         "--harness",
         action="append",
         default=None,
@@ -353,8 +364,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 + str(args.state_dir or improve_runtime.default_state_dir()),
                 file=sys.stderr,
             )
-            print(_decisions_hint(proposal), file=sys.stderr)
+            if args.auto:
+                cycle = improve_runtime.auto_cycle(
+                    state_dir=args.state_dir,
+                    proposal=proposal,
+                    min_sessions=args.min_sessions,
+                )
+                verdict = cycle["verdict"]
+                print(
+                    f"auto: verdict {verdict.get('verdict')} ({verdict.get('reason', 'tested')}); "
+                    f"action {cycle['action']}"
+                    + (f" -> generation {cycle['generation']}" if cycle["generation"] else ""),
+                    file=sys.stderr,
+                )
+            else:
+                print(_decisions_hint(proposal), file=sys.stderr)
             return 0
+        if args.auto:
+            print("improve-run: --auto requires --headless", file=sys.stderr)
+            return 2
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             print(
                 "improve-run: manual route requires a TTY; "
@@ -458,14 +486,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"current: {living_soul.current_path()}")
             return 0
         if args.soul_command == "status":
+            from core import outcome
+
             current = living_soul.current_generation()
+            judged = outcome.verdicts()
             print(f"bootstrap: {living_soul.bootstrap_soul_path()}")
             print(f"current: {current['generation'] if current else 'none'}")
             for meta in living_soul.list_generations():
                 marker = "*" if current and meta["generation"] == current["generation"] else " "
+                verdict = judged.get(meta["generation"], {}).get("verdict", "untested")
                 print(
                     f" {marker} {meta['generation']:>4}  {meta['createdAt']}  "
-                    f"{len(meta['records'])} record(s)  {meta['reason']}"
+                    f"{len(meta['records'])} record(s)  {verdict:<8}  {meta['reason']}"
                 )
             return 0
         if args.soul_command == "rollback":
