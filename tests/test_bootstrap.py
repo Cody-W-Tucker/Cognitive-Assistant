@@ -156,7 +156,6 @@ class SkillsTests(RepoSandboxTestCase):
         for path, profile in ((stale, "existential"), (imported, "existential"), (hand_kept, "")):
             path.parent.mkdir(parents=True)
             path.write_text(_skill(path.parent.name, "g", profile), encoding="utf-8")
-        imported.write_text(_skill("kept-skill", "g", "operational"), encoding="utf-8")
         fake = self.fake_llm(self._reply)
         asyncio.run(skills_creator.build(EXISTENTIAL_PROFILE))
         for spec in EXISTENTIAL_PROFILE.skill_specs:
@@ -165,12 +164,41 @@ class SkillsTests(RepoSandboxTestCase):
         self.assertNotIn("Unrelated", fake.calls[0]["prompt"])
         self.assertFalse(stale.exists())
         self.assertTrue(imported.exists())
-        self.assertTrue(hand_kept.exists())
+        self.assertFalse(hand_kept.exists())
 
         asyncio.run(skills_creator.build(EXISTENTIAL_PROFILE))
         refine = fake.calls[-1]
         self.assertTrue(refine["label"].startswith("skill "))
         self.assertIn("<existing_canonical_skill>", refine["prompt"])
+
+    def test_cleanup_uses_folder_ownership_for_both_profiles(self) -> None:
+        for profile, other in ((EXISTENTIAL_PROFILE, OPERATIONAL_PROFILE),
+                               (OPERATIONAL_PROFILE, EXISTENTIAL_PROFILE)):
+            with self.subTest(profile=profile.name):
+                owned = paths.SKILLS_DIR / profile.name
+                incomplete = owned / "incomplete-skill"
+                incomplete.mkdir(parents=True, exist_ok=True)
+                stale = []
+                for slug, metadata in (("no-metadata", ""), ("foreign-metadata", other.name)):
+                    path = owned / slug / "SKILL.md"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(_skill(slug, "g", metadata), encoding="utf-8")
+                    stale.append(path)
+                preserved = [
+                    paths.SKILLS_DIR / "workflow" / "manual-import" / "SKILL.md",
+                    paths.SKILLS_DIR / other.name / "other-profile" / "SKILL.md",
+                    owned / profile.skill_specs[0].slug / "SKILL.md",
+                ]
+                for path in preserved:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(_skill(path.parent.name, "g", profile.name), encoding="utf-8")
+                before = {path: path.read_bytes() for path in preserved}
+                skills_creator.remove_undeclared(profile)
+                self.assertFalse(incomplete.exists())
+                for path in stale:
+                    self.assertFalse(path.parent.exists())
+                for path, content in before.items():
+                    self.assertEqual(path.read_bytes(), content)
 
     def test_a_skill_missing_its_headings_fails(self) -> None:
         EXISTENTIAL_PROFILE.human_profile_path.write_text(_human_profile(["Core Frame"]), encoding="utf-8")

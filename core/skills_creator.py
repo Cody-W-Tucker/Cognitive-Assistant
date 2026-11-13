@@ -18,8 +18,6 @@ from core import llm, paths
 from core.config import LayerProfile, SkillSpec
 from core.skill_engine import (
     create_declared_skill_document,
-    extract_frontmatter_value,
-    iter_skills,
     refine_declared_skill_document,
     skill_path,
     validate_declared_skill_document,
@@ -86,14 +84,13 @@ async def _build_one(profile: LayerProfile, spec: SkillSpec, sections: Dict[str,
 
 
 def remove_undeclared(profile: LayerProfile) -> None:
-    """Remove skills this profile generated earlier but no longer declares; hand-kept skills stay."""
+    """Remove undeclared skills only from this profile's owned folder."""
     declared = {spec.slug for spec in profile.skill_specs}
-    for path in iter_skills():
-        if path.parent.name in declared:
+    for directory in sorted((paths.SKILLS_DIR / profile.name).glob("*")):
+        if not directory.is_dir() or directory.name in declared:
             continue
-        if extract_frontmatter_value(path.read_text(encoding="utf-8"), "source_profile") == profile.name:
-            shutil.rmtree(path.parent)
-            print(f"Info: Removed stale generated skill {path.parent}")
+        shutil.rmtree(directory)
+        print(f"Info: Removed stale generated skill {directory}")
 
 
 async def build(profile: LayerProfile, *, bio_path: Optional[Path] = None) -> None:

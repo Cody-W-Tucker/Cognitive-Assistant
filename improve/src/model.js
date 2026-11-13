@@ -99,6 +99,16 @@ export function extractFinalJson(text) {
   return null;
 }
 
+function parseStageReply(role, text) {
+  if (role !== "synthesis") return extractFinalJson(text);
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function retryDelays() {
   return String(process.env.CA_LLM_RETRY_DELAYS_MS ?? "5000,20000")
     .split(",")
@@ -145,7 +155,7 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
   const key = createHash("sha256").update(JSON.stringify({ url: config.baseUrl, body })).digest("hex");
   const cacheFile = cacheDir ? path.join(cacheDir, `${key}.txt`) : null;
   if (cacheFile && fs.existsSync(cacheFile)) {
-    const hit = extractFinalJson(fs.readFileSync(cacheFile, "utf8"));
+    const hit = parseStageReply(role, fs.readFileSync(cacheFile, "utf8"));
     if (hit) return hit;
   }
   const headers = { "content-type": "application/json" };
@@ -163,7 +173,7 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
     content = null;
   }
   if (typeof content !== "string" || !content.trim()) throw new Error("model endpoint returned no message content");
-  const parsed = extractFinalJson(content);
+  const parsed = parseStageReply(role, content);
   if (!parsed) throw new Error(`${role} model returned unparseable output`);
   if (cacheFile) {
     try {

@@ -85,6 +85,37 @@ test("one HTTP call, parsed as data, then served from cache", async () => {
   });
 });
 
+test("synthesis accepts and caches only exact JSON objects", async () => {
+  const invalid = [
+    '```json\n{"plans": []}\n```',
+    'Here is the result: {"plans": []}',
+    '```json\n{"plans": []}\n```\n{"plans": [{"id": "e1"}]}',
+    '[]', 'null',
+  ];
+  for (const content of invalid) {
+    await withServer(ok(content), async (requests) => {
+      const cacheDir = path.join(tmpDir(), "model-cache");
+      await assert.rejects(invokeStage("synthesis", "strict reply", { cacheDir }), /unparseable/);
+      assert.equal(requests.length, 1);
+      assert.equal(fs.existsSync(cacheDir), false);
+    });
+  }
+  await withServer(ok(' \n{"plans": [{"id": "e1"}]}\n'), async (requests) => {
+    const cacheDir = path.join(tmpDir(), "model-cache");
+    const expected = { plans: [{ id: "e1" }] };
+    assert.deepEqual(await invokeStage("synthesis", "strict cache", { cacheDir }), expected);
+    assert.deepEqual(await invokeStage("synthesis", "strict cache", { cacheDir }), expected);
+    assert.equal(requests.length, 1);
+    const [file] = fs.readdirSync(cacheDir);
+    for (const content of invalid) {
+      fs.writeFileSync(path.join(cacheDir, file), content);
+      const count = requests.length;
+      assert.deepEqual(await invokeStage("synthesis", "strict cache", { cacheDir }), expected);
+      assert.equal(requests.length, count + 1, "invalid cached output requires a fresh completion");
+    }
+  });
+});
+
 test("HTTP errors and unparseable replies fail without leaking the key or caching", async () => {
   await withServer(() => ({ status: 401, payload: { error: "bad key" } }), async () => {
     const keyFile = path.join(tmpDir(), "key");
