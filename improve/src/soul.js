@@ -11,6 +11,8 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
+import { caHome } from "./state.js";
+
 export const SOUL_SNAPSHOT_MAX_CHARS = 4000;
 export const SOUL_RELATIVE_PATH = path.join(
   "workspaces",
@@ -19,13 +21,8 @@ export const SOUL_RELATIVE_PATH = path.join(
   "SOUL.md",
 );
 
-/**
- * Live CA checkout holding SOUL and experience records. CA_WORKSPACE_ROOT
- * points a packaged runtime (code in the read-only Nix store) at a mutable
- * checkout; otherwise resolved relative to the runtime, never CWD.
- */
+/** Repo root resolved relative to the runtime, never CWD. */
 export function defaultRepoRoot() {
-  if (process.env.CA_WORKSPACE_ROOT) return path.resolve(process.env.CA_WORKSPACE_ROOT);
   return path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "..",
@@ -33,8 +30,13 @@ export function defaultRepoRoot() {
   );
 }
 
-/** Canonical default SOUL path, independent of CWD. */
+/**
+ * The SOUL Hermes runs: the living SOUL once compiled (CA state dir),
+ * otherwise the bootstrap SOUL this runtime shipped with.
+ */
 export function defaultSoulPath() {
+  const living = path.join(caHome(), "soul", "current.md");
+  if (fs.existsSync(living)) return living;
   return path.join(defaultRepoRoot(), SOUL_RELATIVE_PATH);
 }
 

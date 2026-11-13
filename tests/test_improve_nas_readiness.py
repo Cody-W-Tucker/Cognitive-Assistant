@@ -108,16 +108,13 @@ class ApplyLockTests(unittest.TestCase):
             self.assertFalse((state_dir / "rejections.jsonl").exists())
 
 
-class WorkspaceRootTests(unittest.TestCase):
-    def test_workspace_root_override_moves_soul_and_experience(self) -> None:
+class StateRootTests(unittest.TestCase):
+    def test_ca_home_holds_improve_state_and_lineage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            live = Path(directory) / "checkout"
-            with mock.patch.dict(os.environ, {"CA_WORKSPACE_ROOT": str(live)}):
-                self.assertEqual(experience.experience_root(), live.resolve() / "workspaces" / "experience")
-                self.assertEqual(
-                    improve.default_soul_path(),
-                    live.resolve() / "workspaces" / "alignment" / "artifacts" / "SOUL.md",
-                )
+            home = Path(directory)
+            with mock.patch.dict(os.environ, {"CA_HOME": str(home)}):
+                self.assertEqual(improve.default_state_dir(), home / "improve")
+                self.assertEqual(experience.experience_root(), home / "experience")
 
 
 if __name__ == "__main__":

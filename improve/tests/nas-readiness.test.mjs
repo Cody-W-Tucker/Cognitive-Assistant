@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { writeProposal, readJson } from "../src/state.js";
+import { writeProposal, readJson, defaultStateDir, defaultExperienceRoot } from "../src/state.js";
 import { discoverTranscripts } from "../src/discovery.js";
 import { defaultRepoRoot } from "../src/analyze.js";
 import { defaultSoulPath } from "../src/soul.js";
@@ -39,15 +39,20 @@ test("strict discovery fails on a missing named store; default stays fail-soft",
   assert.equal(soft.perHarness.hermes.error, "store missing");
 });
 
-test("CA_WORKSPACE_ROOT redirects the live SOUL and experience root", () => {
-  const live = tmp();
-  const previous = process.env.CA_WORKSPACE_ROOT;
-  process.env.CA_WORKSPACE_ROOT = live;
+test("CA_HOME holds state and lineage; the living SOUL wins over bootstrap once compiled", () => {
+  const home = tmp();
+  const previous = process.env.CA_HOME;
+  process.env.CA_HOME = home;
   try {
-    assert.equal(defaultRepoRoot(), path.resolve(live));
-    assert.equal(defaultSoulPath(), path.join(path.resolve(live), "workspaces", "alignment", "artifacts", "SOUL.md"));
+    assert.equal(defaultStateDir(), path.join(home, "improve"));
+    assert.equal(defaultExperienceRoot(), path.join(home, "experience"));
+    const bootstrap = path.join(defaultRepoRoot(), "workspaces", "alignment", "artifacts", "SOUL.md");
+    assert.equal(defaultSoulPath(), bootstrap);
+    fs.mkdirSync(path.join(home, "soul"), { recursive: true });
+    fs.writeFileSync(path.join(home, "soul", "current.md"), "living\n");
+    assert.equal(defaultSoulPath(), path.join(home, "soul", "current.md"));
   } finally {
-    if (previous === undefined) delete process.env.CA_WORKSPACE_ROOT;
-    else process.env.CA_WORKSPACE_ROOT = previous;
+    if (previous === undefined) delete process.env.CA_HOME;
+    else process.env.CA_HOME = previous;
   }
 });

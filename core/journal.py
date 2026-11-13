@@ -41,6 +41,8 @@ ALLOWED_TYPES = frozenset(
         "experience_accepted",
         "proposal_rejected",
         "artifact_compiled",
+        "soul_compiled",
+        "soul_rolled_back",
     }
 )
 

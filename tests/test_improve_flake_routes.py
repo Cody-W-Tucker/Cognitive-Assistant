@@ -9,10 +9,10 @@ class TestImproveFlakeRoutes(unittest.TestCase):
     def test_package_is_tui_default_and_systemd_is_headless(self) -> None:
         flake = Path(__file__).resolve().parents[1] / "flake.nix"
         text = flake.read_text(encoding="utf-8")
-        self.assertIn('exec python -m core improve-run "$@"', text)
+        self.assertIn('exec python -P -m core improve-run "$@"', text)
         self.assertIn('caPython = pkgs.python314.withPackages (python-pkgs: [ python-pkgs.python-dotenv ]);', text)
         self.assertIn('              caPython', text)
-        self.assertIn('ExecStart = "${cfg.package}/bin/ca-improve --headless";', text)
+        self.assertIn('"${cfg.improvePackage}/bin/ca-improve"\n                    "--headless"', text)
         # Guard against regression to Python 3.12 wrapper.
         self.assertNotIn("python312", text)
         self.assertNotIn("python3.12", text)

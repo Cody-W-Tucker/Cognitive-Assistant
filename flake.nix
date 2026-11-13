@@ -92,7 +92,7 @@
             runtimeInputs = [ pkgs.python314 ];
             text = ''
               export PYTHONPATH=${self}
-              exec python -m core.langfuse_review "$@"
+              exec python -P -m core.langfuse_review "$@"
             '';
           };
           # Interactive by default: renders the live stderr progress view and
@@ -107,7 +107,15 @@
             ];
             text = ''
               export PYTHONPATH=${self}
-              exec python -m core improve-run "$@"
+              exec python -P -m core improve-run "$@"
+            '';
+          };
+          ca = pkgs.writeShellApplication {
+            name = "ca";
+            runtimeInputs = [ caPython ];
+            text = ''
+              export PYTHONPATH=${self}
+              exec python -P -m core "$@"
             '';
           };
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.langfuse-review-queue;
@@ -164,7 +172,10 @@
           };
         };
 
-      nixosModules.ca-improve =
+      # Home Manager module: the living SOUL and the weekly improvement pass
+      # run as the same user as Hermes. The repo ships the bootstrap SOUL;
+      # everything that changes afterwards lives under the CA state dir.
+      homeManagerModules.cognitive-assistant =
         {
           config,
           lib,
@@ -172,66 +183,94 @@
           ...
         }:
         let
-          cfg = config.services.ca-improve;
+          cfg = config.services.cognitive-assistant;
+          system = pkgs.stdenv.hostPlatform.system;
+          prefixFile = pkgs.writeText "ca-soul-prefix.md" cfg.soul.prefix;
+          suffixFile = pkgs.writeText "ca-soul-suffix.md" cfg.soul.suffix;
         in
         {
-          options.services.ca-improve = {
-            enable = lib.mkEnableOption "CA headless improvement pass";
+          options.services.cognitive-assistant = {
+            enable = lib.mkEnableOption "the Cognitive Assistant living SOUL for Hermes";
             package = lib.mkOption {
               type = lib.types.package;
-              default = self.packages.${pkgs.stdenv.hostPlatform.system}.ca-improve;
+              default = self.packages.${system}.ca;
+              description = "CA CLI (`python -m core`) carrying the bootstrap SOUL.";
             };
-            timerConfig = lib.mkOption {
+            improvePackage = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${system}.ca-improve;
+            };
+            hermesHome = lib.mkOption {
+              type = lib.types.str;
+              example = "/home/codyt/.local/share/hermes";
+              description = ''
+                HERMES_HOME. Its SOUL.md becomes a symlink to the living SOUL, so
+                SOUL.md must not also be declared in hermesHomeFiles. User units
+                do not inherit login-shell session variables, so the improvement
+                pass gets it from here.
+              '';
+            };
+            soul.prefix = lib.mkOption {
+              type = lib.types.lines;
+              default = "";
+              description = "Deployer text placed before the SOUL in every generation.";
+            };
+            soul.suffix = lib.mkOption {
+              type = lib.types.lines;
+              default = "";
+              description = "Deployer text placed after the SOUL in every generation.";
+            };
+            improve.enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Run the headless improvement pass on a timer.";
+            };
+            improve.harnesses = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ "hermes" ];
+              description = "Harnesses to scan; a named harness with a missing store fails the run.";
+            };
+            improve.timerConfig = lib.mkOption {
               type = lib.types.attrs;
               default = {
                 OnCalendar = "weekly";
                 Persistent = true;
               };
             };
-            harnesses = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-              example = [ "hermes" ];
-              description = "Harnesses to scan. Named harnesses fail the run when their store is missing; empty scans all, fail-soft.";
-            };
-            hermesHome = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              example = "/home/codyt/.local/share/hermes";
-              description = "HERMES_HOME holding state.db. User units do not inherit login-shell session variables, so set it here.";
-            };
-            workspaceRoot = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = "Live CA checkout (CA_WORKSPACE_ROOT) for SOUL and accepted experience records. Null reads the packaged store copy, frozen at build time.";
-            };
           };
           config = lib.mkIf cfg.enable {
-            # User-scoped units: the pass runs headless as proposal-only and
-            # never deploys. Enable lingering for the target user so the
-            # timer fires without an active session.
-            systemd.user.services.ca-improve = {
-              description = "CA headless improvement pass (proposal only, no deploy)";
-              serviceConfig = {
+            home.packages = [ cfg.package ];
+
+            # Rebuild the living SOUL from the (possibly new) bootstrap plus
+            # lineage, then point Hermes at it. Idempotent: no new generation
+            # unless the inputs changed.
+            home.activation.cognitiveAssistantSoul = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+              run ${cfg.package}/bin/ca soul compile \
+                --prefix-file ${prefixFile} --suffix-file ${suffixFile} --reason activation
+              run ${cfg.package}/bin/ca soul link ${lib.escapeShellArg cfg.hermesHome}
+            '';
+
+            systemd.user.services.ca-improve = lib.mkIf cfg.improve.enable {
+              Unit.Description = "CA headless improvement pass over Hermes sessions";
+              Service = {
+                Type = "oneshot";
+                Environment = [ "HERMES_HOME=${cfg.hermesHome}" ];
                 ExecStart = lib.escapeShellArgs (
                   [
-                    "${cfg.package}/bin/ca-improve"
+                    "${cfg.improvePackage}/bin/ca-improve"
                     "--headless"
                   ]
                   ++ lib.concatMap (harness: [
                     "--harness"
                     harness
-                  ]) cfg.harnesses
+                  ]) cfg.improve.harnesses
                 );
-                Type = "oneshot";
               };
-              environment =
-                lib.optionalAttrs (cfg.hermesHome != null) { HERMES_HOME = cfg.hermesHome; }
-                // lib.optionalAttrs (cfg.workspaceRoot != null) { CA_WORKSPACE_ROOT = cfg.workspaceRoot; };
             };
-            systemd.user.timers.ca-improve = {
-              wantedBy = [ "timers.target" ];
-              inherit (cfg) timerConfig;
+            systemd.user.timers.ca-improve = lib.mkIf cfg.improve.enable {
+              Unit.Description = "Weekly CA improvement pass";
+              Timer = cfg.improve.timerConfig;
+              Install.WantedBy = [ "timers.target" ];
             };
           };
         };

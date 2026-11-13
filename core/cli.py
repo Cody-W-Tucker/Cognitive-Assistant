@@ -15,6 +15,7 @@ Subcommands:
    improve-run        Improvement pass: manual TTY route by default, --headless for JSON proposal into XDG state (never writes repo/Hermes)
    improve-apply      Review gate: apply a proposal (sole writer of experience records)
    improve-synthesize   Resume-only synthesis over persisted evidence/ledger (never discovers/analyzes)
+   soul               Living SOUL: compile | status | rollback <n> | link <hermes-home>
 
 Common flags:
   --profile <name>   Required for most commands. Optional for 'update' (all profiles).
@@ -262,6 +263,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Private state dir holding journal/ (default: XDG).",
     )
 
+    soul_parser = subparsers.add_parser(
+        "soul",
+        help="Living SOUL in the CA state dir: bootstrap SOUL + accepted lineage, by generation.",
+    )
+    soul_sub = soul_parser.add_subparsers(dest="soul_command", required=True)
+    soul_compile = soul_sub.add_parser("compile", help="Rebuild from bootstrap + lineage; new generation only on change.")
+    soul_compile.add_argument("--prefix-file", help="Deployer text placed before the SOUL (persisted for later compiles).")
+    soul_compile.add_argument("--suffix-file", help="Deployer text placed after the SOUL (persisted for later compiles).")
+    soul_compile.add_argument("--reason", default="compile", help="Short reason recorded with the generation.")
+    soul_sub.add_parser("status", help="Show the active generation and history.")
+    soul_rollback = soul_sub.add_parser("rollback", help="Point current.md at an earlier generation.")
+    soul_rollback.add_argument("generation", type=int)
+    soul_link = soul_sub.add_parser("link", help="Make <hermes-home>/SOUL.md a symlink to the living SOUL.")
+    soul_link.add_argument("hermes_home", type=Path)
+
     return parser
 
 
@@ -402,6 +418,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  wrote {written}")
         if not result["written"]:
             print("  nothing written")
+        generation = result.get("generation")
+        if generation:
+            print(f"  living SOUL generation {generation['generation']} ({len(generation['records'])} learned record(s))")
         return 0
 
     if args.command == "improve-synthesize":
@@ -426,6 +445,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(_decisions_hint(proposal), file=sys.stderr)
         return 0
+
+    if args.command == "soul":
+        from core import living_soul
+
+        if args.soul_command == "compile":
+            if args.prefix_file is not None or args.suffix_file is not None:
+                living_soul.write_compose_config(args.prefix_file, args.suffix_file)
+            meta = living_soul.compile_soul(reason=args.reason)
+            state = "new" if meta["changed"] else "unchanged"
+            print(f"generation {meta['generation']} ({state}): {len(meta['records'])} learned record(s)")
+            print(f"current: {living_soul.current_path()}")
+            return 0
+        if args.soul_command == "status":
+            current = living_soul.current_generation()
+            print(f"bootstrap: {living_soul.bootstrap_soul_path()}")
+            print(f"current: {current['generation'] if current else 'none'}")
+            for meta in living_soul.list_generations():
+                marker = "*" if current and meta["generation"] == current["generation"] else " "
+                print(
+                    f" {marker} {meta['generation']:>4}  {meta['createdAt']}  "
+                    f"{len(meta['records'])} record(s)  {meta['reason']}"
+                )
+            return 0
+        if args.soul_command == "rollback":
+            meta = living_soul.rollback(args.generation)
+            print(f"current -> generation {meta['generation']}")
+            return 0
+        if args.soul_command == "link":
+            link = living_soul.link_into(args.hermes_home)
+            print(f"{link} -> {living_soul.current_path()}")
+            return 0
 
     if args.command == "journal-compact":
         from core import improve as improve_runtime

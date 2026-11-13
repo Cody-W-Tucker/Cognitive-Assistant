@@ -6,9 +6,20 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-export function defaultStateDir() {
+/** Root of all CA runtime state; mirrors core/living_soul.py::ca_home. */
+export function caHome() {
+  if (process.env.CA_HOME) return path.resolve(process.env.CA_HOME);
   const base = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-  return path.join(base, "cognitive-assistant", "improve");
+  return path.join(base, "cognitive-assistant");
+}
+
+export function defaultStateDir() {
+  return path.join(caHome(), "improve");
+}
+
+/** Accepted-record lineage; never in the repo. */
+export function defaultExperienceRoot() {
+  return path.join(caHome(), "experience");
 }
 
 export function initStateDir(stateDir) {

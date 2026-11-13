@@ -81,10 +81,11 @@ for hermetic runs). `improve-run --harness hermes` (repeatable) scans only the
 named harnesses and fails the run when a named store is missing or unreadable;
 without `--harness` every adapter is scanned and missing stores are skipped.
 
-Live workspace: SOUL and accepted experience records are read from (and
-`improve-apply` writes to) the CA checkout the code runs from. A packaged
-runtime lives in the read-only Nix store, so set `CA_WORKSPACE_ROOT` to a
-mutable checkout; otherwise it sees the SOUL and records frozen at build time.
+Runtime state: everything that changes after bootstrap lives under CA home
+(`$CA_HOME`, default `$XDG_DATA_HOME/cognitive-assistant/`): `improve/`
+(runtime state and journal), `experience/` (accepted records, the lineage) and
+`soul/` (living SOUL generations). Analysis reads the living SOUL once one is
+compiled, else the bootstrap SOUL. See `docs/Living-SOUL.md`.
 
 Production model invocations use ACPX with Pi. Syntax only, literal shape:
 
@@ -113,8 +114,9 @@ minimal terminal review). `--decisions` must be paired with
 it, apply refuses. A run that replaces an unapplied proposal first archives it
 to `proposals/<id>.json`. Concurrent applies are refused by an exclusive
 state lock. Acceptance atomically writes only the approved
-experience authored source (`workspaces/experience/authored/<id>.md`) and
-the staged generated artifact (`workspaces/experience/staged/<id>.md`);
+experience authored source (`<CA home>/experience/authored/<id>.md`) and
+the staged generated artifact (`<CA home>/experience/staged/<id>.md`),
+then compiles a new living SOUL generation;
 rejections are recorded in state. It never deploys to Hermes and never
 patches SOUL -- SOUL stays the read-only baseline, while
 `core/experience.py::compile_experience_block` (hooked into

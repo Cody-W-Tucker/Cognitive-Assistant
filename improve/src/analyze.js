@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { renderPrompt } from "./prompts.js";
 import { runAcpxPromptFile, runAcpxPromptFileAsync } from "./acpx-text.js";
 import { modelForRole } from "./models.js";
+import { defaultExperienceRoot } from "./state.js";
+import { defaultSoulPath } from "./soul.js";
 
 export const ACPX_BIN = process.env.CA_IMPROVE_ACPX_BIN || process.env.BACKPASS_ACPX_BIN || "acpx";
 
@@ -69,13 +71,8 @@ export function assertAcpxAvailable(options = {}) {
   return result;
 }
 
-/**
- * Live CA checkout holding SOUL and experience records. CA_WORKSPACE_ROOT
- * points a packaged runtime (code in the read-only Nix store) at a mutable
- * checkout; otherwise resolved relative to the runtime, never CWD.
- */
+/** Repo root resolved relative to the runtime, never CWD. */
 export function defaultRepoRoot() {
-  if (process.env.CA_WORKSPACE_ROOT) return path.resolve(process.env.CA_WORKSPACE_ROOT);
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 }
 
@@ -96,7 +93,7 @@ function unavailable(label, lookedIn) {
 function readExperienceRecords(experienceRoot) {
   const roots = [];
   if (experienceRoot) roots.push(path.resolve(experienceRoot));
-  else roots.push(path.join(defaultRepoRoot(), "workspaces", "experience"));
+  else roots.push(defaultExperienceRoot());
   const blocks = [];
   for (const root of roots) {
     for (const sub of ["authored", "staged"]) {
@@ -127,7 +124,7 @@ function readExperienceRecords(experienceRoot) {
  */
 export function loadDefaultContexts({ repoRoot, soulPath, posturePath, experienceRoot } = {}) {
   const root = repoRoot || defaultRepoRoot();
-  const soulFile = soulPath || path.join(root, "workspaces", "alignment", "artifacts", "SOUL.md");
+  const soulFile = soulPath || (repoRoot ? path.join(root, "workspaces", "alignment", "artifacts", "SOUL.md") : defaultSoulPath());
   const postureFile =
     posturePath || path.join(root, "workspaces", "alignment", "artifacts", "INTERACTION_POSTURE.md");
   const soulBaseline = readBaselineFile(soulFile) || unavailable("SOUL baseline", soulFile);
@@ -137,7 +134,7 @@ export function loadDefaultContexts({ repoRoot, soulPath, posturePath, experienc
     readExperienceRecords(experienceRoot) ||
     unavailable(
       "accepted experience records",
-      experienceRoot || path.join(root, "workspaces", "experience"),
+      experienceRoot || defaultExperienceRoot(),
     );
   return { soulBaseline, interactionPosture, experienceRecords };
 }

@@ -130,14 +130,18 @@ def node_bin() -> str:
 
 
 def default_soul_path() -> Path:
-    """Canonical read-only SOUL baseline, independent of CWD."""
-    return experience.workspace_root() / "workspaces" / "alignment" / "artifacts" / "SOUL.md"
+    """The SOUL Hermes is running: the living SOUL once compiled, else the bootstrap."""
+    from core import living_soul
+
+    current = living_soul.current_path()
+    return current if current.exists() else living_soul.bootstrap_soul_path()
 
 
 def default_state_dir() -> Path:
-    """Return the XDG-backed private state dir for the improve runtime."""
-    base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
-    return Path(base) / "cognitive-assistant" / "improve"
+    """Return the private state dir for the improve runtime (under CA home)."""
+    from core import living_soul
+
+    return living_soul.ca_home() / "improve"
 
 
 def _home_args(home: Optional[Path]) -> List[str]:
@@ -632,4 +636,17 @@ def apply(
                 _restore()
                 written = []
                 raise
-    return {"accepted": accepted, "rejected": rejected, "written": written, "dry_run": dry_run}
+    generation = None
+    if accepted and not dry_run and experience_root is None:
+        # The runtime store changed, so the living SOUL is rebuilt from
+        # bootstrap + lineage (never from the previous generation).
+        from core import living_soul
+
+        generation = living_soul.compile_soul(reason=f"accepted {proposal.get('id', '?')}")
+    return {
+        "accepted": accepted,
+        "rejected": rejected,
+        "written": written,
+        "dry_run": dry_run,
+        "generation": generation,
+    }
