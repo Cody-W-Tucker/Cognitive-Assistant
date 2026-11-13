@@ -142,6 +142,70 @@ describe("discovery across harness stores", () => {
     assert.equal(discoverTranscripts({ home, stateDir, harnesses: ["hermes"] }).perHarness.hermes.error, "store missing");
   });
 
+  it("keeps readable siblings when a JSONL descendant vanishes or is inaccessible", (t) => {
+    const readdir = fs.readdirSync;
+    for (const harness of ["claude", "codex"]) {
+      for (const code of ["ENOENT", "EACCES"]) {
+        const home = tmpDir();
+        const root = path.join(home, `.${harness}`, harness === "claude" ? "projects" : "sessions");
+        const bad = path.join(root, "bad");
+        fs.mkdirSync(bad, { recursive: true });
+        writeJsonl(path.join(root, "good", "session.jsonl"), [{ id: "readable" }]);
+        const mock = t.mock.method(fs, "readdirSync", (dir, options) => {
+          if (dir === bad) throw Object.assign(new Error(code), { code });
+          return readdir(dir, options);
+        });
+        try {
+          const found = discoverTranscripts({ home, harnesses: [harness], since: "all", strict: true });
+          assert.deepEqual(ids(found), ["readable"]);
+        } finally {
+          mock.mock.restore();
+        }
+      }
+    }
+  });
+
+  it("isolates configured Claude root failures but reports a wholly inaccessible store", (t) => {
+    const home = tmpDir();
+    const config = path.join(home, "config");
+    const defaultRoot = path.join(home, ".claude", "projects");
+    const configRoot = path.join(config, "projects");
+    writeJsonl(path.join(defaultRoot, "default.jsonl"), [{ id: "default" }]);
+    writeJsonl(path.join(configRoot, "config.jsonl"), [{ id: "config" }]);
+    const oldHome = process.env.HOME;
+    const oldConfig = process.env.CLAUDE_CONFIG_DIR;
+    const stat = fs.statSync;
+    const readdir = fs.readdirSync;
+    process.env.HOME = home;
+    process.env.CLAUDE_CONFIG_DIR = config;
+    try {
+      for (const operation of ["stat", "readdir"]) {
+        for (const badRoot of [defaultRoot, configRoot, "both"]) {
+          const method = operation === "stat" ? "statSync" : "readdirSync";
+          const original = operation === "stat" ? stat : readdir;
+          const mock = t.mock.method(fs, method, (file, options) => {
+            if (file === badRoot || (badRoot === "both" && [defaultRoot, configRoot].includes(file))) {
+              throw Object.assign(new Error("access denied"), { code: "EACCES" });
+            }
+            return original(file, options);
+          });
+          try {
+            const discover = () => discoverTranscripts({ harnesses: ["claude"], since: "all", strict: true });
+            if (badRoot === "both") assert.throws(discover, /unreadable store/);
+            else assert.deepEqual(ids(discover()), [badRoot === defaultRoot ? "config" : "default"]);
+          } finally {
+            mock.mock.restore();
+          }
+        }
+      }
+    } finally {
+      if (oldHome === undefined) delete process.env.HOME;
+      else process.env.HOME = oldHome;
+      if (oldConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = oldConfig;
+    }
+  });
+
   it("parses --since windows", () => {
     assert.equal(cutoffMs("all"), 0);
     assert.equal(cutoffMs("2d", 10 * 86400_000), 8 * 86400_000);

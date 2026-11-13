@@ -90,6 +90,30 @@ describe("annotate", () => {
     }
   });
 
+  it("rejects a dropped plan's cluster and sources outside the kept plan", async () => {
+    const led = ledger();
+    led.clusters[0].sources.push("s9");
+    led.clusters.push({ ...led.clusters[0], id: "g-bbb" });
+    const plans = [plan(), plan({ id: "e2", clusterId: "g-bbb" })];
+    const foreignSources = record({
+      sources: ["s1", "s9"],
+      evidence: [{ source: "s1", text: QUOTE_A }, { source: "s9", text: "outsider quote nine" }],
+    });
+    for (const candidate of [record({ clusterId: "g-bbb" }), foreignSources]) {
+      assert.deepEqual(validateRecord(candidate, { ledger: led, evidenceIndex: evidenceIndex() }), []);
+      const out = await annotate(plans, {
+        invoke: async () => ({ annotations: [
+          { id: "e1", verdict: "keep", record: candidate },
+          { id: "e2", verdict: "drop" },
+        ] }),
+        stateDir: tmpDir(), runId: "run-1", ledger: led, evidenceIndex: evidenceIndex(), soul,
+      });
+      assert.equal(out.failed, true);
+      assert.deepEqual(out.kept, []);
+      assert.match(out.note, /must match the plan cluster|not in plan.provisionalSources/);
+    }
+  });
+
   it("the prompt lists each plan's exact allowed quotes and never slices one", () => {
     const long = `${"long quote ".repeat(900)}end`;
     const led = ledger();

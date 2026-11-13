@@ -147,6 +147,14 @@ export async function annotate(plans, { invoke, stateDir, runId, ledger, evidenc
     if (!VERDICTS.has(verdict)) return fail(`annotation for ${plan.id} has verdict ${JSON.stringify(annotation.verdict)} (want keep|drop|revert)`);
     if (verdict !== "keep") continue;
     const errors = validateRecord(annotation.record, { ledger, evidenceIndex });
+    if (!errors.length) {
+      const record = annotation.record;
+      const sources = new Set(plan.provisionalSources);
+      if (String(record.clusterId) !== plan.clusterId) errors.push("record.clusterId must match the plan cluster");
+      for (const source of [...record.sources, ...record.evidence.map((item) => item.source)]) {
+        if (!sources.has(String(source))) errors.push(`source ${JSON.stringify(source)} is not in plan.provisionalSources`);
+      }
+    }
     if (errors.length) return fail(`annotation invalid for ${plan.id} (${errors.join("; ")})`);
     kept.push({ plan, annotation: { verdict, reason: String(annotation.reason || annotation.rationale || "") }, record: annotation.record });
   }

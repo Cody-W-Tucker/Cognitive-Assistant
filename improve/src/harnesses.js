@@ -54,7 +54,14 @@ function toMs(value) {
 function walkJsonl(root, depth = 6) {
   const out = [];
   const visit = (dir, left) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      if (dir === root) throw err;
+      return;
+    }
+    for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isFile() && entry.name.endsWith(".jsonl")) out.push(full);
       else if (entry.isDirectory() && left > 0) visit(full, left - 1);
@@ -77,10 +84,19 @@ function readHead(file) {
 
 function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) {
   const rows = [];
-  const existing = roots.filter((root) => fs.statSync(root, { throwIfNoEntry: false })?.isDirectory());
-  if (!existing.length) return null;
-  for (const root of existing) {
-    for (const file of walkJsonl(root)) {
+  let readable = false;
+  let rootError;
+  for (const root of roots) {
+    let files;
+    try {
+      if (!fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) continue;
+      files = walkJsonl(root);
+      readable = true;
+    } catch (err) {
+      rootError = err;
+      continue;
+    }
+    for (const file of files) {
       let head;
       let mtimeMs;
       try {
@@ -105,6 +121,10 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
         location: { path: file },
       });
     }
+  }
+  if (!readable) {
+    if (rootError) throw rootError;
+    return null;
   }
   return rows;
 }
