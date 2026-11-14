@@ -49,6 +49,13 @@ function toMs(value) {
   return n < 1e12 ? Math.round(n * 1000) : Math.round(n);
 }
 
+function timestampMs(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" || /^\d+(\.\d+)?$/.test(String(value))) return toMs(value);
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 // --- JSONL stores (claude, codex) ------------------------------------------
 
 function walkJsonl(root, depth = 6) {
@@ -107,6 +114,14 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
         continue; // vanished or unreadable session file; the rest of the store still counts
       }
       let header = null;
+      let startedAtMs = null;
+      for (const line of head.split("\n")) {
+        try {
+          const record = JSON.parse(line);
+          startedAtMs = timestampMs(record.timestamp ?? record.time ?? record.payload?.timestamp);
+          if (startedAtMs !== null) break;
+        } catch { /* ignore incomplete or foreign lines */ }
+      }
       try {
         header = unwrap(JSON.parse(head.split("\n")[0]));
       } catch {
@@ -117,6 +132,7 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
         id: id || `${harness}:${path.basename(file, ".jsonl")}`,
         cwd: absoluteOrNull(header?.cwd),
         mtimeMs,
+        startedAtMs: startedAtMs ?? mtimeMs,
         firstText: head,
         location: { path: file },
       });
@@ -204,7 +220,12 @@ function sessionRows(db, table, cols, { cwdCol, updated, created }) {
   return db.prepare(`SELECT * FROM ${table}`).all().map((row) => ({
     id: String(row[idCol]),
     cwd: cwdCol ? absoluteOrNull(row[cwdCol]) : null,
-    mtimeMs: toMs(updatedCol ? row[updatedCol] : null) ?? toMs(createdCol ? row[createdCol] : null),
+    mtimeMs: timestampMs(updatedCol ? row[updatedCol] : null) ?? timestampMs(createdCol ? row[createdCol] : null),
+    startedAtMs: timestampMs(createdCol ? row[createdCol] : null) ?? timestampMs(updatedCol ? row[updatedCol] : null),
+    endedAt: timestampMs(row.ended_at) === null ? null : new Date(timestampMs(row.ended_at)).toISOString(),
+    source: row.source ?? null,
+    gitRepoRoot: row.git_repo_root ?? null,
+    parentSessionId: row.parent_session_id ?? null,
   }));
 }
 
@@ -253,7 +274,8 @@ const HERMES = {
     });
     const textCol = firstOf(schema.get("messages"), ["text", "content"]);
     if (textCol && schema.get("messages").has("session_id")) {
-      attachFirstText(rows, db.prepare(`SELECT session_id, ${textCol} AS text FROM messages ORDER BY rowid ASC`).all());
+      const active = schema.get("messages").has("active") ? " WHERE active = 1" : "";
+      attachFirstText(rows, db.prepare(`SELECT session_id, ${textCol} AS text FROM messages${active} ORDER BY rowid ASC`).all());
     }
     return rows;
   },
@@ -262,10 +284,29 @@ const HERMES = {
     const textCol = firstOf(cols, ["text", "content"]);
     if (!textCol || !cols.has("session_id")) return [];
     const roleSelect = cols.has("role") ? "role" : "NULL AS role";
+    const callsSelect = cols.has("tool_calls") ? "tool_calls" : "NULL AS tool_calls";
+    const nameSelect = cols.has("tool_name") ? "tool_name" : "NULL AS tool_name";
+    const active = cols.has("active") ? " AND active = 1" : "";
     return db
-      .prepare(`SELECT ${roleSelect}, ${textCol} AS text FROM messages WHERE session_id = ? ORDER BY rowid ASC`)
+      .prepare(`SELECT ${roleSelect}, ${textCol} AS text, ${callsSelect}, ${nameSelect} FROM messages WHERE session_id = ?${active} ORDER BY rowid ASC`)
       .all(sessionId)
-      .flatMap((row) => recordToEvents({ role: row.role, text: asText(row.text) }));
+      .flatMap((row) => {
+        if (row.role === "session_meta") return [];
+        if (row.role === "tool") return [{ kind: "tool", name: row.tool_name || "tool", result: asText(row.text) }];
+        const events = recordToEvents({ role: row.role, text: asText(row.text) });
+        let calls;
+        try { calls = JSON.parse(asText(row.tool_calls)); } catch { calls = []; }
+        if (!Array.isArray(calls)) calls = calls && typeof calls === "object" ? [calls] : [];
+        for (const call of calls) {
+          const fn = call.function || call;
+          let input = fn.arguments ?? fn.input;
+          if (typeof input === "string") {
+            try { input = JSON.parse(input); } catch { /* retain raw input */ }
+          }
+          events.push({ kind: "tool", name: fn.name || row.tool_name || "tool", input });
+        }
+        return events;
+      });
   },
 };
 
@@ -374,7 +415,8 @@ export async function readTranscriptEvents(transcript) {
  * rooted under `stateDir` count as `self` and are dropped; sessions the
  * cursor already holds at the same revision are skipped.
  */
-export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false } = {}) {
+export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now() } = {}) {
+  if (!Number.isFinite(idleHours) || idleHours < 0) throw new Error("idleHours must be a non-negative number");
   const isolated = Boolean(home);
   const root = isolated ? path.resolve(home) : process.env.HOME || os.homedir();
   const selected = harnesses || SUPPORTED_HARNESSES;
@@ -407,7 +449,10 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
         stats.self += 1;
         continue;
       }
-      const transcript = { harness, id: row.id, cwd: row.cwd, ...row.location, mtimeMs: row.mtimeMs };
+      if (harness === "hermes" && !row.endedAt && (row.mtimeMs === null || now - row.mtimeMs <= idleHours * 3600_000)) continue;
+      const transcript = { harness, id: row.id, cwd: row.cwd ?? null, ...row.location, mtimeMs: row.mtimeMs,
+        startedAtMs: row.startedAtMs ?? row.mtimeMs ?? null, endedAt: row.endedAt ?? null,
+        source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null };
       // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
       const prior = processed[checkpointKey(transcript)];
       if (prior !== undefined && (prior === null || prior === transcript.mtimeMs)) continue;

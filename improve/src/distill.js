@@ -105,7 +105,11 @@ export function distill(events, meta = {}) {
     }
   }
   lines.push(`source: ${meta.path || meta.db || "unknown"}`);
-  return lines.join("\n").slice(0, 24000);
+  const trace = lines.join("\n");
+  if (trace.length <= 24000) return trace;
+  const head = trace.slice(0, 16000);
+  const tail = trace.slice(-7900);
+  return `${head}\n\n[... ${trace.length - head.length - tail.length} chars elided ...]\n\n${tail}`;
 }
 
 /** Best-effort normalization of one raw transcript record into events. */
