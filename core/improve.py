@@ -62,6 +62,8 @@ def _runtime(command: str, flags: List[str], *, tui: bool = False) -> Dict:
     if proc.returncode != 0:
         raise RuntimeError(f"ca-improve {command} failed: {(proc.stderr or '').strip()}")
     proposal = json.loads(proc.stdout)
+    if command == "outcome":
+        return proposal
     journal.record(
         "run_completed",
         {
@@ -123,6 +125,22 @@ def run(
 def synthesize_resume(*, min_gap_evidence: int = 2) -> Dict:
     """Propose again from evidence already on disk, without discovering or analyzing sessions."""
     return _runtime("synthesize", ["--min-gap-evidence", str(min_gap_evidence)])
+
+
+
+def score_outcomes(*, since: str = "all", limit: Optional[int] = None, dry_run: bool = False,
+                   rescore: bool = False, mature_days: float = 3, analyzer: str = "model") -> Dict:
+    """Score mature sessions or write a private preview without changing evidence."""
+    flags = ["--since", since, "--mature-days", str(mature_days), "--analyzer", analyzer]
+    if limit is not None:
+        flags += ["--limit", str(limit)]
+    if dry_run:
+        flags.append("--dry-run")
+    if rescore:
+        flags.append("--rescore")
+    if os.environ.get("CA_IMPROVE_HOME"):
+        flags += ["--home", os.environ["CA_IMPROVE_HOME"]]
+    return _runtime("outcome", flags)
 
 
 def read_proposal() -> Dict:

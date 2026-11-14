@@ -196,3 +196,20 @@ outside `journal/`.
 
 Several runtime modules adapt Backpass (MIT, Kun Chen, commit 0268201). The
 per-file mapping and license text are in `improve/LICENSE.NOTICE`.
+
+### Delayed outcome scoring
+
+After analysis, the runtime scores mature, successful evidence once, using a
+blind outcome prompt and follow-up sessions, commits and optional journal
+matches. The default window is three days after the session ended. Sessions
+without a known end or whose original transcript is unavailable cannot be
+scored. A failed score is logged to `outcome-failures.jsonl` and retried on a
+later run. Citations and verbatim quotes are checked before writing an outcome.
+The analyzer's positive, negative and gaps remain unchanged.
+
+`CA_LLM_MODEL_OUTCOME` overrides `CA_LLM_MODEL` for this tool-free role. Use
+`python -m core improve-outcome --since 70d --dry-run` to write a private JSONL
+preview under `outcome-preview/` without changing evidence. `--limit N`,
+`--mature-days N`, `--rescore`, and `--analyzer mock` are also available.
+Rescoring existing outcomes requires `--rescore`; use it deliberately after a
+rubric change. Preview and cache files contain private session material.

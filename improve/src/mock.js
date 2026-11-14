@@ -63,7 +63,7 @@ function annotateReply({ plans, ledger, evidenceIndex }) {
   };
 }
 
-const REPLIES = { analysis, consolidate: () => ({ merges: [] }), synthesis, annotate: annotateReply };
+const REPLIES = { outcome: () => ({ aim: "Determine the session outcome.", label: "unclear", reason: "The mock does not judge progress.", evidence: [] }), analysis, consolidate: () => ({ merges: [] }), synthesis, annotate: annotateReply };
 
 export async function mockInvoke(role, _prompt, context) {
   return REPLIES[role](context);

@@ -330,6 +330,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Only scan this harness (repeatable). A named harness whose store is missing fails the run.",
     )
 
+    improve_outcome_parser = subparsers.add_parser("improve-outcome", help="Score mature session outcomes, or preview a backfill.")
+    improve_outcome_parser.add_argument("--since", default="all")
+    improve_outcome_parser.add_argument("--limit", type=int)
+    improve_outcome_parser.add_argument("--mature-days", type=float, default=3)
+    improve_outcome_parser.add_argument("--dry-run", action="store_true")
+    improve_outcome_parser.add_argument("--rescore", action="store_true")
+    improve_outcome_parser.add_argument("--analyzer", choices=("model", "mock"), default="model")
+
     improve_apply_parser = subparsers.add_parser(
         "improve-apply",
         help="Review the current proposal: write accepted records and rebuild the living SOUL.",
@@ -420,6 +428,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "improve-run":
         return _improve_run(args)
+
+    if args.command == "improve-outcome":
+        from core import improve
+
+        print(json.dumps(improve.score_outcomes(since=args.since, limit=args.limit, mature_days=args.mature_days,
+                                                dry_run=args.dry_run, rescore=args.rescore, analyzer=args.analyzer)))
+        return 0
 
     if args.command == "improve-apply":
         return _improve_apply(args)

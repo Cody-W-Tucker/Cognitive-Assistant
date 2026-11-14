@@ -51,7 +51,7 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   const cwd = session.cwd;
 
   if ((typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd))) {
-    const { transcripts } = discoverTranscripts({ home, stateDir, since: "all" });
+    const { transcripts } = discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true });
     for (const candidate of transcripts) {
       if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
       if (candidate.harness === "hermes" && (!SOURCES.has(candidate.source) || candidate.parentSessionId)) continue;

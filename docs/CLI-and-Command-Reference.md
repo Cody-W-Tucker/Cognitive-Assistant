@@ -91,3 +91,12 @@ Decision syntax: each token is `<edit-id>=accepted` or
 `already-covered`, `not-evidenced`, `unsafe`, `other`. `--decisions` can be
 repeated and must be paired with `--proposal <id>`; every edit needs a
 decision.
+
+### improve-outcome
+
+`python -m core improve-outcome [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--analyzer model|mock]`
+
+Scores mature analyzed sessions once. Dry-run writes a private JSONL preview
+and does not alter evidence. Rescore explicitly replaces existing outcomes on
+successful validation; failed attempts leave the prior outcome intact. The
+outcome model uses `CA_LLM_MODEL_OUTCOME`, falling back to `CA_LLM_MODEL`.

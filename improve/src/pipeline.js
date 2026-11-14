@@ -12,6 +12,7 @@ import { foldEvidence } from "./fold.js";
 import { discoverTranscripts, readTranscriptEvents, SUPPORTED_HARNESSES } from "./harnesses.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
+import { runOutcome } from "./outcome.js";
 import { loadPrompt } from "./prompts.js";
 import { propose } from "./propose.js";
 import { readSoulSnapshot } from "./soul.js";
@@ -187,6 +188,7 @@ export async function runPipeline({
   });
   emit("analyze:done", { ...tally });
 
+  await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {

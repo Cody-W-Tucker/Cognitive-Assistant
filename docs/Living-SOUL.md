@@ -116,3 +116,14 @@ services.cognitive-assistant = {
   };
 };
 ```
+
+### Outcome evidence
+
+Outcome scoring waits three days by default and records advanced, stalled,
+regressed, or unclear using a blind rubric. Unclear means the available
+follow-up does not decide; an unscored session has not yet supplied a verdict.
+For outcome-based verdicts, stalled and regressed are misses; advanced is not,
+and unclear and unscored sessions are excluded. Outcome rubric versions must
+match before comparing generations. The backtest and measured volume setting
+in `plans/feature-2.md` still require human review; do not infer a calibrated
+sample size from the default.

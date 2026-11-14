@@ -421,7 +421,7 @@ export async function readTranscriptEvents(transcript) {
  * rooted under `stateDir` count as `self` and are dropped; sessions the
  * cursor already holds at the same revision are skipped.
  */
-export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now(), includeCheckpointed = null } = {}) {
+export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now(), includeCheckpointed = null, ignoreCheckpoint = false } = {}) {
   if (!Number.isFinite(idleHours) || idleHours < 0) throw new Error("idleHours must be a non-negative number");
   const isolated = Boolean(home);
   const root = isolated ? path.resolve(home) : process.env.HOME || os.homedir();
@@ -431,7 +431,7 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
     if (!ADAPTERS[harness]) throw new Error(`unknown harness "${harness}" (supported: ${SUPPORTED_HARNESSES.join(", ")})`);
   }
   const cutoff = cutoffMs(since);
-  const processed = stateDir ? readSessionCheckpoint(stateDir) : {};
+  const processed = stateDir && !ignoreCheckpoint ? readSessionCheckpoint(stateDir) : {};
   const transcripts = [];
   const perHarness = {};
   for (const harness of selected) {
