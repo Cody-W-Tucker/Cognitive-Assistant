@@ -14,6 +14,7 @@ from core.paths import improve_dir, soul_dir
 from tests.fixtures import CAHomeTestCase
 
 T0 = datetime(2026, 11, 1, tzinfo=timezone.utc)
+FIVE = outcome.OutcomePolicy(min_sessions=5)
 
 
 def _iso(when: datetime) -> str:
@@ -83,11 +84,11 @@ class AutoCycleTests(CAHomeTestCase):
 
     def _adopt_after_baseline(self, proposal: dict, misses: int) -> dict:
         """First run builds a baseline; adoption happens once it has sessions."""
-        first = improve.auto_cycle(proposal=proposal, min_sessions=5)
+        first = improve.auto_cycle(proposal=proposal, policy=FIVE)
         self.assertEqual(first["action"], "baseline")
         self._set_activations([(T0, 1)])
         _fill("base", T0, total=10, misses=misses)
-        adopted = improve.auto_cycle(proposal=proposal, min_sessions=5)
+        adopted = improve.auto_cycle(proposal=proposal, policy=FIVE)
         self.assertEqual(adopted["action"], "adopt")
         return adopted
 
@@ -104,21 +105,27 @@ class AutoCycleTests(CAHomeTestCase):
         # Not enough sessions under the new generation yet: hold, adopt nothing.
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1), (start, current["generation"])])
-        waiting = improve.auto_cycle(proposal=proposal, min_sessions=5)
+        waiting = improve.auto_cycle(proposal=proposal, policy=FIVE)
         self.assertEqual(waiting["action"], "wait")
 
         # Sessions under the new generation go clearly worse: revert it.
         _fill("after", start, total=10, misses=8)
-        reverted = improve.auto_cycle(proposal=proposal, min_sessions=5)
+        reverted = improve.auto_cycle(proposal=proposal, policy=FIVE)
         self.assertEqual(reverted["verdict"]["verdict"], "revert")
         self.assertEqual(reverted["action"], "revert")
         self.assertNotIn(adopted[0], living_soul.current_generation()["records"])
         self.assertIn(adopted[0], experience.reverted_ids())
+        # The reverted text is generation 1's, so generation 1 is reactivated
+        # and its sessions remain the baseline for the next change.
+        self.assertEqual(reverted["generation"], 1)
+        self.assertEqual(living_soul.current_generation()["generation"], 1)
+        self.assertEqual(len(living_soul.list_generations()), 2)
+        self.assertEqual(living_soul.activations()[-1]["generation"], 1)
 
         # The next run must not bring the withdrawn change straight back.
         again = improve.run(home=self.user_home, analyzer="mock")
         self.assertNotIn(adopted[0], [edit["record"]["id"] for edit in again["edits"]])
-        self.assertNotEqual(improve.auto_cycle(proposal=again, min_sessions=5).get("records"), adopted)
+        self.assertNotEqual(improve.auto_cycle(proposal=again, policy=FIVE).get("records"), adopted)
 
     def test_change_that_does_not_hurt_is_kept(self) -> None:
         proposal = self.run_mock_proposal()
@@ -127,16 +134,37 @@ class AutoCycleTests(CAHomeTestCase):
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1), (start, current["generation"])])
         _fill("after", start, total=10, misses=3)
-        verdict = outcome.evaluate(min_sessions=5)
+        verdict = outcome.evaluate(FIVE)
         self.assertEqual(verdict["verdict"], "keep")
         # Settled verdicts are final and recorded once.
-        again = outcome.evaluate(min_sessions=5)
+        again = outcome.evaluate(FIVE)
         self.assertTrue(again.get("settled"))
         self.assertEqual(len(outcome.verdicts()), 2)
 
+    def test_wrapper_change_does_not_end_the_test_of_the_change_before_it(self) -> None:
+        proposal = self.run_mock_proposal()
+        adopted = self._adopt_after_baseline(proposal, misses=1)["records"]
+        tested = living_soul.current_generation()["generation"]
+        prefix = self.ca_home / "prefix.md"
+        prefix.write_text("Be brief.", encoding="utf-8")
+        living_soul.write_compose_config(str(prefix), None)
+        wrapped = living_soul.compile_soul(reason="activation")
+        self.assertEqual((wrapped["added"], wrapped["parent"]), ([], tested))
+
+        start = T0 + timedelta(days=7)
+        self._set_activations([(T0, 1), (start, tested), (start + timedelta(days=1), wrapped["generation"])])
+        _fill("under-test", start, total=3, misses=3)
+        self.assertEqual(outcome.evaluate(FIVE)["verdict"], "pending")
+        _fill("wrapped", start + timedelta(days=1), total=7, misses=5)
+        verdict = outcome.evaluate(FIVE)
+        self.assertEqual((verdict["verdict"], verdict["generation"], verdict["added"]), ("revert", tested, adopted))
+        self.assertEqual(verdict["current"], {"sessions": 10, "misses": 8})
+        # The wrapper-only generation is then kept untested, as before.
+        self.assertEqual(outcome.evaluate(FIVE)["reason"], "untested: no records added")
+
     def test_other_harness_sessions_do_not_count(self) -> None:
         proposal = self.run_mock_proposal()
-        improve.auto_cycle(proposal=proposal, min_sessions=5)
+        improve.auto_cycle(proposal=proposal, policy=FIVE)
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1)])
         before = outcome.session_outcomes()
@@ -180,7 +208,7 @@ class AutoCycleTests(CAHomeTestCase):
         self._set_activations([(T0, 1), (start, current["generation"])])
         for i in range(10):
             _write_evidence(f"after{i}", start + timedelta(minutes=i), True, scored=False)
-        result = outcome.evaluate(min_sessions=5, record=False)
+        result = outcome.evaluate(FIVE, record=False)
         self.assertEqual(result["verdict"], "pending")
         self.assertEqual(result["current"]["sessions"], 0)
 
@@ -191,7 +219,7 @@ class AutoCycleTests(CAHomeTestCase):
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1), (start, current["generation"])])
         _fill("after", start, total=10, misses=1)
-        result = outcome.evaluate(min_sessions=5)
+        result = outcome.evaluate(FIVE)
         self.assertEqual(result["verdict"], "keep")
         self.assertTrue(result["improved"])
         self.assertTrue(outcome.verdicts()[current["generation"]]["improved"])
@@ -207,12 +235,12 @@ class AutoCycleTests(CAHomeTestCase):
             _write_evidence(f"base{i}", T0 + timedelta(minutes=i + 1), False, rubric=stamp)
             _write_evidence(f"after{i}", start + timedelta(minutes=i + 1), False,
                             rubric={**stamp, "contextSha": "c2"})
-        self.assertEqual(outcome.evaluate(min_sessions=5, record=False)["verdict"], "keep")
+        self.assertEqual(outcome.evaluate(FIVE, record=False)["verdict"], "keep")
         for rubric, reason in [({**stamp, "promptSha": "p2"}, "promptSha"),
                                ({**stamp, "model": "m2"}, "model"),
                                ({**stamp, "matureDays": 3}, "matureDays"), (None, "promptSha")]:
             _write_evidence("after0", start + timedelta(minutes=1), False, rubric=rubric)
-            verdict = outcome.evaluate(min_sessions=5, record=False)
+            verdict = outcome.evaluate(FIVE, record=False)
             self.assertEqual(verdict["verdict"], "pending")
             self.assertIn(reason, verdict["reason"])
         self.assertNotIn(current["generation"], outcome.verdicts())

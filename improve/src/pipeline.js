@@ -12,7 +12,7 @@ import { foldEvidence } from "./fold.js";
 import { discoverTranscripts, readTranscriptEvents, transcriptRevision, SUPPORTED_HARNESSES } from "./harnesses.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
-import { runOutcome } from "./outcome.js";
+import { outcomeSnapshot, runOutcome, sessionMeta } from "./outcome.js";
 import { loadPrompt } from "./prompts.js";
 import { propose } from "./propose.js";
 import { readSoulSnapshot } from "./soul.js";
@@ -47,11 +47,8 @@ async function collectTrace(transcript) {
       toolCalls: count((e) => e?.kind === "tool"),
     },
     distilled: distill(events, transcript),
-    outcomeSnapshot: revision && (transcript.endedAt || transcript.activityKnown) && JSON.stringify(revision) === JSON.stringify(transcript.discoveryRevision) && JSON.stringify(revision) === JSON.stringify(transcriptRevision(transcript)) ? {
-      revision, location: { harness: transcript.harness, id: transcript.id, path: transcript.path, db: transcript.db }, trace: distill(events, transcript),
-      texts: events.filter((e) => e.kind === "message" && ["user", "assistant"].includes(e.role) && typeof e.text === "string").flatMap((e) => { const text = e.text.split("--- Attached Context ---", 1)[0].trim(); return [text.slice(0, 4800), text.slice(-1000)]; }),
-      firstUserMessage: (events.find((e) => e.kind === "message" && e.role === "user" && e.text)?.text || "").split("--- Attached Context ---", 1)[0].slice(0, 500),
-    } : null,
+    outcomeSnapshot: revision && (transcript.endedAt || transcript.activityKnown) && JSON.stringify(revision) === JSON.stringify(transcript.discoveryRevision) && JSON.stringify(revision) === JSON.stringify(transcriptRevision(transcript))
+      ? outcomeSnapshot(transcript, events, revision) : null,
   };
 }
 
@@ -92,10 +89,7 @@ export function sessionEligible(transcript, now, idleHours) {
 }
 
 export function stampEvidence(record, session, rubric) {
-  const startedAt = session?.startedAtMs ?? null;
-  const explicitEnd = typeof session?.endedAt === "number" ? session.endedAt : Date.parse(session?.endedAt);
-  const ended = Math.max(explicitEnd || 0, session?.activityKnown ? session?.mtimeMs || 0 : 0);
-  return { ...record, sessionAt: startedAt ?? (session?.harness === "hermes" ? null : session?.mtimeMs) ?? null, startedAt, endedAt: ended ? new Date(ended).toISOString() : null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
+  return { ...record, ...sessionMeta(session), rubric };
 }
 
 /**
@@ -197,8 +191,8 @@ export async function runPipeline({
   });
   emit("analyze:done", { ...tally });
 
-  const outcomes = await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
-  if (outcomes.failed) throw new Error(`outcome scoring failed for ${outcomes.failed} session(s); see private outcome-failures.jsonl`);
+  // Sessions that cannot be scored yet stay without an outcome and never stop the run.
+  await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {

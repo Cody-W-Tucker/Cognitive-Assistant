@@ -2,11 +2,12 @@ import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
-import { discoverTranscripts, readTranscriptEvents, transcriptRevision } from "./harnesses.js";
+import { discoverTranscripts, readTranscriptEvents, sessionEndMs, transcriptRevision } from "./harnesses.js";
 
 const execFileAsync = promisify(execFile);
 const DAY_MS = 86400_000;
 const MESSAGE_LIMIT = 2000;
+const MAX_SESSIONS = 8;
 const SOURCES = new Set(["desktop", "tui", "cli"]);
 
 // Do not include attached context, tools, or unbounded transcript text.
@@ -44,11 +45,18 @@ function noteDate(row) {
 
 /**
  * Collect bounded, citable evidence. `session` is an evidence record with
- * harness, transcriptId, endedAt, cwd and gitRepoRoot. firstUserMessage must
- * be taken from that session's normalized events, not a full transcript.
- * Returns arrays (empty means none); source failures are intentionally soft.
+ * harness, transcriptId and endedAt; cwd and gitRepoRoot are optional.
+ * firstUserMessage must be taken from that session's normalized events, not a
+ * full transcript. Returns arrays (empty means none); source failures are
+ * intentionally soft.
+ *
+ * Later sessions: every Hermes session inside the window is a candidate, with
+ * no directory requirement (most Hermes sessions have none); the judge decides
+ * whether one continues the same aim. Other harnesses are matched by repo or
+ * directory. The earliest MAX_SESSIONS are kept. `candidates` (an array, or a
+ * function returning one) lets a caller discover once for many sessions.
  */
-export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null } = {}) {
+export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null, candidates = null } = {}) {
   const start = time(session?.endedAt);
   if (!Number.isFinite(start)) throw new Error("followup: session endedAt is required");
   if (typeof matureDays !== "number" || !Number.isFinite(matureDays) || matureDays < 0) throw new Error("followup: matureDays must be non-negative");
@@ -58,28 +66,35 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   const root = repoRoot(session);
   const cwd = session.cwd;
 
-  if ((typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd))) {
-    const { transcripts } = discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: originalLocation ? { ...originalLocation, id: session.transcriptId } : null });
-    for (const candidate of transcripts) {
-      if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
-      if (candidate.harness === "hermes" && (!SOURCES.has(candidate.source) || candidate.parentSessionId)) continue;
-      if (root ? !samePath(root, repoRoot(candidate)) : !samePath(cwd, candidate.cwd)) continue;
-      const began = time(candidate.startedAtMs);
-      const ended = time(candidate.endedAt ?? candidate.mtimeMs);
-      // mtime also guards against a stale endedAt followed by later activity.
-      const modified = time(candidate.mtimeMs);
-      if (!Number.isFinite(began) || !Number.isFinite(ended) || !Number.isFinite(modified) || began < start || began > end || ended < began || ended > end || modified < began || modified > end) continue;
-      try {
-        const revision = transcriptRevision(candidate);
-        if (!revision || JSON.stringify(revision) !== JSON.stringify(candidate.discoveryRevision)) continue;
-        const events = await readTranscriptEvents(candidate);
-        if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(candidate))) continue;
-        const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));
-        const assistants = events.filter((e) => e.kind === "message" && e.role === "assistant" && message(e.text));
-        if (!users.length && !assistants.length) continue;
-        result.sessions.push({ ref: `session:${candidate.id}`, harness: candidate.harness, date: new Date(began).toISOString(), firstUser: message(users[0]?.text), lastAssistant: message(assistants.at(-1)?.text) });
-      } catch { /* unreadable session */ }
-    }
+  const located = (typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd));
+  const pool = typeof candidates === "function" ? candidates() : candidates
+    ?? discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: originalLocation ? { ...originalLocation, id: session.transcriptId } : null }).transcripts;
+  const later = [];
+  for (const candidate of pool) {
+    if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
+    if (candidate.harness === "hermes") {
+      if (!SOURCES.has(candidate.source) || candidate.parentSessionId) continue;
+    } else if (!located || (root ? !samePath(root, repoRoot(candidate)) : !samePath(cwd, candidate.cwd))) continue;
+    const began = time(candidate.startedAtMs);
+    const ended = sessionEndMs(candidate) ?? NaN;
+    // mtime also guards against a stale endedAt followed by later activity.
+    const modified = time(candidate.mtimeMs);
+    if (!Number.isFinite(began) || !Number.isFinite(ended) || !Number.isFinite(modified) || began < start || began > end || ended < began || ended > end || modified < began || modified > end) continue;
+    later.push({ candidate, began });
+  }
+  later.sort((a, b) => a.began - b.began);
+  for (const { candidate, began } of later) {
+    if (result.sessions.length >= MAX_SESSIONS) break;
+    try {
+      const revision = transcriptRevision(candidate);
+      if (!revision || JSON.stringify(revision) !== JSON.stringify(candidate.discoveryRevision)) continue;
+      const events = await readTranscriptEvents(candidate);
+      if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(candidate))) continue;
+      const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));
+      const assistants = events.filter((e) => e.kind === "message" && e.role === "assistant" && message(e.text));
+      if (!users.length && !assistants.length) continue;
+      result.sessions.push({ ref: `session:${candidate.id}`, harness: candidate.harness, date: new Date(began).toISOString(), firstUser: message(users[0]?.text), lastAssistant: message(assistants.at(-1)?.text) });
+    } catch { /* unreadable session */ }
   }
 
   if (typeof root === "string" && path.isAbsolute(root)) {
@@ -98,7 +113,7 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   const query = message(firstUserMessage).replace(/\s+/g, " ").slice(0, 500);
   if (query) {
     try {
-      const { stdout } = await execFileAsync("qmd", ["search", query, "-c", "Journal", "--format", "json", "-n", "50"], { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const { stdout } = await execFileAsync("qmd", ["search", "-c", "Journal", "--format", "json", "-n", "50", "--", query], { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
       const rows = JSON.parse(stdout);
       if (Array.isArray(rows)) for (const row of rows) {
         const date = noteDate(row);

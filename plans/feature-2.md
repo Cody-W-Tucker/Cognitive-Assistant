@@ -4,6 +4,22 @@ Goal reference: `IDEA.md`. This replaces the conformity-based miss with a
 delayed, blind outcome signal: did the session move the person, judged from
 evidence outside the transcript. Requires feature 1 items 1-7.
 
+Status (2026-11-14): implemented, backtest not yet run. Differences from the
+text below, decided while building:
+
+- **Later sessions do not need a directory.** Most Hermes sessions have no
+  `cwd` by design. Every later Hermes session in the window is a candidate
+  (earliest eight); the judge decides which continue the same aim.
+- **The end of a session is its last activity**, not Hermes's `ended_at`,
+  which is stamped when an idle session is reaped.
+- **No failure states.** A session that cannot be scored is left without an
+  outcome and tried again later. There are no reason codes and no failure log.
+- **The trace is a snapshot from analysis time**, valid while the session's
+  messages are unchanged. A dry run reads unanalyzed sessions directly, which
+  is what makes the backtest possible on a fresh CA home.
+- **Journal evidence is keyword search and will rarely match.** Linking
+  sessions and notes by topic similarity is a later plan addition.
+
 ## Design
 
 A new `outcome` stage, separate from `analyze`.

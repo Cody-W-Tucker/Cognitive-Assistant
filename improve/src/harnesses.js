@@ -239,23 +239,19 @@ function sessionRows(db, table, cols, { cwdCol, updated, created }) {
   }));
 }
 
-function attachFirstText(rows, firstRows) {
-  const first = new Map();
-  for (const { session_id: sid, text } of firstRows) if (!first.has(String(sid))) first.set(String(sid), asText(text));
-  for (const row of rows) row.firstText = first.get(row.id) || "";
-}
+const firstRowText = (row) => (row ? asText(row.text) : "");
 
 const OPENCODE = {
   dbPath: (root) => path.join(root, ".local", "share", "opencode", "opencode.db"),
-  list(db, schema, excludedId) {
+  list(db, schema) {
     const table = schema.has("session_v2") ? "session_v2" : schema.has("session") ? "session" : null;
     if (!table) return [];
-    const rows = sessionRows(db, table, schema.get(table), { cwdCol: "directory", updated: ["time_updated"], created: ["time_created"] });
+    return sessionRows(db, table, schema.get(table), { cwdCol: "directory", updated: ["time_updated"], created: ["time_created"] });
+  },
+  firstText(db, schema, sessionId) {
     const msg = schema.get("session_message");
-    if (msg?.has("data") && msg.has("session_id")) {
-      attachFirstText(rows, db.prepare("SELECT session_id, data AS text FROM session_message WHERE session_id != ? ORDER BY seq ASC").all(excludedId ?? ""));
-    }
-    return rows;
+    if (!msg?.has("data") || !msg.has("session_id")) return "";
+    return firstRowText(db.prepare("SELECT data AS text FROM session_message WHERE session_id = ? ORDER BY seq ASC LIMIT 1").get(sessionId));
   },
   read(db, schema, sessionId) {
     if (!schema.has("session_message")) return [];
@@ -274,20 +270,21 @@ const OPENCODE = {
 
 const HERMES = {
   dbPath: (root, isolated) => path.join(isolated ? path.join(root, ".hermes") : process.env.HERMES_HOME || path.join(root, ".hermes"), "state.db"),
-  list(db, schema, excludedId) {
+  list(db, schema) {
     const cols = schema.get("sessions");
     if (!cols) return [];
-    const rows = sessionRows(db, "sessions", cols, {
+    return sessionRows(db, "sessions", cols, {
       cwdCol: cols.has("cwd") ? "cwd" : null,
       updated: ["last_activity_at", "updated_at", "time_updated", "updated", "modified_at"],
       created: ["started_at", "created_at", "time_created", "created", "timestamp", "mtime"],
     });
-    const textCol = firstOf(schema.get("messages"), ["text", "content"]);
-    if (textCol && schema.get("messages").has("session_id")) {
-      const active = schema.get("messages").has("active") ? " AND active = 1" : "";
-      attachFirstText(rows, db.prepare(`SELECT session_id, ${textCol} AS text FROM messages WHERE session_id != ?${active} ORDER BY rowid ASC`).all(excludedId ?? ""));
-    }
-    return rows;
+  },
+  firstText(db, schema, sessionId) {
+    const cols = schema.get("messages");
+    const textCol = firstOf(cols, ["text", "content"]);
+    if (!textCol || !cols.has("session_id")) return "";
+    const active = cols.has("active") ? " AND active = 1" : "";
+    return firstRowText(db.prepare(`SELECT ${textCol} AS text FROM messages WHERE session_id = ?${active} ORDER BY rowid ASC LIMIT 1`).get(sessionId));
   },
   read(db, schema, sessionId) {
     const cols = schema.get("messages");
@@ -320,14 +317,20 @@ const HERMES = {
   },
 };
 
-function listSqliteSessions(store, root, isolated, excludedId) {
+/**
+ * Session rows are cheap; a session's first text and revision each read its
+ * messages. `keep` drops rows before any of that, and `detail` says which of
+ * the kept rows still need it, so a run pays for new sessions, not history.
+ */
+function listSqliteSessions(store, root, isolated, { keep = () => true, detail = () => true } = {}) {
   const dbPath = store.dbPath(root, isolated);
   if (!fs.statSync(dbPath, { throwIfNoEntry: false })?.isFile()) return null;
   return withDb(dbPath, (db, schema) => {
     db.exec("BEGIN");
     try {
-      return store.list(db, schema, excludedId).map((row) => ({ ...row, location: { db: dbPath },
-        sqliteRevision: sqliteRevision(db, schema, store === HERMES ? "hermes" : "opencode", row.id) }));
+      return store.list(db, schema).filter(keep).map((row) => ({ ...row, location: { db: dbPath },
+        ...(detail(row) ? { firstText: store.firstText(db, schema, row.id),
+          sqliteRevision: sqliteRevision(db, schema, store === HERMES ? "hermes" : "opencode", row.id) } : {}) }));
     } finally { db.exec("ROLLBACK"); }
   });
 }
@@ -402,7 +405,7 @@ const ADAPTERS = {
     read: (transcript) => readJsonlEvents(transcript, codexEvents),
   },
   opencode: {
-    list: (root, isolated, _cutoff, excluded) => listSqliteSessions(OPENCODE, root, isolated, excluded?.id),
+    list: (root, isolated, _cutoff, _excluded, filters) => listSqliteSessions(OPENCODE, root, isolated, filters),
     // OpenCode's current legacy SQLite store can retain only session headers;
     // its export command is then the authoritative read path.
     read: async (transcript) => {
@@ -411,7 +414,7 @@ const ADAPTERS = {
     },
   },
   hermes: {
-    list: (root, isolated, _cutoff, excluded) => listSqliteSessions(HERMES, root, isolated, excluded?.id),
+    list: (root, isolated, _cutoff, _excluded, filters) => listSqliteSessions(HERMES, root, isolated, filters),
     read: (transcript) => withDb(transcript.db, (db, schema) => HERMES.read(db, schema, transcript.id)),
   },
 };
@@ -421,20 +424,31 @@ export async function readTranscriptEvents(transcript) {
   return await ADAPTERS[transcript.harness].read(transcript);
 }
 
-// Hash the complete session row and the transcript rows in one SQLite read
-// transaction. Unrelated sessions and WAL checkpoints must not invalidate it.
+// Hash one session's transcript rows in one SQLite read transaction. The
+// session row is left out: Hermes rewrites it (ended_at, end_reason) when it
+// reaps an idle session, which does not change what was said. Unrelated
+// sessions and WAL checkpoints must not invalidate it either.
 function sqliteRevision(db, schema, harness, id) {
   const table = harness === "hermes" ? "sessions" : schema.has("session_v2") ? "session_v2" : "session";
   const messages = harness === "hermes" ? "messages" : "session_message";
   if (!id || !schema.get(table)?.has("id") || !schema.get(messages)?.has("session_id")) return null;
   if (harness === "opencode" && (!schema.get(messages).has("data") || !schema.get(messages).has("seq"))) return null;
-  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
-  if (!row) return null;
+  if (!db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id)) return null;
   const entries = db.prepare(`SELECT * FROM ${messages} WHERE session_id = ? ORDER BY rowid`).all(id);
   // An empty OpenCode store falls back to export, whose backing data is not verified.
   if (harness === "opencode" && !entries.length) return null;
   const encode = (_key, value) => typeof value === "bigint" ? String(value) : value instanceof Uint8Array ? Buffer.from(value).toString("base64") : value;
-  return { version: 1, harness, id, sha256: createHash("sha256").update(JSON.stringify([row, entries], encode)).digest("hex") };
+  return { version: 2, harness, id, sha256: createHash("sha256").update(JSON.stringify(entries, encode)).digest("hex") };
+}
+
+/**
+ * When a session ended, in epoch ms. Last activity wins when the store
+ * records it: Hermes stamps ended_at when it reaps an idle session, which can
+ * be weeks after the person stopped.
+ */
+export function sessionEndMs(session) {
+  const explicit = typeof session?.endedAt === "number" ? session.endedAt : Date.parse(session?.endedAt);
+  return (session?.activityKnown && session?.mtimeMs) || explicit || null;
 }
 
 export function transcriptRevision(transcript) {
@@ -447,17 +461,6 @@ export function transcriptRevision(transcript) {
       finally { db.exec("ROLLBACK"); }
     });
     return [file, ...(transcript.db ? [file + "-wal", file + "-shm"] : [])].map((p) => {
-      const s = fs.statSync(p, { throwIfNoEntry: false });
-      return s ? [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs] : null;
-    });
-  } catch { return null; }
-}
-
-// Compatibility proof for snapshots produced before session-scoped revisions.
-export function legacySqliteRevision(transcript) {
-  if (!transcript.db || transcript.harness === "opencode") return null;
-  try {
-    return [transcript.db, transcript.db + "-wal", transcript.db + "-shm"].map((p) => {
       const s = fs.statSync(p, { throwIfNoEntry: false });
       return s ? [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs] : null;
     });
@@ -493,8 +496,17 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
     perHarness[harness] = stats;
     let rows;
     const dbPath = harness === "hermes" ? HERMES.dbPath(root, isolated) : harness === "opencode" ? OPENCODE.dbPath(root, isolated) : null;
+    const excluded = excludeTranscript?.harness === harness ? excludeTranscript : null;
+    const checkpointed = (row) => {
+      const prior = processed[checkpointKey({ harness, id: row.id })];
+      // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
+      return prior !== undefined && (prior === null || prior === row.mtimeMs) && !includeCheckpointed?.({ harness, id: row.id });
+    };
     try {
-      rows = ADAPTERS[harness].list(root, isolated, cutoff, excludeTranscript?.harness === harness ? excludeTranscript : null);
+      rows = ADAPTERS[harness].list(root, isolated, cutoff, excluded, {
+        keep: (row) => row.id !== excluded?.id && !(cutoff && row.mtimeMs !== null && row.mtimeMs < cutoff),
+        detail: (row) => !checkpointed(row),
+      });
     } catch (err) {
       stats.error = `unreadable store: ${err.message}`;
       continue;
@@ -515,11 +527,9 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
       const transcript = { harness, id: row.id, cwd: row.cwd ?? null, ...row.location, mtimeMs: row.mtimeMs,
         startedAtMs: row.startedAtMs ?? (harness === "hermes" ? null : row.mtimeMs) ?? null, endedAt: row.endedAt ?? null,
         source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null, activityKnown: row.activityKnown === true };
+      if (checkpointed(row)) continue;
       const revision = transcriptRevision(transcript);
       transcript.discoveryRevision = revision && (dbPath ? JSON.stringify(row.sqliteRevision) === JSON.stringify(revision) : Math.round(revision[0]?.[3]) === row.mtimeMs) ? revision : null;
-      // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
-      const prior = processed[checkpointKey(transcript)];
-      if (prior !== undefined && (prior === null || prior === transcript.mtimeMs) && !includeCheckpointed?.(transcript)) continue;
       transcripts.push(transcript);
       stats.matched += 1;
     }

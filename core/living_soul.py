@@ -12,7 +12,9 @@ owns everything that changes afterwards:
 
 A generation is a pure function of (wrapper, bootstrap SOUL, active records).
 It never reads the previous generation, so a change cannot compound on its own
-output, and rollback is repointing ``current.md``. Records a bootstrap already
+output, and rollback is repointing ``current.md``. A generation is its text:
+compiling text that an earlier generation already holds reactivates that
+generation, so the sessions it already ran still count for it. Records a bootstrap already
 absorbed (listed in ``absorbed.json`` beside the bootstrap SOUL) are left out,
 so a rebootstrap that folded them into the SOUL does not count them twice.
 """
@@ -156,7 +158,7 @@ def current_generation() -> Optional[Dict]:
 
 
 def compile_soul(*, reason: str = "compile") -> Dict:
-    """Build the living SOUL from its inputs; new generation only when the output changes."""
+    """Build the living SOUL from its inputs; new generation only for text never compiled before."""
     bootstrap = paths.BOOTSTRAP_SOUL_PATH
     bootstrap_text = bootstrap.read_text(encoding="utf-8")
     if not bootstrap_text.strip():
@@ -171,10 +173,25 @@ def compile_soul(*, reason: str = "compile") -> Dict:
     )
     sha = _sha256(text)
     current = current_generation()
-    if current and current.get("sha256") == sha:
-        _point_current(generations_dir() / f"{current['generation']:04d}.md")
-        return {**current, "changed": False}
-    number = max((g["generation"] for g in list_generations()), default=0) + 1
+    existing = list_generations()
+    # The current generation first, then the most recent with the same text.
+    same = next((g for g in [current, *reversed(existing)] if g and g.get("sha256") == sha), None)
+    if same:
+        changed = not current or current["generation"] != same["generation"]
+        _point_current(generations_dir() / f"{same['generation']:04d}.md")
+        if changed:
+            journal.record(
+                "soul_compiled",
+                {
+                    "generation": same["generation"],
+                    "output_ref": sha,
+                    "bootstrap_ref": same["bootstrapSha256"],
+                    "record_ids": same["records"],
+                    "reason": reason[:80],
+                },
+            )
+        return {**same, "changed": changed}
+    number = max((g["generation"] for g in existing), default=0) + 1
     record_ids = [record["id"] for record in records]
     previous_ids = (current or {}).get("records", [])
     bootstrap_sha = _sha256(bootstrap_text)

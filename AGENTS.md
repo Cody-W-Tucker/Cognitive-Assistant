@@ -56,6 +56,7 @@ python -m core update
 
 # Improvement loop and living SOUL (state under CA home)
 python -m core improve-run [--headless [--auto]]
+python -m core improve-outcome [--since 70d --dry-run]   # score outcomes; dry run is the backtest
 python -m core improve-apply [--proposal <id> --decisions "e1=accepted e2=rejected:too-narrow"]
 python -m core improve-synthesize
 python -m core journal-compact

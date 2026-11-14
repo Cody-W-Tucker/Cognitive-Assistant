@@ -19,7 +19,7 @@ shell.
 **`homeManagerModules.cognitive-assistant`** (`services.cognitive-assistant`)
 runs the living SOUL as the same user as Hermes. On activation it runs
 `ca soul compile` with the configured `soul.prefix` / `soul.suffix` and
-`ca soul link <hermesHome>`; with `improve.enable` (default) it adds a weekly
+`ca soul link <hermesHome>`; with `improve.enable` (default) it adds a daily
 `ca-improve` user service/timer that runs `ca improve-run --headless`, plus
 `--auto --min-sessions <n>` when `improve.auto` (default) and one `--harness`
 per entry of `improve.harnesses` (default `[ "hermes" ]`). The model endpoint

@@ -72,7 +72,17 @@ have shifted; confirm each before editing.
      (`improve/src/state.js`, around 54-56). Read old-style names as a
      fallback so existing state is not orphaned.
 
-### Can defer until after the backtest
+### Throughput and efficiency
+
+Status (2026-11-14): items 1-10 are implemented. Two were done differently
+from the text below, on purpose:
+
+- Item 9 has no separate `ca soul verdict` command or second timer. The
+  analysis run is incremental, so the one timer now defaults to daily, which
+  gives a daily verdict check without a second entry point.
+- Item 10 filters the session list in code before any messages are read,
+  instead of in SQL: timestamp units differ per store, and the session table
+  is small. The cost that mattered was reading every session's messages.
 
 8. **Content-hash generations.** `core/living_soul.py` (around 173-193):
    when the compiled text matches any earlier generation's sha256, reuse that

@@ -118,7 +118,13 @@ def _improve_run(args: argparse.Namespace) -> int:
     if not args.auto:
         _print_proposal_summary(proposal, file=sys.stderr)
         return 0
-    cycle = improve.auto_cycle(proposal=proposal, min_sessions=args.min_sessions)
+    from core.outcome import OutcomePolicy
+
+    chosen = {"min_sessions": args.min_sessions, "z_threshold": args.z_threshold}
+    cycle = improve.auto_cycle(
+        proposal=proposal,
+        policy=OutcomePolicy(**{name: value for name, value in chosen.items() if value is not None}),
+    )
     verdict = cycle["verdict"]
     generation = f" -> generation {cycle['generation']}" if cycle["generation"] else ""
     print(
@@ -168,7 +174,7 @@ def _soul(args: argparse.Namespace) -> int:
         if args.prefix_file is not None or args.suffix_file is not None:
             living_soul.write_compose_config(args.prefix_file, args.suffix_file)
         meta = living_soul.compile_soul(reason=args.reason)
-        state = "new" if meta["changed"] else "unchanged"
+        state = "activated" if meta["changed"] else "unchanged"
         print(f"generation {meta['generation']} ({state}): {len(meta['records'])} learned record(s)")
         print(f"current: {living_soul.current_path()}")
     elif args.soul_command == "status":
@@ -320,8 +326,14 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_run_parser.add_argument(
         "--min-sessions",
         type=int,
-        default=15,
-        help="--auto: sessions needed on each side before judging a change (default 15).",
+        default=None,
+        help="--auto: scored sessions needed on each side before judging a change (default 15).",
+    )
+    improve_run_parser.add_argument(
+        "--z-threshold",
+        type=float,
+        default=None,
+        help="--auto: one-sided z a rise in the miss rate must clear to revert a change (default 1.645).",
     )
     improve_run_parser.add_argument(
         "--harness",

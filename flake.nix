@@ -155,7 +155,7 @@
           };
         };
 
-      # Home Manager module: the living SOUL and the weekly improvement pass
+      # Home Manager module: the living SOUL and the daily improvement pass
       # run as the same user as Hermes. The repo ships the bootstrap SOUL;
       # everything that changes afterwards lives under the CA state dir.
       homeManagerModules.cognitive-assistant =
@@ -216,7 +216,7 @@
             improve.minSessions = lib.mkOption {
               type = lib.types.ints.positive;
               default = 15;
-              description = "Analyzed Hermes sessions needed on each side before a change is judged.";
+              description = "Scored Hermes sessions needed on each side before a change is judged.";
             };
             llm.baseUrl = lib.mkOption {
               type = lib.types.str;
@@ -238,7 +238,7 @@
                 synthesis = "a-larger-model";
                 annotate = "a-larger-model";
               };
-              description = "Per-stage model overrides: analysis, consolidate, synthesis, annotate.";
+              description = "Per-stage model overrides: analysis, consolidate, synthesis, annotate, outcome.";
             };
             llm.apiKeyFile = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
@@ -252,8 +252,10 @@
             };
             improve.timerConfig = lib.mkOption {
               type = lib.types.attrs;
+              # Each run only reads sessions it has not seen, so a daily run is
+              # cheap and lets a verdict land as soon as it has its sessions.
               default = {
-                OnCalendar = "weekly";
+                OnCalendar = "daily";
                 Persistent = true;
               };
             };
@@ -300,7 +302,7 @@
               };
             };
             systemd.user.timers.ca-improve = lib.mkIf cfg.improve.enable {
-              Unit.Description = "Weekly CA improvement pass";
+              Unit.Description = "CA improvement pass";
               Timer = cfg.improve.timerConfig;
               Install.WantedBy = [ "timers.target" ];
             };

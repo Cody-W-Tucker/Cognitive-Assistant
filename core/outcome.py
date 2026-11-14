@@ -13,22 +13,40 @@ The current generation is compared with the one it replaced:
 
 Only one change is under test at a time: a new record is auto-applied only
 once the current generation has a verdict. A generation produced by a new
-bootstrap is kept without a test; rebootstrapping is the person's call.
+bootstrap is kept without a test; rebootstrapping is the person's call. A
+generation that added no records (the deployer's wrapper text changed) does
+not end the test of the one before it: their sessions are pooled and the
+verdict goes to the generation that added the records.
+
+Every threshold lives in ``OutcomePolicy``.
 """
 
 from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import AbstractSet, Dict, List, Optional, Set, Tuple
+from typing import AbstractSet, Dict, FrozenSet, List, Optional, Set, Tuple
 from urllib.parse import quote
 
 from core import journal, living_soul
 from core.paths import improve_dir, soul_dir
 
 VERDICT_SOURCES = frozenset({"desktop", "tui", "cli"})
+
+Outcomes = Tuple[Dict[int, Dict[str, int]], Dict[int, Set[Tuple]]]
+
+
+@dataclass(frozen=True)
+class OutcomePolicy:
+    """How a change is judged. The one place these thresholds are set."""
+
+    min_sessions: int = 15
+    z_threshold: float = 1.645
+    harness: str = "hermes"
+    sources: FrozenSet[str] = VERDICT_SOURCES
 
 
 def _parse_at(value: str) -> float:
@@ -59,9 +77,7 @@ def is_miss(evidence: Dict) -> Optional[bool]:
     return None
 
 
-def _collect_outcomes(
-    harness: str, sources: AbstractSet[str],
-) -> Tuple[Dict[int, Dict[str, int]], Dict[int, Set[Tuple]]]:
+def _collect_outcomes(harness: str, sources: AbstractSet[str]) -> Outcomes:
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
     rubrics: Dict[int, Set[Tuple]] = {}
@@ -109,6 +125,11 @@ def _collect_outcomes(
             rubric.get("matureDays") if isinstance(rubric.get("matureDays"), (int, float)) and not isinstance(rubric.get("matureDays"), bool) and math.isfinite(rubric["matureDays"]) and rubric["matureDays"] >= 0 else None,
         ))
     return totals, rubrics
+
+
+def collect(policy: OutcomePolicy = OutcomePolicy()) -> Outcomes:
+    """Per generation: decisive outcome counts, and the rubrics that scored them."""
+    return _collect_outcomes(policy.harness, policy.sources)
 
 
 def session_outcomes(harness: str = "hermes", sources: Optional[AbstractSet[str]] = None) -> Dict[int, Dict[str, int]]:
@@ -166,45 +187,61 @@ def z_score(current: Dict[str, int], baseline: Dict[str, int]) -> float:
 
 
 def evaluate(
+    policy: OutcomePolicy = OutcomePolicy(),
     *,
-    min_sessions: int = 15,
-    z_threshold: float = 1.645,
     record: bool = True,
+    collected: Optional[Outcomes] = None,
 ) -> Dict:
-    """Judge the active generation against its parent; settled verdicts are final."""
+    """Judge the change under test against its parent; settled verdicts are final.
+
+    ``collected`` lets a caller that already read the evidence pass it in.
+    """
     current = living_soul.current_generation()
     if not current:
         return {"verdict": "none", "reason": "no living SOUL compiled yet"}
-    number = current["generation"]
-    settled = verdicts().get(number)
+    judged = verdicts()
+    settled = judged.get(current["generation"])
     if settled:
         return {**settled, "settled": True}
-    parent = current.get("parent")
-    base = {"generation": number, "added": current.get("added", [])}
-    if parent is None or current.get("bootstrapChanged") or not current.get("added"):
+    # Walk back over generations that added nothing to the one whose records
+    # are under test; its sessions and theirs ran with the same records.
+    known = {meta["generation"]: meta for meta in living_soul.list_generations()}
+    subject, pooled = current, [current["generation"]]
+    while (
+        not subject.get("added")
+        and not subject.get("bootstrapChanged")
+        and subject.get("parent") in known
+        and subject["parent"] not in judged
+    ):
+        subject = known[subject["parent"]]
+        pooled.append(subject["generation"])
+    number, parent = subject["generation"], subject.get("parent")
+    base = {"generation": number, "added": subject.get("added", [])}
+    if parent is None or subject.get("bootstrapChanged") or not subject.get("added"):
         why = "first generation" if parent is None else (
-            "new bootstrap" if current.get("bootstrapChanged") else "no records added"
+            "new bootstrap" if subject.get("bootstrapChanged") else "no records added"
         )
         row = {**base, "verdict": "keep", "reason": f"untested: {why}"}
         if record:
             _record_verdict(row)
         return row
-    outcomes, rubrics = _collect_outcomes("hermes", VERDICT_SOURCES)
+    outcomes, rubrics = collected if collected is not None else collect(policy)
     empty = {"sessions": 0, "misses": 0}
-    now, before = outcomes.get(number, empty), outcomes.get(parent, empty)
+    now = {key: sum(outcomes.get(g, empty)[key] for g in pooled) for key in empty}
+    before = outcomes.get(parent, empty)
     row = {**base, "parent": parent, "current": now, "baseline": before}
     if now["sessions"] and before["sessions"]:
-        used = rubrics[number] | rubrics[parent]
+        used = set().union(*(rubrics.get(g, set()) for g in [*pooled, parent]))
         mismatches = [name for index, name in enumerate(("promptSha", "model", "matureDays"))
                       if len({rubric[index] for rubric in used}) > 1]
         if mismatches:
             return {**row, "verdict": "pending", "reason": "rubric mismatch: " + ", ".join(mismatches)}
-    if now["sessions"] < min_sessions or before["sessions"] < min_sessions:
-        return {**row, "verdict": "pending", "reason": f"need {min_sessions} sessions on each side"}
+    if now["sessions"] < policy.min_sessions or before["sessions"] < policy.min_sessions:
+        return {**row, "verdict": "pending", "reason": f"need {policy.min_sessions} sessions on each side"}
     z = z_score(now, before)
     row["z"] = round(z, 3)
-    row["improved"] = z < -z_threshold
-    row["verdict"] = "revert" if z > z_threshold else "keep"
+    row["improved"] = z < -policy.z_threshold
+    row["verdict"] = "revert" if z > policy.z_threshold else "keep"
     if record:
         _record_verdict(row)
     return row
