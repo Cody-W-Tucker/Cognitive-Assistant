@@ -8,7 +8,7 @@
 // Configuration (environment, never model-controlled):
 //   CA_LLM_BASE_URL            OpenAI-compatible base, e.g. http://nas:8080/v1
 //   CA_LLM_MODEL               model for every role
-//   CA_LLM_MODEL_<ROLE>        per-role override (ANALYSIS, CONSOLIDATE, SYNTHESIS, ANNOTATE)
+//   CA_LLM_MODEL_<ROLE>        per-role override (ANALYSIS, OUTCOME, CONSOLIDATE, SYNTHESIS, ANNOTATE)
 //   CA_LLM_API_KEY_FILE        optional file holding a bearer key (inference-only)
 //   CA_LLM_RETRY_DELAYS_MS     retry backoff for 429/5xx/network errors (default 5000,20000)
 //
@@ -22,6 +22,7 @@ import path from "node:path";
 
 const ROLES = {
   analysis: { timeoutSec: 180, maxTokens: 4000 },
+  outcome: { timeoutSec: 180, maxTokens: 4000 },
   consolidate: { timeoutSec: 180, maxTokens: 4000 },
   synthesis: { timeoutSec: 300, maxTokens: 6000 },
   annotate: { timeoutSec: 300, maxTokens: 8000 },
@@ -149,7 +150,7 @@ async function postWithRetry(url, init, deadline) {
  * One chat completion for `role`. Resolves to the reply's JSON object; throws
  * on transport, HTTP, or parse failure. Replies are cached in `cacheDir`.
  */
-export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
+export async function invokeStage(role, prompt, { cacheDir = null, validate = null } = {}) {
   const config = modelConfig(role);
   const body = buildChatRequest({ role, model: config.model, prompt });
   const key = createHash("sha256").update(JSON.stringify({ url: config.baseUrl, body })).digest("hex");
@@ -157,7 +158,7 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
   if (cacheFile) {
     try {
       const hit = parseStageReply(role, fs.readFileSync(cacheFile, "utf8"));
-      if (hit) return hit;
+      if (hit && (!validate || validate(hit))) return hit;
     } catch {}
   }
   const headers = { "content-type": "application/json" };
@@ -177,7 +178,7 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
   if (typeof content !== "string" || !content.trim()) throw new Error("model endpoint returned no message content");
   const parsed = parseStageReply(role, content);
   if (!parsed) throw new Error(`${role} model returned unparseable output`);
-  if (cacheFile) {
+  if (cacheFile && (!validate || validate(parsed))) {
     try {
       fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
       fs.writeFileSync(cacheFile, content, { encoding: "utf8", mode: 0o600 });
@@ -191,5 +192,5 @@ export async function invokeStage(role, prompt, { cacheDir = null } = {}) {
 /** The production invoke for one state dir: `(role, prompt) => Promise<object>`. */
 export function modelInvoke(stateDir) {
   const cacheDir = path.join(stateDir, "model-cache");
-  return (role, prompt) => invokeStage(role, prompt, { cacheDir });
+  return (role, prompt, context = {}) => invokeStage(role, prompt, { cacheDir, validate: context.validate });
 }

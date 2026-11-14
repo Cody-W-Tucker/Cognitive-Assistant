@@ -101,11 +101,16 @@ export function distill(events, meta = {}) {
       lines.push("");
     } else if (event.kind === "tool") {
       const input = describeToolInput(event.input);
-      lines.push(`- tool ${event.name || "unknown"}${input ? `: ${input}` : ""}`);
+      const result = event.result == null ? "" : oneLine(typeof event.result === "string" ? event.result : JSON.stringify(event.result), TOOL_OUTPUT_CHARS);
+      lines.push(`- tool ${event.name || "unknown"}${input ? `: ${input}` : ""}${result ? ` => ${result}` : ""}`);
     }
   }
   lines.push(`source: ${meta.path || meta.db || "unknown"}`);
-  return lines.join("\n").slice(0, 24000);
+  const trace = lines.join("\n");
+  if (trace.length <= 24000) return trace;
+  const head = trace.slice(0, 16000);
+  const tail = trace.slice(-7900);
+  return `${head}\n\n[... ${trace.length - head.length - tail.length} chars elided ...]\n\n${tail}`;
 }
 
 /** Best-effort normalization of one raw transcript record into events. */

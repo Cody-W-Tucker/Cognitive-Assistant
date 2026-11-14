@@ -51,8 +51,20 @@ function safeName(text) {
 }
 
 /** Where one session's analysis is kept; separators in the id cannot leave evidence/. */
-export function evidenceFile(stateDir, transcriptId) {
-  return path.join(stateDir, "evidence", `${String(transcriptId).replace(/[/\\]/g, "_")}.json`);
+export function evidenceFile(stateDir, transcriptId, harness = null) {
+  const name = harness == null
+    ? String(transcriptId).replace(/[/\\]/g, "_")
+    : `${encodeURIComponent(String(harness))}:${encodeURIComponent(String(transcriptId))}`;
+  return path.join(stateDir, "evidence", `${name}.json`);
+}
+
+/** Prefer qualified evidence; a legacy file belongs only to its recorded harness. */
+export function readSessionEvidence(stateDir, harness, transcriptId) {
+  const qualified = readJson(evidenceFile(stateDir, transcriptId, harness));
+  if (qualified?.status === "ok") return qualified;
+  const legacy = readJson(evidenceFile(stateDir, transcriptId));
+  if (legacy?.status === "ok" && String(legacy.harness) === String(harness) && String(legacy.transcriptId) === String(transcriptId)) return legacy;
+  return qualified;
 }
 
 /** Gap identity: the same observation text, ignoring case and spacing. */
@@ -104,12 +116,19 @@ export function readSessionCheckpoint(stateDir) {
 export function readEvidenceRecords(stateDir) {
   const dir = path.join(stateDir, "evidence");
   if (!fs.existsSync(dir)) return [];
-  return fs
+  const records = fs
     .readdirSync(dir)
     .filter((name) => name.endsWith(".json"))
     .sort()
     .map((name) => readJson(path.join(dir, name)))
     .filter((record) => record?.status === "ok");
+  const unique = new Map();
+  for (const record of records) {
+    const key = checkpointKey({ harness: record.harness, id: record.transcriptId });
+    const qualified = readJson(evidenceFile(stateDir, record.transcriptId, record.harness));
+    unique.set(key, qualified?.status === "ok" ? qualified : record);
+  }
+  return [...unique.values()];
 }
 
 /** Rows Python appends on reject. A malformed line is skipped; the file stays for audit. */

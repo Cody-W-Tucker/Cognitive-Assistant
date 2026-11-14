@@ -5,6 +5,19 @@ import { distill, recordToEvents } from "../src/distill.js";
 
 const ATTACHED_MARKER = "--- Attached Context ---";
 
+test("long sessions retain both the beginning and the outcome", () => {
+  const events = [
+    { kind: "message", role: "user", text: "START" },
+    ...Array.from({ length: 50 }, (_, i) => ({ kind: "message", role: "assistant", text: `${i} ${"x".repeat(1000)}` })),
+    { kind: "message", role: "assistant", text: "FINAL OUTCOME" },
+  ];
+  const trace = distill(events, { id: "long" });
+  assert.ok(trace.includes("START"));
+  assert.ok(trace.includes("FINAL OUTCOME"));
+  assert.match(trace, /\[\.\.\. \d+ chars elided \.\.\.\]/);
+  assert.ok(trace.length <= 24000);
+});
+
 function liveRecords() {
   const pageBody = `page-body-marker-${"lorem ipsum dolor sit amet ".repeat(40)}`;
   const userContent = `What is nix.dev?\n\n${ATTACHED_MARKER}\nSkip to main content\n${pageBody}`;
@@ -113,4 +126,10 @@ test("pre-normalized role:'tool' message normalizes to one-line tool event, empt
   assert.equal(toolLines.length, 1, `expected 1 one-line tool event, got:\n${trace}`);
   assert.equal(toolLines[0].trim().split("\n").length, 1, "pre-normalized tool event stays one line");
   assert.ok(!trace.includes("## human\n" + toolPayload.slice(0, 20)), "tool content never renders as human block");
+});
+
+test("tool results survive distillation in bounded form", () => {
+  const trace = distill([{ kind: "tool", name: "test", input: { command: "npm test" }, result: `FAIL regression ${"x".repeat(500)}` }]);
+  assert.match(trace, /tool test: npm test => FAIL regression/);
+  assert.ok(!trace.includes("x".repeat(250)));
 });

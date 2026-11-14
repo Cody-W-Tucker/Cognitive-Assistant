@@ -21,10 +21,14 @@ improve-run  ->  <CA home>/improve/proposal.json  ->  improve-apply  ->  experie
   absorbed by the bootstrap), so the runtime never reads the
   `experience/authored/` layout itself. `node` must be on `PATH` (the dev
   shell and the `ca` package provide it).
-- `improve/` (Node, zero dependencies) does discovery, analysis and proposal.
-  `improve/bin/ca-improve.js` has two commands, `run` and `synthesize`; both
-  print exactly one JSON proposal on stdout. Progress (`--tui`) and errors go
-  to stderr. `run` and `synthesize` share the tail in `src/propose.js`.
+- `improve/` (Node, zero dependencies) does discovery, analysis, outcome scoring
+  and proposal. `improve/bin/ca-improve.js` has three commands, `run`,
+  `synthesize` and `outcome`: `run` prints exactly one JSON proposal on
+  stdout, `outcome` prints the `{runId, preview, selected, scored,
+  unscored}` summary. Progress (`--tui`) and errors go to stderr. `run` and
+  `synthesize` share the tail in `src/propose.js`; `run` also scores mature
+  sessions in-process via `src/outcome.js` before proposing (see [Delayed
+  outcome scoring](#delayed-outcome-scoring)).
 
 The runtime writes only under its state directory. Session stores are opened
 read-only, and nothing in the repo or in Hermes is modified.
@@ -36,6 +40,7 @@ read-only, and nothing in the repo or in Hermes is modified.
 | discover | `src/harnesses.js` | no |
 | collect + distill | `src/distill.js` | no |
 | analyze | `src/analyze.js`, `prompts/analysis.md` | one per session |
+| outcome | `src/outcome.js`, `src/followup.js`, `prompts/outcome.md` | one per mature session |
 | fold | `src/fold.js` | no |
 | consolidate | `src/consolidate.js`, `prompts/consolidate.md` | one, only with >= 2 gaps |
 | synthesize | `src/synthesize.js`, `prompts/synthesis.md` | one |
@@ -78,6 +83,24 @@ read-only, and nothing in the repo or in Hermes is modified.
   unless they now cite more sessions or a session the rejection did not, then
   writes `proposal.json`. An unapplied proposal it replaces is archived to
   `proposals/<id>.json`.
+
+Discovery skips an unfinished Hermes session until it has ended or been idle
+for 12 hours (`--idle-hours`), without advancing the cursor, and a session with
+successful evidence is never analyzed again. The session list is filtered
+before any messages are read, so a run reads the transcripts of new sessions,
+not of the whole store. Distillation keeps the head and the tail of a long
+trace around an elision marker, and includes Hermes tool calls.
+
+Evidence carries `sessionAt` (session start), `startedAt`, `endedAt`,
+`source`, `cwd`, `gitRepoRoot` and `parentSessionId`, plus
+`rubric: {promptSha, contextSha, model}`. `endedAt` is the session's last
+activity when the store records it: Hermes stamps `ended_at` when it reaps an
+idle session, which can be weeks after the person stopped. `cwd` and
+`gitRepoRoot` are optional; most Hermes sessions have neither. The prompt hash identifies the
+analysis template; the context hash identifies rendered SOUL, posture and
+records contexts. Older evidence may lack these fields. See
+[Living SOUL](Living-SOUL.md#outcome-check-and-autonomous-changes) for how
+missing sources and rubric stamps affect verdicts.
 
 Each edit in the proposal is `{id, kind: "add", title, rationale, evidence,
 record, annotation: {verdict: "keep", reason}, clusterId}`. The proposal also
@@ -123,7 +146,7 @@ object from a code fence or surrounding prose.
 | --- | --- |
 | `CA_LLM_BASE_URL` | Endpoint base, e.g. `http://127.0.0.1:8080/v1` (required) |
 | `CA_LLM_MODEL` | Model for every role |
-| `CA_LLM_MODEL_<ROLE>` | Per-role override: `ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE` |
+| `CA_LLM_MODEL_<ROLE>` | Per-role override: `ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE`, `OUTCOME` |
 | `CA_LLM_API_KEY_FILE` | Optional file with a bearer key (use an inference-only key) |
 | `CA_LLM_RETRY_DELAYS_MS` | Backoff for 429, 5xx and network errors (default `5000,20000`) |
 
@@ -181,3 +204,51 @@ outside `journal/`.
 
 Several runtime modules adapt Backpass (MIT, Kun Chen, commit 0268201). The
 per-file mapping and license text are in `improve/LICENSE.NOTICE`.
+
+### Delayed outcome scoring
+
+After analysis, the runtime scores each mature session that has successful
+evidence, once, with a blind outcome prompt: the judge sees the session trace
+and follow-up evidence, never the SOUL, posture or records. A session is mature
+three days after it ended (`--mature-days`). Citations and verbatim quotes are
+checked before an outcome is written. The analyzer's positive, negative and
+gaps are not touched.
+
+Follow-up evidence is whatever falls inside the window after the session
+ended:
+
+- **Later sessions.** Every later Hermes session from the `desktop`, `tui` or
+  `cli` sources that is not a continuation of another, with no directory
+  requirement; the judge decides whether one is about the same aim. Sessions
+  from other harnesses are matched by repository or directory. The earliest
+  eight are kept, each as its first user message and last agent message.
+- **Commits.** `git log` in the session's repository, when it has one.
+- **Journal.** A keyword `qmd` search of the `Journal` collection, limited to
+  notes dated inside the window. This rarely matches; see
+  `plans/feature-2.md`.
+
+The trace is a snapshot taken when the session was analyzed, used only while
+the session's transcript is unchanged since. For SQLite stores the revision
+covers that session's messages, not its session row or the rest of the
+database, so Hermes reaping an idle session does not invalidate it; new
+messages do. Header-only OpenCode exports cannot be verified and are excluded.
+
+A session that cannot be scored (no known end, a changed transcript, an
+invalid reply, a model error) is left without an outcome. Nothing is written
+for it, the run continues, a later run tries again, and verdicts ignore it.
+`improve-outcome` reports how many were `scored` and `unscored`.
+
+`CA_LLM_MODEL_OUTCOME` overrides `CA_LLM_MODEL` for this tool-free role.
+
+**Backtest.** `python -m core improve-outcome --since 70d --dry-run` writes a
+private JSONL preview under `<CA home>/improve/outcome-preview/` and changes
+no evidence. A dry run also previews finished Hermes sessions that were never
+analyzed, from every source, reading their transcripts as they stand, so it
+works on a fresh CA home. Each row is `{harness, transcriptId, source,
+startedAt, endedAt, followup: {sessions, commits, journal}, outcome}`, where
+`followup` holds counts and `outcome` is `{aim, label, reason, evidence,
+rubric, scoredAt}`. `--limit N`, `--mature-days N`, `--rescore` and
+`--analyzer mock` are also available.
+
+Rescoring existing outcomes requires `--rescore`; use it deliberately after a
+rubric change. Preview and cache files contain private session material.

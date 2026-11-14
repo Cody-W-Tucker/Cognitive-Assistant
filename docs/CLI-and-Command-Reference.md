@@ -71,7 +71,8 @@ no `--state-dir` or `--soul-path` flags. Details:
 | `--min-gap-evidence` | `2` | Distinct sessions a gap needs before it can become a candidate (integer >= 2) |
 | `--harness NAME` | all | Scan only this harness (repeatable); a named harness whose store is missing fails the run |
 | `--auto` | off | With `--headless`: judge the change under test, then revert, wait, or adopt one record |
-| `--min-sessions` | `15` | `--auto`: analyzed sessions needed on each side before judging |
+| `--min-sessions` | `15` | `--auto`: scored sessions needed on each side before judging |
+| `--z-threshold` | `1.645` | `--auto`: one-sided z a rise in the miss rate must clear to revert |
 
 `CA_IMPROVE_HOME`, when set, scopes every session store under that one home
 directory (used for hermetic runs).
@@ -81,7 +82,7 @@ directory (used for hermetic runs).
 | `improve-synthesize [--min-gap-evidence N]` | Propose again from saved evidence and ledger; no discovery or analysis |
 | `improve-apply [--proposal ID --decisions "e1=accepted e2=rejected:too-narrow"] [--dry-run]` | Review the current proposal: write accepted records, log rejections, compile the living SOUL. Without `--decisions` it asks in the terminal |
 | `journal-compact` | Rebuild `journal/current.json` and `journal/bootstrap.md` from `events.jsonl` |
-| `soul compile [--prefix-file F] [--suffix-file F] [--reason TEXT]` | Build a new living SOUL generation if its inputs changed |
+| `soul compile [--prefix-file F] [--suffix-file F] [--reason TEXT]` | Build the living SOUL: a new generation for new text, or the earlier generation that already holds it |
 | `soul status` | Bootstrap path, active generation, history with verdicts |
 | `soul rollback N` | Point `current.md` at generation N |
 | `soul link HERMES_HOME` | Make `HERMES_HOME/SOUL.md` a symlink to the living SOUL |
@@ -91,3 +92,15 @@ Decision syntax: each token is `<edit-id>=accepted` or
 `already-covered`, `not-evidenced`, `unsafe`, `other`. `--decisions` can be
 repeated and must be paired with `--proposal <id>`; every edit needs a
 decision.
+
+### improve-outcome
+
+`python -m core improve-outcome [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--analyzer model|mock]`
+
+Scores mature analyzed sessions once and prints `{runId, preview, selected,
+scored, unscored}`. A session that cannot be scored is left as it is and tried
+again on a later run. Dry-run writes a private JSONL preview, does not alter
+evidence, and also previews finished Hermes sessions that were never analyzed
+(the backtest). Rescore explicitly replaces existing outcomes on successful
+validation; an unscored attempt leaves the prior outcome intact. The
+outcome model uses `CA_LLM_MODEL_OUTCOME`, falling back to `CA_LLM_MODEL`.

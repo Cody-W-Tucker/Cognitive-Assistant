@@ -30,7 +30,10 @@ Active records are accepted records minus reverted ones minus those listed in
 `absorbed.json` beside the bootstrap SOUL. Only each record's instruction goes
 into the SOUL; its evidence stays in the lineage.
 
-A new generation is written only when the output changes. `improve-apply`
+A generation is its text. A new one is written only for text that no earlier
+generation holds; compiling text an earlier generation already holds
+reactivates that generation, so after a revert the sessions it already ran
+remain the baseline for the next change. `improve-apply`
 compiles after accepting records; Home Manager activation compiles after a
 rebuild (a new bootstrap) and links Hermes to it.
 
@@ -46,14 +49,23 @@ ca soul link <hermes-home>
 `improve-run --headless --auto` (what the Home Manager timer runs) makes one
 step per run:
 
-1. Analyze new Hermes sessions. Each evidence record carries `sessionAt`, and
-   `soul/activations.jsonl` maps that time to the generation that was live.
+1. Analyze new Hermes sessions and score the outcome of sessions that have
+   matured (see [Improvement Loop](Improvement-Loop.md#delayed-outcome-scoring)).
+   `soul/activations.jsonl` maps each evidence record's `sessionAt`, the
+   session start, to the generation that was live.
 2. Judge the active generation against the one it replaced. A session is a
-   *miss* when the analysis found a quote-backed harm or non-compliance
-   negative, or a gap. The verdict is `pending` until both generations have
-   `--min-sessions` analyzed Hermes sessions (default 15), then `revert` if the
-   miss rate rose with a one-sided two-proportion z above 1.645, else `keep`.
-   Verdicts are final and recorded in `soul/verdicts.jsonl` and the journal.
+   *miss* when its outcome label is `stalled` or `regressed`, and not a miss
+   when it is `advanced`. Sessions labelled `unclear`, and sessions with no
+   outcome yet, count on neither side. The analysis findings (harm,
+   non-compliance, gaps) feed proposals and play no part in the verdict. The
+   verdict is `pending` until both generations have `--min-sessions` scored
+   Hermes sessions (default 15), then `revert` if the miss rate rose with a
+   one-sided two-proportion z above `--z-threshold` (default 1.645), else
+   `keep`. A `keep` row also records `improved: true` when the miss rate fell
+   by the same margin; that is reporting only. Only sources `desktop`, `tui`
+   and `cli` count; other or missing sources can still produce gaps but do not
+   count toward a verdict. Verdicts are final and recorded in
+   `soul/verdicts.jsonl` and the journal.
 3. `revert` withdraws the records that generation added (`reverted.jsonl`, kept
    as lineage), logs them in `improve/rejections.jsonl` with reason
    `reverted` so later runs do not propose them again on the same sessions,
@@ -64,10 +76,21 @@ step per run:
    own, since those are the baseline the new change will be judged against.
    On a fresh install the first weeks only build that baseline.
 
-So exactly one change is under test at a time, and every change is judged by
-what happened in sessions after it, scored by the same analysis prompt and
-model as the sessions before it. A generation from a new bootstrap is kept
-untested; rebootstrapping is the person's decision.
+So exactly one change is under test at a time. A comparison stays pending if
+the outcomes it would count were scored under different rubrics: a different
+outcome prompt hash, model or maturation window, including a mix within one
+generation. An outcome without a rubric is its own rubric and cannot be mixed
+with stamped ones. The analysis rubric on the evidence is recorded and not
+compared; the outcome judge never sees the SOUL or the records, so both sides
+are scored by the same text.
+
+A generation that added no records (the wrapper text changed on a Home Manager
+activation) does not end the test of the generation before it: their sessions
+are pooled and the verdict goes to the generation that added the records.
+
+The thresholds live in one place, `OutcomePolicy` in `core/outcome.py`:
+`min_sessions`, `z_threshold`, the harness and the source allowlist. A generation from a new bootstrap is kept untested;
+rebootstrapping is the person's decision.
 
 What the metric does not control for: the mix of work changes from week to
 week, and the judge is an LLM. Quote validation is limited to the analysis
@@ -90,7 +113,7 @@ learned section on the next compile. See
 from `hermesHomeFiles`, which would overwrite the link), compiles on
 activation (`ca soul compile` then `ca soul link`), and runs
 `ca improve-run --headless --auto --min-sessions <n> --harness hermes` from a
-weekly user timer with `HERMES_HOME` and the `CA_LLM_*` endpoint variables set.
+daily user timer with `HERMES_HOME` and the `CA_LLM_*` endpoint variables set.
 Every model call is a tool-free chat completion to `llm.baseUrl` (see
 [Improvement Loop](Improvement-Loop.md)); no agent harness runs. Other options:
 `improve.enable`, `improve.auto`, `improve.minSessions`, `improve.harnesses`,
@@ -108,3 +131,14 @@ services.cognitive-assistant = {
   };
 };
 ```
+
+### Outcome evidence
+
+Outcome scoring waits three days by default and records advanced, stalled,
+regressed, or unclear using a blind rubric. Unclear means the available
+follow-up does not decide; an unscored session has not yet supplied a verdict.
+For outcome-based verdicts, stalled and regressed are misses; advanced is not,
+and unclear and unscored sessions are excluded. Outcome rubric versions must
+match before comparing generations. The backtest and measured volume setting
+in `plans/feature-2.md` still require human review; do not infer a calibrated
+sample size from the default.

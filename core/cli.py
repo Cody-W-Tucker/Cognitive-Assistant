@@ -118,7 +118,13 @@ def _improve_run(args: argparse.Namespace) -> int:
     if not args.auto:
         _print_proposal_summary(proposal, file=sys.stderr)
         return 0
-    cycle = improve.auto_cycle(proposal=proposal, min_sessions=args.min_sessions)
+    from core.outcome import OutcomePolicy
+
+    chosen = {"min_sessions": args.min_sessions, "z_threshold": args.z_threshold}
+    cycle = improve.auto_cycle(
+        proposal=proposal,
+        policy=OutcomePolicy(**{name: value for name, value in chosen.items() if value is not None}),
+    )
     verdict = cycle["verdict"]
     generation = f" -> generation {cycle['generation']}" if cycle["generation"] else ""
     print(
@@ -168,7 +174,7 @@ def _soul(args: argparse.Namespace) -> int:
         if args.prefix_file is not None or args.suffix_file is not None:
             living_soul.write_compose_config(args.prefix_file, args.suffix_file)
         meta = living_soul.compile_soul(reason=args.reason)
-        state = "new" if meta["changed"] else "unchanged"
+        state = "activated" if meta["changed"] else "unchanged"
         print(f"generation {meta['generation']} ({state}): {len(meta['records'])} learned record(s)")
         print(f"current: {living_soul.current_path()}")
     elif args.soul_command == "status":
@@ -320,8 +326,14 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_run_parser.add_argument(
         "--min-sessions",
         type=int,
-        default=15,
-        help="--auto: sessions needed on each side before judging a change (default 15).",
+        default=None,
+        help="--auto: scored sessions needed on each side before judging a change (default 15).",
+    )
+    improve_run_parser.add_argument(
+        "--z-threshold",
+        type=float,
+        default=None,
+        help="--auto: one-sided z a rise in the miss rate must clear to revert a change (default 1.645).",
     )
     improve_run_parser.add_argument(
         "--harness",
@@ -329,6 +341,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Only scan this harness (repeatable). A named harness whose store is missing fails the run.",
     )
+
+    improve_outcome_parser = subparsers.add_parser("improve-outcome", help="Score mature session outcomes, or preview a backfill.")
+    improve_outcome_parser.add_argument("--since", default="all")
+    improve_outcome_parser.add_argument("--limit", type=int)
+    improve_outcome_parser.add_argument("--mature-days", type=float, default=3)
+    improve_outcome_parser.add_argument("--dry-run", action="store_true")
+    improve_outcome_parser.add_argument("--rescore", action="store_true")
+    improve_outcome_parser.add_argument("--analyzer", choices=("model", "mock"), default="model")
 
     improve_apply_parser = subparsers.add_parser(
         "improve-apply",
@@ -420,6 +440,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "improve-run":
         return _improve_run(args)
+
+    if args.command == "improve-outcome":
+        from core import improve
+
+        print(json.dumps(improve.score_outcomes(since=args.since, limit=args.limit, mature_days=args.mature_days,
+                                                dry_run=args.dry_run, rescore=args.rescore, analyzer=args.analyzer)))
+        return 0
 
     if args.command == "improve-apply":
         return _improve_apply(args)
