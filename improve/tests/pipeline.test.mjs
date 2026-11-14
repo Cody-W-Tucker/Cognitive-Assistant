@@ -159,7 +159,8 @@ describe("run with the mock analyzer", () => {
 
 it("uses start and metadata with safe fallbacks", () => {
   const session = { startedAtMs: 100, mtimeMs: 200, endedAt: 300, source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p" };
-  assert.deepEqual(stampEvidence({ status: "ok" }, session, { model: "mock" }), { status: "ok", sessionAt: 100, startedAt: 100, endedAt: 300, source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p", rubric: { model: "mock" } });
+  assert.deepEqual(stampEvidence({ status: "ok" }, session, { model: "mock" }), { status: "ok", sessionAt: 100, startedAt: 100, endedAt: "1970-01-01T00:00:00.300Z", source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p", rubric: { model: "mock" } });
+  assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200, activityKnown: true }, {}).endedAt, "1970-01-01T00:00:00.200Z");
   assert.equal(stampEvidence({}, { mtimeMs: 200 }, {}).sessionAt, 200);
   assert.equal(stampEvidence({}, {}, {}).startedAt, null);
   assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200 }, {}).sessionAt, null);

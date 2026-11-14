@@ -209,7 +209,8 @@ class AutoCycleTests(CAHomeTestCase):
                             rubric={**stamp, "contextSha": "c2"})
         self.assertEqual(outcome.evaluate(min_sessions=5, record=False)["verdict"], "keep")
         for rubric, reason in [({**stamp, "promptSha": "p2"}, "promptSha"),
-                               ({**stamp, "model": "m2"}, "model"), (None, "promptSha")]:
+                               ({**stamp, "model": "m2"}, "model"),
+                               ({**stamp, "matureDays": 3}, "matureDays"), (None, "promptSha")]:
             _write_evidence("after0", start + timedelta(minutes=1), False, rubric=rubric)
             verdict = outcome.evaluate(min_sessions=5, record=False)
             self.assertEqual(verdict["verdict"], "pending")

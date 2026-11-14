@@ -89,7 +89,7 @@ function readHead(file) {
   }
 }
 
-function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) {
+function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record, excludedPath = null) {
   const rows = [];
   let readable = false;
   let rootError;
@@ -104,6 +104,7 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
       continue;
     }
     for (const file of files) {
+      if (excludedPath && path.resolve(file) === path.resolve(excludedPath)) continue;
       let head;
       let mtimeMs;
       try {
@@ -138,6 +139,7 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
         id: id || `${harness}:${path.basename(file, ".jsonl")}`,
         cwd: absoluteOrNull(header?.cwd),
         mtimeMs,
+        activityKnown: true,
         startedAtMs: startedAtMs ?? mtimeMs,
         firstText: head,
         location: { path: file },
@@ -227,6 +229,7 @@ function sessionRows(db, table, cols, { cwdCol, updated, created }) {
     id: String(row[idCol]),
     cwd: cwdCol ? absoluteOrNull(row[cwdCol]) : null,
     mtimeMs: timestampMs(updatedCol ? row[updatedCol] : null) ?? timestampMs(createdCol ? row[createdCol] : null),
+    activityKnown: timestampMs(updatedCol ? row[updatedCol] : null) !== null,
     startedAtMs: timestampMs(createdCol ? row[createdCol] : null),
     endedAt: timestampMs(row.ended_at) === null ? null : new Date(timestampMs(row.ended_at)).toISOString(),
     source: row.source ?? null,
@@ -243,13 +246,13 @@ function attachFirstText(rows, firstRows) {
 
 const OPENCODE = {
   dbPath: (root) => path.join(root, ".local", "share", "opencode", "opencode.db"),
-  list(db, schema) {
+  list(db, schema, excludedId) {
     const table = schema.has("session_v2") ? "session_v2" : schema.has("session") ? "session" : null;
     if (!table) return [];
     const rows = sessionRows(db, table, schema.get(table), { cwdCol: "directory", updated: ["time_updated"], created: ["time_created"] });
     const msg = schema.get("session_message");
     if (msg?.has("data") && msg.has("session_id")) {
-      attachFirstText(rows, db.prepare("SELECT session_id, data AS text FROM session_message ORDER BY seq ASC").all());
+      attachFirstText(rows, db.prepare("SELECT session_id, data AS text FROM session_message WHERE session_id != ? ORDER BY seq ASC").all(excludedId ?? ""));
     }
     return rows;
   },
@@ -270,7 +273,7 @@ const OPENCODE = {
 
 const HERMES = {
   dbPath: (root, isolated) => path.join(isolated ? path.join(root, ".hermes") : process.env.HERMES_HOME || path.join(root, ".hermes"), "state.db"),
-  list(db, schema) {
+  list(db, schema, excludedId) {
     const cols = schema.get("sessions");
     if (!cols) return [];
     const rows = sessionRows(db, "sessions", cols, {
@@ -280,8 +283,8 @@ const HERMES = {
     });
     const textCol = firstOf(schema.get("messages"), ["text", "content"]);
     if (textCol && schema.get("messages").has("session_id")) {
-      const active = schema.get("messages").has("active") ? " WHERE active = 1" : "";
-      attachFirstText(rows, db.prepare(`SELECT session_id, ${textCol} AS text FROM messages${active} ORDER BY rowid ASC`).all());
+      const active = schema.get("messages").has("active") ? " AND active = 1" : "";
+      attachFirstText(rows, db.prepare(`SELECT session_id, ${textCol} AS text FROM messages WHERE session_id != ?${active} ORDER BY rowid ASC`).all(excludedId ?? ""));
     }
     return rows;
   },
@@ -316,10 +319,10 @@ const HERMES = {
   },
 };
 
-function listSqliteSessions(store, root, isolated) {
+function listSqliteSessions(store, root, isolated, excludedId) {
   const dbPath = store.dbPath(root, isolated);
   if (!fs.statSync(dbPath, { throwIfNoEntry: false })?.isFile()) return null;
-  return withDb(dbPath, (db, schema) => store.list(db, schema)).map((row) => ({ ...row, location: { db: dbPath } }));
+  return withDb(dbPath, (db, schema) => store.list(db, schema, excludedId)).map((row) => ({ ...row, location: { db: dbPath } }));
 }
 
 /** OpenCode `export` output to events (no model call). */
@@ -373,25 +376,26 @@ function readOpencodeExport(sessionId, bin = process.env.CA_IMPROVE_OPENCODE_BIN
 
 const ADAPTERS = {
   claude: {
-    list: (root, isolated, cutoff) => {
+    list: (root, isolated, cutoff, excluded) => {
       const roots = [path.join(root, ".claude", "projects")];
       if (!isolated && process.env.CLAUDE_CONFIG_DIR) roots.push(path.join(process.env.CLAUDE_CONFIG_DIR, "projects"));
-      return listJsonlSessions("claude", [...new Set(roots)], cutoff);
+      return listJsonlSessions("claude", [...new Set(roots)], cutoff, undefined, excluded?.path);
     },
     read: readJsonlEvents,
   },
   codex: {
-    list: (root, isolated, cutoff) =>
+    list: (root, isolated, cutoff, excluded) =>
       listJsonlSessions(
         "codex",
         [!isolated && process.env.CODEX_HOME ? path.join(process.env.CODEX_HOME, "sessions") : path.join(root, ".codex", "sessions")],
         cutoff,
         codexPayload,
+        excluded?.path,
       ),
     read: (transcript) => readJsonlEvents(transcript, codexEvents),
   },
   opencode: {
-    list: (root, isolated) => listSqliteSessions(OPENCODE, root, isolated),
+    list: (root, isolated, _cutoff, excluded) => listSqliteSessions(OPENCODE, root, isolated, excluded?.id),
     // OpenCode's current legacy SQLite store can retain only session headers;
     // its export command is then the authoritative read path.
     read: async (transcript) => {
@@ -400,7 +404,7 @@ const ADAPTERS = {
     },
   },
   hermes: {
-    list: (root, isolated) => listSqliteSessions(HERMES, root, isolated),
+    list: (root, isolated, _cutoff, excluded) => listSqliteSessions(HERMES, root, isolated, excluded?.id),
     read: (transcript) => withDb(transcript.db, (db, schema) => HERMES.read(db, schema, transcript.id)),
   },
 };
@@ -408,6 +412,19 @@ const ADAPTERS = {
 /** Events for one discovered transcript. */
 export async function readTranscriptEvents(transcript) {
   return await ADAPTERS[transcript.harness].read(transcript);
+}
+
+// Conservative store revision: shared SQLite changes invalidate snapshots too.
+// Never use a header-only OpenCode export: its backing store cannot be verified.
+export function transcriptRevision(transcript) {
+  const file = transcript.path || transcript.db;
+  if (!file || (transcript.harness === "opencode")) return null;
+  try {
+    return [file, ...(transcript.db ? [file + "-wal", file + "-shm"] : [])].map((p) => {
+      const s = fs.statSync(p, { throwIfNoEntry: false });
+      return s ? [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs] : null;
+    });
+  } catch { return null; }
 }
 
 /**
@@ -421,7 +438,7 @@ export async function readTranscriptEvents(transcript) {
  * rooted under `stateDir` count as `self` and are dropped; sessions the
  * cursor already holds at the same revision are skipped.
  */
-export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now(), includeCheckpointed = null, ignoreCheckpoint = false } = {}) {
+export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now(), includeCheckpointed = null, ignoreCheckpoint = false, excludeTranscript = null } = {}) {
   if (!Number.isFinite(idleHours) || idleHours < 0) throw new Error("idleHours must be a non-negative number");
   const isolated = Boolean(home);
   const root = isolated ? path.resolve(home) : process.env.HOME || os.homedir();
@@ -438,8 +455,10 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
     const stats = { scanned: 0, matched: 0, self: 0, error: null };
     perHarness[harness] = stats;
     let rows;
+    const dbPath = harness === "hermes" ? HERMES.dbPath(root, isolated) : harness === "opencode" ? OPENCODE.dbPath(root, isolated) : null;
+    const before = dbPath ? transcriptRevision({ harness, db: dbPath }) : null;
     try {
-      rows = ADAPTERS[harness].list(root, isolated, cutoff);
+      rows = ADAPTERS[harness].list(root, isolated, cutoff, excludeTranscript?.harness === harness ? excludeTranscript : null);
     } catch (err) {
       stats.error = `unreadable store: ${err.message}`;
       continue;
@@ -449,6 +468,7 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
       continue;
     }
     for (const row of rows) {
+      if (excludeTranscript?.harness === harness && row.id === excludeTranscript.id) continue;
       if (cutoff && row.mtimeMs !== null && row.mtimeMs < cutoff) continue;
       stats.scanned += 1;
       if ((row.firstText && headHasSelfSentinel(row.firstText)) || isUnder(row.cwd, stateDir)) {
@@ -458,7 +478,9 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
       if (harness === "hermes" && !row.endedAt && (row.mtimeMs === null || now - row.mtimeMs <= idleHours * 3600_000)) continue;
       const transcript = { harness, id: row.id, cwd: row.cwd ?? null, ...row.location, mtimeMs: row.mtimeMs,
         startedAtMs: row.startedAtMs ?? (harness === "hermes" ? null : row.mtimeMs) ?? null, endedAt: row.endedAt ?? null,
-        source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null };
+        source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null, activityKnown: row.activityKnown === true };
+      const revision = transcriptRevision(transcript);
+      transcript.discoveryRevision = revision && (dbPath ? JSON.stringify(before) === JSON.stringify(revision) : Math.round(revision[0]?.[3]) === row.mtimeMs) ? revision : null;
       // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
       const prior = processed[checkpointKey(transcript)];
       if (prior !== undefined && (prior === null || prior === transcript.mtimeMs) && !includeCheckpointed?.(transcript)) continue;

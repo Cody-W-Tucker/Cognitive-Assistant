@@ -1,8 +1,8 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
-import { discoverTranscripts, readTranscriptEvents } from "./harnesses.js";
+import { discoverTranscripts, readTranscriptEvents, transcriptRevision } from "./harnesses.js";
 
 const execFileAsync = promisify(execFile);
 const DAY_MS = 86400_000;
@@ -24,6 +24,14 @@ function samePath(a, b) {
   return typeof a === "string" && typeof b === "string" && path.isAbsolute(a) && path.isAbsolute(b) && path.resolve(a) === path.resolve(b);
 }
 
+function repoRoot(row) {
+  for (const dir of [row.gitRepoRoot, row.cwd]) {
+    if (typeof dir !== "string" || !path.isAbsolute(dir)) continue;
+    try { return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* try cwd */ }
+  }
+  return null;
+}
+
 function noteDate(row) {
   // A date-only note is admissible only if its entire UTC day is in the window.
   const explicit = typeof row.date === "string" ? row.date : "";
@@ -40,29 +48,32 @@ function noteDate(row) {
  * be taken from that session's normalized events, not a full transcript.
  * Returns arrays (empty means none); source failures are intentionally soft.
  */
-export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir } = {}) {
+export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null } = {}) {
   const start = time(session?.endedAt);
   if (!Number.isFinite(start)) throw new Error("followup: session endedAt is required");
   if (typeof matureDays !== "number" || !Number.isFinite(matureDays) || matureDays < 0) throw new Error("followup: matureDays must be non-negative");
   const end = start + matureDays * DAY_MS;
   if (!Number.isFinite(end) || end > 8640000000000000) throw new Error("followup: invalid window");
   const result = { sessions: [], commits: [], journal: [] };
-  const root = typeof session.gitRepoRoot === "string" && path.isAbsolute(session.gitRepoRoot) ? session.gitRepoRoot : null;
+  const root = repoRoot(session);
   const cwd = session.cwd;
 
   if ((typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd))) {
-    const { transcripts } = discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true });
+    const { transcripts } = discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: originalLocation ? { ...originalLocation, id: session.transcriptId } : null });
     for (const candidate of transcripts) {
       if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
       if (candidate.harness === "hermes" && (!SOURCES.has(candidate.source) || candidate.parentSessionId)) continue;
-      if (root ? !samePath(root, candidate.gitRepoRoot) : !samePath(cwd, candidate.cwd)) continue;
+      if (root ? !samePath(root, repoRoot(candidate)) : !samePath(cwd, candidate.cwd)) continue;
       const began = time(candidate.startedAtMs);
       const ended = time(candidate.endedAt ?? candidate.mtimeMs);
       // mtime also guards against a stale endedAt followed by later activity.
       const modified = time(candidate.mtimeMs);
       if (!Number.isFinite(began) || !Number.isFinite(ended) || !Number.isFinite(modified) || began < start || began > end || ended < began || ended > end || modified < began || modified > end) continue;
       try {
+        const revision = transcriptRevision(candidate);
+        if (!revision) continue;
         const events = await readTranscriptEvents(candidate);
+        if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(candidate))) continue;
         const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));
         const assistants = events.filter((e) => e.kind === "message" && e.role === "assistant" && message(e.text));
         if (!users.length && !assistants.length) continue;

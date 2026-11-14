@@ -3,22 +3,34 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { runOutcome, validateOutcome } from "../src/outcome.js";
 import { evidenceFile, writeJson } from "../src/state.js";
+import { transcriptRevision } from "../src/harnesses.js";
 
 const followup = { sessions: [{ ref: "session:later", firstUser: "Still stuck" }], commits: [], journal: [] };
 const reply = { aim: "Fix the bug", label: "stalled", reason: "It remains", evidence: [{ ref: "trace", quote: "Fix the bug" }] };
 test("validates citations and verbatim quotes", () => {
-  assert.ok(validateOutcome(reply, "Fix the bug", followup));
+  assert.ok(validateOutcome(reply, "Fix the bug", followup, ["Fix the bug"]));
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:other", quote: "Still stuck" }] }, "Fix the bug", followup));
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "trace", quote: "invented" }] }, "Fix the bug", followup));
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:later", quote: "invented" }] }, "Fix the bug", followup));
+  assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:later", quote: "session:later" }] }, "Fix the bug", followup));
+  assert.ok(!validateOutcome(reply, "Fix the bug", followup, []));
+});
+test("CLI reports scoring failures without printing private evidence", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-cli-"));
+  writeJson(evidenceFile(dir, "x", "claude"), { harness: "claude", transcriptId: "x", status: "ok", endedAt: "2020-01-01T00:00:00Z", outcomeSnapshot: { trace: "PRIVATE QUOTE" } });
+  const result = spawnSync(process.execPath, ["bin/ca-improve.js", "outcome", "--state-dir", dir, "--analyzer", "mock"], { cwd: path.resolve("."), encoding: "utf8" });
+  assert.equal(result.status, 1);
+  assert.equal(JSON.parse(result.stdout).failed, 1);
+  assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE QUOTE/);
 });
 test("maturation, preview, failures, and explicit rescore", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-test-"));
   const transcript = path.join(dir, "trace.jsonl");
   fs.writeFileSync(transcript, JSON.stringify({ type: "user", message: { role: "user", content: "Fix the bug" } }) + "\n");
-  const record = { harness: "claude", transcriptId: "x", status: "ok", endedAt: "2026-01-01T00:00:00Z", positive: [1], negative: [], gaps: [] };
+  const record = { harness: "claude", transcriptId: "x", status: "ok", endedAt: "2026-01-01T00:00:00Z", positive: [1], negative: [], gaps: [], outcomeSnapshot: { revision: transcriptRevision({ harness: "claude", path: transcript }), trace: "Fix the bug", texts: ["Fix the bug"], firstUserMessage: "Fix the bug" } };
   const file = evidenceFile(dir, "x", "claude");
   writeJson(file, record);
   const options = { stateDir: dir, now: Date.parse("2026-01-04T00:00:00Z"), transcripts: [{ harness: "claude", id: "x", path: transcript }], collect: async () => followup, invoke: async (_role, prompt) => { assert.ok(!prompt.includes("SOUL_BASELINE")); return reply; } };
@@ -31,7 +43,10 @@ test("maturation, preview, failures, and explicit rescore", async () => {
   assert.equal((await runOutcome({ ...options, invoke: async () => ({ ...reply, evidence: [] }) })).failed, 1);
   assert.equal(fs.readFileSync(file, "utf8"), before);
   assert.equal((await runOutcome(options)).scored, 1);
+  assert.equal(JSON.parse(fs.readFileSync(file)).outcome.rubric.matureDays, 3);
   assert.deepEqual(JSON.parse(fs.readFileSync(file)).positive, [1]);
   assert.equal((await runOutcome(options)).selected, 0);
   assert.equal((await runOutcome({ ...options, rescore: true })).scored, 1);
+  fs.appendFileSync(transcript, "changed");
+  assert.equal((await runOutcome({ ...options, rescore: true })).failed, 1);
 });

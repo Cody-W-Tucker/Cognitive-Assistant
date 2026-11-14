@@ -77,8 +77,9 @@ async function main() {
             minGapEvidence,
           });
     tui?.stop();
-    process.stdout.write(`${JSON.stringify(proposal)}\n`);
-    return 0;
+    const output = command === "outcome" ? { runId: proposal.runId, preview: proposal.preview, selected: proposal.selected, scored: proposal.scored, failed: proposal.failed } : proposal;
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+    return command === "outcome" && proposal.failed ? 1 : 0;
   } catch (err) {
     tui?.stop();
     process.stderr.write(`ca-improve ${command}: ${err.message}\n`);

@@ -28,7 +28,7 @@ it("includes only matching sessions wholly inside inclusive bounds", async () =>
   assert.equal(result.sessions[0].firstUser.length, 2000);
   assert.equal(result.sessions[0].lastAssistant, "last");
   assert.deepEqual(result.commits, []); assert.deepEqual(result.journal, []);
-  assert.deepEqual((await collectFollowup({ session: { ...base, gitRepoRoot: "/project" }, home })).sessions, []);
+  assert.equal((await collectFollowup({ session: { ...base, gitRepoRoot: "/project" }, home })).sessions.length, 2);
 });
 
 it("filters commits by inclusive committer timestamps", async () => {
@@ -41,6 +41,19 @@ it("filters commits by inclusive committer timestamps", async () => {
   const result = await collectFollowup({ session: { ...base, gitRepoRoot: root }, home: tmpDir() });
   assert.deepEqual(result.commits.map((c) => c.subject), ["commit 2", "commit 1"]);
   assert.ok(result.commits.every((c) => /^commit:[a-f0-9]{40}$/.test(c.ref)));
+});
+
+it("matches a repo root against another harness cwd, but not another repository", async () => {
+  const root = tmpDir(), other = tmpDir(), home = tmpDir();
+  execFileSync("git", ["init", "-q", root]);
+  execFileSync("git", ["init", "-q", other]);
+  fs.mkdirSync(path.join(root, "sub"));
+  for (const [id, cwd] of [["same", path.join(root, "sub")], ["other", other]]) {
+    const file = writeJsonl(path.join(home, ".claude", "projects", `${id}.jsonl`), [{ sessionId: id, cwd, timestamp: new Date(start + day).toISOString(), role: "user", content: id }]);
+    fs.utimesSync(file, (start + day) / 1000, (start + day) / 1000);
+  }
+  const result = await collectFollowup({ session: { ...base, harness: "hermes", gitRepoRoot: root }, home });
+  assert.deepEqual(result.sessions.map((item) => item.ref), ["session:same"]);
 });
 
 it("searches Journal lexically and excludes undated and out-of-window notes", async () => {

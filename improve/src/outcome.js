@@ -3,9 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { distill } from "./distill.js";
 import { collectFollowup } from "./followup.js";
-import { cutoffMs, discoverTranscripts, readTranscriptEvents } from "./harnesses.js";
+import { cutoffMs, transcriptRevision } from "./harnesses.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
 import { loadPrompt, renderPrompt } from "./prompts.js";
@@ -15,10 +14,10 @@ const DAY = 86400000;
 const labels = new Set(["advanced", "stalled", "regressed", "unclear"]);
 const time = (v) => v == null || v === "" ? NaN : typeof v === "number" ? v : Date.parse(v);
 
-export function validateOutcome(reply, trace, followup) {
+export function validateOutcome(reply, trace, followup, traceTexts = []) {
   if (!reply || typeof reply.aim !== "string" || !reply.aim.trim() || typeof reply.reason !== "string" || !reply.reason.trim() || !labels.has(reply.label) || !Array.isArray(reply.evidence) || (reply.label !== "unclear" && !reply.evidence.length)) return false;
-  const sources = new Map(Object.values(followup).flat().map((item) => [item.ref, Object.values(item).filter((v) => typeof v === "string")]));
-  return reply.evidence.every(({ ref, quote } = {}) => typeof ref === "string" && typeof quote === "string" && quote.trim() && (ref === "trace" ? trace.includes(quote) : sources.has(ref) && sources.get(ref).some((value) => value.includes(quote))));
+  const sources = new Map(Object.values(followup).flat().map((item) => [item.ref, [item.firstUser, item.lastAssistant, item.subject, item.text].filter((v) => typeof v === "string")]));
+  return reply.evidence.every(({ ref, quote } = {}) => typeof ref === "string" && typeof quote === "string" && quote.trim() && (ref === "trace" ? trace.includes(quote) && traceTexts.some((text) => text.includes(quote)) : sources.has(ref) && sources.get(ref).some((value) => value.includes(quote))));
 }
 
 export async function runOutcome({ home, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup, transcripts = null } = {}) {
@@ -31,14 +30,12 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
   const custom = Boolean(invoke);
   if (!invoke) { if (analyzer === "mock") invoke = mockInvoke; else { assertModelConfigured(); invoke = modelInvoke(stateDir); } }
   const model = modelName || (custom ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL));
-  const rubric = { promptSha: createHash("sha256").update(loadPrompt("outcome")).digest("hex"), model };
+  const rubric = { promptSha: createHash("sha256").update(loadPrompt("outcome")).digest("hex"), model, matureDays: days };
   const rows = readEvidenceRecords(stateDir).filter((r) => {
     const ended = time(r.endedAt);
     return Number.isFinite(ended) && ended >= cutoff && ended + days * DAY <= now && (rescore || !r.outcome);
   }).sort((a, b) => time(b.endedAt) - time(a.endedAt));
   const selected = limit === null ? rows : rows.slice(0, Number(limit));
-  const discovered = transcripts ?? (selected.length ? discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true }).transcripts : []);
-  const index = new Map(discovered.map((t) => [checkpointKey(t), t]));
   const runId = `outcome-${new Date(now).toISOString().replace(/[-:.TZ]/g, "")}-${randomBytes(4).toString("hex")}`;
   const preview = dryRun ? path.join(stateDir, "outcome-preview", `${runId}.jsonl`) : null;
   if (preview) { fs.mkdirSync(path.dirname(preview), { recursive: true, mode: 0o700 }); fs.writeFileSync(preview, "", { mode: 0o600 }); }
@@ -46,14 +43,17 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
   for (const record of selected) {
     let result;
     try {
-      const session = index.get(checkpointKey({ harness: record.harness, id: record.transcriptId }));
-      if (!session) throw new Error("original session unavailable");
-      const events = await readTranscriptEvents(session);
-      const trace = distill(events, session);
-      const firstUserMessage = events.find((e) => e.kind === "message" && e.role === "user" && e.text)?.text || "";
-      const followup = await collect({ session: record, firstUserMessage, matureDays: days, home, stateDir });
+      const snapshot = record.outcomeSnapshot;
+      const session = snapshot?.location ?? transcripts?.find((t) => checkpointKey(t) === checkpointKey({ harness: record.harness, id: record.transcriptId }));
+      if (!session || session.harness !== record.harness) throw new Error("original session unavailable");
+      const revision = transcriptRevision(session);
+      if (!snapshot?.revision || !revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session snapshot unavailable or changed");
+      const { trace, firstUserMessage, texts } = snapshot;
+      if (typeof trace !== "string" || !Array.isArray(texts)) throw new Error("invalid original session snapshot");
+      const followup = await collect({ session: record, firstUserMessage, matureDays: days, home, stateDir, originalLocation: session });
+      if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(session))) throw new Error("original session changed");
       const prompt = renderPrompt("outcome", { TRACE: trace, FOLLOWUP: JSON.stringify(followup, null, 2) });
-      const valid = (reply) => validateOutcome(reply, trace, followup);
+      const valid = (reply) => validateOutcome(reply, trace, followup, texts);
       const reply = await invoke("outcome", prompt, { trace, followup, validate: valid });
       if (!valid(reply)) throw new Error("invalid outcome reply");
       const outcome = { aim: reply.aim, label: reply.label, reason: reply.reason, evidence: reply.evidence, rubric, scoredAt: new Date(now).toISOString() };
@@ -63,7 +63,7 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
         const file = readJson(qualified)?.status === "ok" ? qualified : evidenceFile(stateDir, record.transcriptId);
         writeJson(file, { ...record, outcome });
       }
-    } catch (err) { result = { harness: record.harness, transcriptId: record.transcriptId, status: "failed", error: err.message }; }
+    } catch { result = { harness: record.harness, transcriptId: record.transcriptId, status: "failed", error: "outcome scoring failed" }; }
     results.push(result);
     if (!dryRun && result.status === "failed") {
       const failures = path.join(stateDir, "outcome-failures.jsonl");

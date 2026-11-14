@@ -61,10 +61,10 @@ def is_miss(evidence: Dict) -> Optional[bool]:
 
 def _collect_outcomes(
     harness: str, sources: AbstractSet[str],
-) -> Tuple[Dict[int, Dict[str, int]], Dict[int, Set[Tuple[Optional[str], Optional[str]]]]]:
+) -> Tuple[Dict[int, Dict[str, int]], Dict[int, Set[Tuple]]]:
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
-    rubrics: Dict[int, Set[Tuple[Optional[str], Optional[str]]]] = {}
+    rubrics: Dict[int, Set[Tuple]] = {}
     records: Dict[Tuple[str, str], Dict] = {}
     evidence_dir = improve_dir() / "evidence"
     for path in sorted(evidence_dir.glob("*.json")):
@@ -106,6 +106,7 @@ def _collect_outcomes(
         rubrics.setdefault(generation, set()).add((
             prompt if isinstance(prompt, str) and prompt else None,
             model if isinstance(model, str) and model else None,
+            rubric.get("matureDays") if isinstance(rubric.get("matureDays"), (int, float)) and not isinstance(rubric.get("matureDays"), bool) and math.isfinite(rubric["matureDays"]) and rubric["matureDays"] >= 0 else None,
         ))
     return totals, rubrics
 
@@ -194,7 +195,7 @@ def evaluate(
     row = {**base, "parent": parent, "current": now, "baseline": before}
     if now["sessions"] and before["sessions"]:
         used = rubrics[number] | rubrics[parent]
-        mismatches = [name for index, name in enumerate(("promptSha", "model"))
+        mismatches = [name for index, name in enumerate(("promptSha", "model", "matureDays"))
                       if len({rubric[index] for rubric in used}) > 1]
         if mismatches:
             return {**row, "verdict": "pending", "reason": "rubric mismatch: " + ", ".join(mismatches)}

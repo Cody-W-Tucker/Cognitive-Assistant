@@ -291,10 +291,11 @@ describe("Hermes adapter schema variants", () => {
     const stateDir = path.join(h, "state");
     const found = discoverTranscripts({ home: h, stateDir, since: "all", harnesses: ["hermes"], now });
     assert.deepEqual(ids(found), ["ended", "idle"]);
-    assert.deepEqual({ ...found.transcripts[0], db: undefined }, {
+    assert.ok(found.transcripts[0].discoveryRevision);
+    assert.deepEqual({ ...found.transcripts[0], db: undefined, discoveryRevision: undefined }, {
       harness: "hermes", id: "ended", cwd: "/repo/sub", db: undefined,
       startedAtMs: now - 100000000, mtimeMs: now, endedAt: new Date(now).toISOString(),
-      source: "cli", gitRepoRoot: "/repo", parentSessionId: "parent",
+      source: "cli", gitRepoRoot: "/repo", parentSessionId: "parent", activityKnown: true, discoveryRevision: undefined,
     });
     assert.equal(fs.existsSync(path.join(stateDir, "cursor.json")), false);
     assert.deepEqual(ids(discoverTranscripts({ home: h, since: "all", harnesses: ["hermes"], now, idleHours: 0 })), ["ended", "idle", "open"]);

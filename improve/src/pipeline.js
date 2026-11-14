@@ -9,7 +9,7 @@ import { analyzeTraces, loadContexts } from "./analyze.js";
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
 import { distill } from "./distill.js";
 import { foldEvidence } from "./fold.js";
-import { discoverTranscripts, readTranscriptEvents, SUPPORTED_HARNESSES } from "./harnesses.js";
+import { discoverTranscripts, readTranscriptEvents, transcriptRevision, SUPPORTED_HARNESSES } from "./harnesses.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
 import { runOutcome } from "./outcome.js";
@@ -31,6 +31,7 @@ import {
 /** An unreadable session becomes a failed trace, retried next run rather than checkpointed. */
 async function collectTrace(transcript) {
   let events;
+  const revision = transcriptRevision(transcript);
   try {
     events = await readTranscriptEvents(transcript);
   } catch (err) {
@@ -46,6 +47,11 @@ async function collectTrace(transcript) {
       toolCalls: count((e) => e?.kind === "tool"),
     },
     distilled: distill(events, transcript),
+    outcomeSnapshot: revision && (transcript.endedAt || transcript.activityKnown) && JSON.stringify(revision) === JSON.stringify(transcript.discoveryRevision) && JSON.stringify(revision) === JSON.stringify(transcriptRevision(transcript)) ? {
+      revision, location: { harness: transcript.harness, path: transcript.path, db: transcript.db }, trace: distill(events, transcript),
+      texts: events.filter((e) => e.kind === "message" && ["user", "assistant"].includes(e.role) && typeof e.text === "string").flatMap((e) => { const text = e.text.split("--- Attached Context ---", 1)[0].trim(); return [text.slice(0, 4800), text.slice(-1000)]; }),
+      firstUserMessage: (events.find((e) => e.kind === "message" && e.role === "user" && e.text)?.text || "").split("--- Attached Context ---", 1)[0].slice(0, 500),
+    } : null,
   };
 }
 
@@ -87,7 +93,9 @@ export function sessionEligible(transcript, now, idleHours) {
 
 export function stampEvidence(record, session, rubric) {
   const startedAt = session?.startedAtMs ?? null;
-  return { ...record, sessionAt: startedAt ?? (session?.harness === "hermes" ? null : session?.mtimeMs) ?? null, startedAt, endedAt: session?.endedAt ?? null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
+  const explicitEnd = typeof session?.endedAt === "number" ? session.endedAt : Date.parse(session?.endedAt);
+  const ended = Math.max(explicitEnd || 0, session?.activityKnown ? session?.mtimeMs || 0 : 0);
+  return { ...record, sessionAt: startedAt ?? (session?.harness === "hermes" ? null : session?.mtimeMs) ?? null, startedAt, endedAt: ended ? new Date(ended).toISOString() : null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
 }
 
 /**
@@ -179,7 +187,8 @@ export async function runPipeline({
       const session = sessions.get(checkpointKey({ harness: record.harness, id: record.transcriptId }));
       // A failed or skipped re-analysis never replaces earlier good evidence.
       if (record.status === "ok" || readSessionEvidence(stateDir, record.harness, record.transcriptId)?.status !== "ok") {
-        writeJson(file, stampEvidence(record, session, rubric));
+        const snapshot = traces.find((t) => t.harness === record.harness && t.transcriptId === record.transcriptId)?.outcomeSnapshot;
+        writeJson(file, { ...stampEvidence(record, session, rubric), outcomeSnapshot: snapshot ?? null });
       }
       tally.done += 1;
       tally[record.status] += 1;
@@ -188,7 +197,8 @@ export async function runPipeline({
   });
   emit("analyze:done", { ...tally });
 
-  await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
+  const outcomes = await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
+  if (outcomes.failed) throw new Error(`outcome scoring failed for ${outcomes.failed} session(s); see private outcome-failures.jsonl`);
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {
