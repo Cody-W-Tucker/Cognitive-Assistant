@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Outcome check: did the latest living SOUL change make sessions go worse?
 
-The signal is what already went wrong in real sessions, as the analysis pass
-records it: a session is a *miss* when it has at least one quote-backed
-negative (harm or non-compliance) or gap. Each analyzed Hermes session is
-attributed to the generation that was active when it happened. The current
-generation is compared with the one it replaced:
+The signal is the delayed outcome of a session. Stalled and regressed outcomes
+are misses; advanced outcomes are not. Unclear and unscored sessions are
+excluded. Each eligible Hermes session is attributed to its active generation.
+The current generation is compared with the one it replaced:
 
 - pending: either side has fewer than ``min_sessions`` sessions.
 - revert:  the miss rate rose and a one-sided two-proportion z-test clears
@@ -29,7 +28,6 @@ from urllib.parse import quote
 from core import journal, living_soul
 from core.paths import improve_dir, soul_dir
 
-MISS_CLASSES = {"harm", "non-compliance"}
 VERDICT_SOURCES = frozenset({"desktop", "tui", "cli"})
 
 
@@ -48,9 +46,17 @@ def generation_at(ms: float, history: List[Dict]) -> Optional[int]:
     return active
 
 
-def is_miss(evidence: Dict) -> bool:
-    negatives = [n for n in evidence.get("negative", []) or [] if n.get("class") in MISS_CLASSES]
-    return bool(negatives or evidence.get("gaps"))
+def is_miss(evidence: Dict) -> Optional[bool]:
+    """Return None when a session has no decisive outcome."""
+    result = evidence.get("outcome")
+    if not isinstance(result, dict):
+        return None
+    label = result.get("label")
+    if label in ("stalled", "regressed"):
+        return True
+    if label == "advanced":
+        return False
+    return None
 
 
 def _collect_outcomes(
@@ -87,10 +93,13 @@ def _collect_outcomes(
         generation = generation_at(at, history)
         if generation is None:
             continue
+        miss = is_miss(evidence)
+        if miss is None:
+            continue
         bucket = totals.setdefault(generation, {"sessions": 0, "misses": 0})
         bucket["sessions"] += 1
-        bucket["misses"] += int(is_miss(evidence))
-        rubric = evidence.get("rubric")
+        bucket["misses"] += int(miss)
+        rubric = evidence["outcome"].get("rubric")
         if not isinstance(rubric, dict):
             rubric = {}
         prompt, model = rubric.get("promptSha"), rubric.get("model")
@@ -102,7 +111,7 @@ def _collect_outcomes(
 
 
 def session_outcomes(harness: str = "hermes", sources: Optional[AbstractSet[str]] = None) -> Dict[int, Dict[str, int]]:
-    """Per generation: eligible analyzed session count and sessions with a miss."""
+    """Per generation: decisive outcome count and sessions with a miss."""
     totals, _ = _collect_outcomes(harness, VERDICT_SOURCES if sources is None else sources)
     return totals
 
@@ -193,6 +202,7 @@ def evaluate(
         return {**row, "verdict": "pending", "reason": f"need {min_sessions} sessions on each side"}
     z = z_score(now, before)
     row["z"] = round(z, 3)
+    row["improved"] = z < -z_threshold
     row["verdict"] = "revert" if z > z_threshold else "keep"
     if record:
         _record_verdict(row)

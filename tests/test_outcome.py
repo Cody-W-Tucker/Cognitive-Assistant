@@ -27,6 +27,7 @@ def _ms(when: datetime) -> int:
 def _write_evidence(
     name: str, when: datetime, miss: bool, harness: str = "hermes",
     source: str | None = "cli", rubric: dict | None = None,
+    label: str | None = None, scored: bool = True,
 ) -> None:
     negative = [{"class": "harm", "quote": "q"}] if miss else []
     payload = {
@@ -40,6 +41,8 @@ def _write_evidence(
         "source": source,
         "rubric": rubric,
     }
+    if scored:
+        payload["outcome"] = {"label": label or ("stalled" if miss else "advanced"), "rubric": rubric}
     path = improve_dir() / "evidence" / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -60,11 +63,13 @@ class OutcomeUnitTests(unittest.TestCase):
         self.assertEqual(outcome.generation_at(_ms(T0 + timedelta(days=1)), history), 1)
         self.assertEqual(outcome.generation_at(_ms(T0 + timedelta(days=8)), history), 2)
 
-    def test_miss_counts_harm_noncompliance_and_gaps_only(self) -> None:
-        self.assertTrue(outcome.is_miss({"negative": [{"class": "harm"}]}))
-        self.assertTrue(outcome.is_miss({"negative": [{"class": "non-compliance"}]}))
-        self.assertTrue(outcome.is_miss({"gaps": [{"mistake": "x"}]}))
-        self.assertFalse(outcome.is_miss({"negative": [{"class": "irrelevant"}], "gaps": []}))
+    def test_miss_uses_outcome_labels_only(self) -> None:
+        for label in ("stalled", "regressed"):
+            self.assertIs(outcome.is_miss({"outcome": {"label": label}}), True)
+        self.assertIs(outcome.is_miss({"outcome": {"label": "advanced"}, "gaps": [1]}), False)
+        for evidence in ({"outcome": {"label": "unclear"}}, {"negative": [{"class": "harm"}]},
+                         {"outcome": {"label": "invalid"}}):
+            self.assertIsNone(outcome.is_miss(evidence))
 
 
 class AutoCycleTests(CAHomeTestCase):
@@ -152,12 +157,44 @@ class AutoCycleTests(CAHomeTestCase):
         _write_evidence("same", T0, miss=True)
         path = improve_dir() / "evidence" / "hermes:same.json"
         legacy = json.loads((path.parent / "same.json").read_text(encoding="utf-8"))
-        path.write_text(json.dumps({**legacy, "negative": []}), encoding="utf-8")
+        path.write_text(json.dumps({**legacy, "outcome": {**legacy["outcome"], "label": "advanced"}}), encoding="utf-8")
         self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 0}})
         path.write_text(json.dumps({**legacy, "source": "cron"}), encoding="utf-8")
         self.assertEqual(outcome.session_outcomes(), {})
         path.write_text(json.dumps({**legacy, "status": "failed"}), encoding="utf-8")
         self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 1}})
+    def test_unclear_and_unscored_do_not_count(self) -> None:
+        self._set_activations([(T0, 1)])
+        _write_evidence("unclear", T0, True, label="unclear")
+        _write_evidence("unscored", T0, True, scored=False)
+        self.assertEqual(outcome.session_outcomes(), {})
+        _write_evidence("advanced", T0, True, label="advanced")
+        _write_evidence("regressed", T0, False, label="regressed")
+        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 2, "misses": 1}})
+
+    def test_unscored_generations_are_pending(self) -> None:
+        proposal = self.run_mock_proposal()
+        self._adopt_after_baseline(proposal, misses=0)
+        current = living_soul.current_generation()
+        start = T0 + timedelta(days=7)
+        self._set_activations([(T0, 1), (start, current["generation"])])
+        for i in range(10):
+            _write_evidence(f"after{i}", start + timedelta(minutes=i), True, scored=False)
+        result = outcome.evaluate(min_sessions=5, record=False)
+        self.assertEqual(result["verdict"], "pending")
+        self.assertEqual(result["current"]["sessions"], 0)
+
+    def test_improved_is_reported_without_changing_keep_rule(self) -> None:
+        proposal = self.run_mock_proposal()
+        self._adopt_after_baseline(proposal, misses=8)
+        current = living_soul.current_generation()
+        start = T0 + timedelta(days=7)
+        self._set_activations([(T0, 1), (start, current["generation"])])
+        _fill("after", start, total=10, misses=1)
+        result = outcome.evaluate(min_sessions=5)
+        self.assertEqual(result["verdict"], "keep")
+        self.assertTrue(result["improved"])
+        self.assertTrue(outcome.verdicts()[current["generation"]]["improved"])
 
     def test_rubric_mismatch_blocks_verdict(self) -> None:
         proposal = self.run_mock_proposal()
