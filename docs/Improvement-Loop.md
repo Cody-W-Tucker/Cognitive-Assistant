@@ -211,5 +211,17 @@ The analyzer's positive, negative and gaps remain unchanged.
 `python -m core improve-outcome --since 70d --dry-run` to write a private JSONL
 preview under `outcome-preview/` without changing evidence. `--limit N`,
 `--mature-days N`, `--rescore`, and `--analyzer mock` are also available.
+
+Outcome scoring requires a snapshot of the original session and an unchanged
+session revision. SQLite revisions cover that session, not the shared database;
+header-only OpenCode exports remain unverifiable and are excluded. Existing
+SQLite snapshots made with the older database-wide revision cannot be converted
+after the database has changed. Historical evidence without a snapshot is not
+safe to reconstruct from timestamps or checkpoints alone: a session may have
+been reopened or edited. The Node CLI's explicit `outcome --backfill-snapshots`
+can reconstruct only records that already carry a contemporaneously saved
+`originalRevision` matching the current session and its recorded end time.
+Most older records do not carry that proof and remain unscorable; this option
+does not make a historical backtest complete. Dry runs do not save backfills.
 Rescoring existing outcomes requires `--rescore`; use it deliberately after a
 rubric change. Preview and cache files contain private session material.

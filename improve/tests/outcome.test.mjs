@@ -4,9 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import { runOutcome, validateOutcome } from "../src/outcome.js";
 import { evidenceFile, writeJson } from "../src/state.js";
-import { transcriptRevision } from "../src/harnesses.js";
+import { discoverTranscripts, legacySqliteRevision, transcriptRevision } from "../src/harnesses.js";
 
 const followup = { sessions: [{ ref: "session:later", firstUser: "Still stuck" }], commits: [], journal: [] };
 const reply = { aim: "Fix the bug", label: "stalled", reason: "It remains", evidence: [{ ref: "trace", quote: "Fix the bug" }] };
@@ -49,4 +50,48 @@ test("maturation, preview, failures, and explicit rescore", async () => {
   assert.equal((await runOutcome({ ...options, rescore: true })).scored, 1);
   fs.appendFileSync(transcript, "changed");
   assert.equal((await runOutcome({ ...options, rescore: true })).failed, 1);
+});
+
+test("explicit backfill requires a matching contemporaneous revision and session end", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-backfill-"));
+  const dir = path.join(home, "state"), root = path.join(home, ".claude", "projects");
+  fs.mkdirSync(root, { recursive: true });
+  const file = path.join(root, "x.jsonl"), end = Date.parse("2026-01-01T00:00:00Z");
+  fs.writeFileSync(file, JSON.stringify({ sessionId: "x", timestamp: "2025-12-31T00:00:00Z", role: "user", content: "Fix the bug" }) + "\n");
+  fs.utimesSync(file, end / 1000, end / 1000);
+  const session = discoverTranscripts({ home, since: "all", harnesses: ["claude"] }).transcripts[0];
+  const evidence = evidenceFile(dir, "x", "claude");
+  const record = { harness: "claude", transcriptId: "x", status: "ok", endedAt: new Date(end).toISOString() };
+  const options = { home, stateDir: dir, now: end + 3 * 86400000, transcripts: [session], collect: async () => followup, invoke: async () => reply };
+  writeJson(evidence, record);
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true })).failed, 1);
+  writeJson(evidence, { ...record, originalRevision: session.discoveryRevision });
+  assert.equal((await runOutcome(options)).failed, 1);
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true, dryRun: true })).scored, 1);
+  assert.equal(JSON.parse(fs.readFileSync(evidence)).outcomeSnapshot, undefined);
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true })).scored, 1);
+  assert.ok(JSON.parse(fs.readFileSync(evidence)).outcomeSnapshot);
+  writeJson(evidence, { ...record, originalRevision: session.discoveryRevision });
+  fs.appendFileSync(file, JSON.stringify({ role: "user", content: "reopened" }) + "\n");
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true })).failed, 1);
+});
+
+test("explicitly upgrades an unchanged legacy SQLite snapshot", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-old-"));
+  const dbPath = path.join(dir, "state.db"), db = new DatabaseSync(dbPath);
+  db.exec("CREATE TABLE sessions (id TEXT); CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT); INSERT INTO sessions VALUES ('x'); INSERT INTO messages VALUES ('x', 'user', 'Fix the bug')");
+  db.close();
+  const session = { harness: "hermes", id: "x", db: dbPath };
+  const old = legacySqliteRevision(session), evidence = evidenceFile(dir, "x", "hermes");
+  const record = { harness: "hermes", transcriptId: "x", status: "ok", endedAt: "2026-01-01T00:00:00Z", outcomeSnapshot: { location: session, revision: old, trace: "Fix the bug", texts: ["Fix the bug"] } };
+  writeJson(evidence, record);
+  const options = { stateDir: dir, now: Date.parse("2026-01-04T00:00:00Z"), collect: async () => followup, invoke: async () => reply };
+  assert.equal((await runOutcome(options)).failed, 1);
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true })).scored, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(evidence)).outcomeSnapshot.revision, transcriptRevision(session));
+  writeJson(evidence, record);
+  const changed = new DatabaseSync(dbPath);
+  changed.exec("INSERT INTO messages VALUES ('x', 'user', 'reopened')");
+  changed.close();
+  assert.equal((await runOutcome({ ...options, backfillSnapshots: true })).failed, 1);
 });

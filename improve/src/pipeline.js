@@ -48,7 +48,7 @@ async function collectTrace(transcript) {
     },
     distilled: distill(events, transcript),
     outcomeSnapshot: revision && (transcript.endedAt || transcript.activityKnown) && JSON.stringify(revision) === JSON.stringify(transcript.discoveryRevision) && JSON.stringify(revision) === JSON.stringify(transcriptRevision(transcript)) ? {
-      revision, location: { harness: transcript.harness, path: transcript.path, db: transcript.db }, trace: distill(events, transcript),
+      revision, location: { harness: transcript.harness, id: transcript.id, path: transcript.path, db: transcript.db }, trace: distill(events, transcript),
       texts: events.filter((e) => e.kind === "message" && ["user", "assistant"].includes(e.role) && typeof e.text === "string").flatMap((e) => { const text = e.text.split("--- Attached Context ---", 1)[0].trim(); return [text.slice(0, 4800), text.slice(-1000)]; }),
       firstUserMessage: (events.find((e) => e.kind === "message" && e.role === "user" && e.text)?.text || "").split("--- Attached Context ---", 1)[0].slice(0, 500),
     } : null,

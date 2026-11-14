@@ -71,7 +71,7 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
       if (!Number.isFinite(began) || !Number.isFinite(ended) || !Number.isFinite(modified) || began < start || began > end || ended < began || ended > end || modified < began || modified > end) continue;
       try {
         const revision = transcriptRevision(candidate);
-        if (!revision) continue;
+        if (!revision || JSON.stringify(revision) !== JSON.stringify(candidate.discoveryRevision)) continue;
         const events = await readTranscriptEvents(candidate);
         if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(candidate))) continue;
         const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));

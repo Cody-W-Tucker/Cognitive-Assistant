@@ -11,13 +11,13 @@ const USAGE = `usage:
   ca-improve run (--headless|--tui) --state-dir D --soul-path S [--experience-file E] [--posture-path P]
                  [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--home H] [--harness X]...
   ca-improve synthesize --state-dir D --soul-path S [--min-gap-evidence N]
-  ca-improve outcome --state-dir D [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--analyzer model|mock]`;
+  ca-improve outcome --state-dir D [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--backfill-snapshots] [--analyzer model|mock]`;
 
 function parseFlags(args, command) {
   const flags = { harness: [] };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-    if (["--headless", "--tui", "--dry-run", "--rescore"].includes(arg)) {
+    if (["--headless", "--tui", "--dry-run", "--rescore", "--backfill-snapshots"].includes(arg)) {
       flags[arg.slice(2)] = true;
       continue;
     }
@@ -70,7 +70,7 @@ async function main() {
             minGapEvidence,
             progress: tui?.event,
           })
-        : command === "outcome" ? await runOutcome({ home: flags.home, stateDir: flags["state-dir"], since: flags.since || "all", limit: flags.limit ?? null, matureDays: flags["mature-days"] ?? 3, dryRun: !!flags["dry-run"], rescore: !!flags.rescore, analyzer })
+        : command === "outcome" ? await runOutcome({ home: flags.home, stateDir: flags["state-dir"], since: flags.since || "all", limit: flags.limit ?? null, matureDays: flags["mature-days"] ?? 3, dryRun: !!flags["dry-run"], rescore: !!flags.rescore, backfillSnapshots: !!flags["backfill-snapshots"], analyzer })
         : await runSynthesizeResume({
             stateDir: flags["state-dir"],
             soulPath: flags["soul-path"],

@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 import { recordToEvents } from "./distill.js";
 import { HEAD_BYTES, headHasSelfSentinel } from "./sentinel.js";
@@ -322,7 +323,13 @@ const HERMES = {
 function listSqliteSessions(store, root, isolated, excludedId) {
   const dbPath = store.dbPath(root, isolated);
   if (!fs.statSync(dbPath, { throwIfNoEntry: false })?.isFile()) return null;
-  return withDb(dbPath, (db, schema) => store.list(db, schema, excludedId)).map((row) => ({ ...row, location: { db: dbPath } }));
+  return withDb(dbPath, (db, schema) => {
+    db.exec("BEGIN");
+    try {
+      return store.list(db, schema, excludedId).map((row) => ({ ...row, location: { db: dbPath },
+        sqliteRevision: sqliteRevision(db, schema, store === HERMES ? "hermes" : "opencode", row.id) }));
+    } finally { db.exec("ROLLBACK"); }
+  });
 }
 
 /** OpenCode `export` output to events (no model call). */
@@ -400,7 +407,7 @@ const ADAPTERS = {
     // its export command is then the authoritative read path.
     read: async (transcript) => {
       const events = withDb(transcript.db, (db, schema) => OPENCODE.read(db, schema, transcript.id));
-      return events.length ? events : await readOpencodeExport(transcript.id);
+      return events.length || transcriptRevision(transcript) ? events : await readOpencodeExport(transcript.id);
     },
   },
   hermes: {
@@ -414,13 +421,43 @@ export async function readTranscriptEvents(transcript) {
   return await ADAPTERS[transcript.harness].read(transcript);
 }
 
-// Conservative store revision: shared SQLite changes invalidate snapshots too.
-// Never use a header-only OpenCode export: its backing store cannot be verified.
+// Hash the complete session row and the transcript rows in one SQLite read
+// transaction. Unrelated sessions and WAL checkpoints must not invalidate it.
+function sqliteRevision(db, schema, harness, id) {
+  const table = harness === "hermes" ? "sessions" : schema.has("session_v2") ? "session_v2" : "session";
+  const messages = harness === "hermes" ? "messages" : "session_message";
+  if (!id || !schema.get(table)?.has("id") || !schema.get(messages)?.has("session_id")) return null;
+  if (harness === "opencode" && (!schema.get(messages).has("data") || !schema.get(messages).has("seq"))) return null;
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!row) return null;
+  const entries = db.prepare(`SELECT * FROM ${messages} WHERE session_id = ? ORDER BY rowid`).all(id);
+  // An empty OpenCode store falls back to export, whose backing data is not verified.
+  if (harness === "opencode" && !entries.length) return null;
+  const encode = (_key, value) => typeof value === "bigint" ? String(value) : value instanceof Uint8Array ? Buffer.from(value).toString("base64") : value;
+  return { version: 1, harness, id, sha256: createHash("sha256").update(JSON.stringify([row, entries], encode)).digest("hex") };
+}
+
 export function transcriptRevision(transcript) {
   const file = transcript.path || transcript.db;
-  if (!file || (transcript.harness === "opencode")) return null;
+  if (!file) return null;
   try {
+    if (transcript.db) return withDb(file, (db, schema) => {
+      db.exec("BEGIN");
+      try { return sqliteRevision(db, schema, transcript.harness, transcript.id); }
+      finally { db.exec("ROLLBACK"); }
+    });
     return [file, ...(transcript.db ? [file + "-wal", file + "-shm"] : [])].map((p) => {
+      const s = fs.statSync(p, { throwIfNoEntry: false });
+      return s ? [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs] : null;
+    });
+  } catch { return null; }
+}
+
+// Compatibility proof for snapshots produced before session-scoped revisions.
+export function legacySqliteRevision(transcript) {
+  if (!transcript.db || transcript.harness === "opencode") return null;
+  try {
+    return [transcript.db, transcript.db + "-wal", transcript.db + "-shm"].map((p) => {
       const s = fs.statSync(p, { throwIfNoEntry: false });
       return s ? [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs] : null;
     });
@@ -456,7 +493,6 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
     perHarness[harness] = stats;
     let rows;
     const dbPath = harness === "hermes" ? HERMES.dbPath(root, isolated) : harness === "opencode" ? OPENCODE.dbPath(root, isolated) : null;
-    const before = dbPath ? transcriptRevision({ harness, db: dbPath }) : null;
     try {
       rows = ADAPTERS[harness].list(root, isolated, cutoff, excludeTranscript?.harness === harness ? excludeTranscript : null);
     } catch (err) {
@@ -480,7 +516,7 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
         startedAtMs: row.startedAtMs ?? (harness === "hermes" ? null : row.mtimeMs) ?? null, endedAt: row.endedAt ?? null,
         source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null, activityKnown: row.activityKnown === true };
       const revision = transcriptRevision(transcript);
-      transcript.discoveryRevision = revision && (dbPath ? JSON.stringify(before) === JSON.stringify(revision) : Math.round(revision[0]?.[3]) === row.mtimeMs) ? revision : null;
+      transcript.discoveryRevision = revision && (dbPath ? JSON.stringify(row.sqliteRevision) === JSON.stringify(revision) : Math.round(revision[0]?.[3]) === row.mtimeMs) ? revision : null;
       // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
       const prior = processed[checkpointKey(transcript)];
       if (prior !== undefined && (prior === null || prior === transcript.mtimeMs) && !includeCheckpointed?.(transcript)) continue;

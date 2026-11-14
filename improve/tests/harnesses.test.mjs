@@ -2,8 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import { cutoffMs, discoverTranscripts, opencodeExportToEvents, readTranscriptEvents } from "../src/harnesses.js";
+import { cutoffMs, discoverTranscripts, opencodeExportToEvents, readTranscriptEvents, transcriptRevision } from "../src/harnesses.js";
 import { codex, daysAgoSec, makeSqlite, nowSec, tmpDir, writeCodexSession, writeJsonl } from "./helpers.mjs";
 
 const OPENCODE_V2 = [
@@ -16,6 +17,24 @@ const HERMES_MESSAGES = "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id 
 const opencodeDb = (home) => path.join(home, ".local", "share", "opencode", "opencode.db");
 const hermesDb = (home) => path.join(home, ".hermes", "state.db");
 const ids = (result) => result.transcripts.map((t) => t.id);
+
+it("SQLite revisions are session-scoped and detect reopening, including OpenCode", () => {
+  const { home: root } = fixtureHome();
+  for (const harness of ["hermes", "opencode"]) {
+    const session = discoverTranscripts({ home: root, since: "all", harnesses: [harness] }).transcripts[0];
+    const revision = transcriptRevision(session);
+    assert.ok(revision);
+    assert.deepEqual(revision, session.discoveryRevision);
+    const db = new DatabaseSync(session.db);
+    if (harness === "hermes") db.exec("INSERT INTO messages VALUES ('other', 'other', 'user', 'unrelated')");
+    else db.exec("INSERT INTO session_message VALUES ('other', 'other', 'user', 0, 0, 0, '{}')");
+    assert.deepEqual(transcriptRevision(session), revision);
+    if (harness === "hermes") db.exec("INSERT INTO messages VALUES ('new', 'hermes-1', 'user', 'reopened')");
+    else db.exec("INSERT INTO session_message VALUES ('new', 'opencode-1', 'user', 1, 0, 0, '{}')");
+    assert.notDeepEqual(transcriptRevision(session), revision);
+    db.close();
+  }
+});
 
 /** A fake HOME with one session per supported store plus excluded-store and self-session traps. */
 function fixtureHome() {
@@ -284,6 +303,7 @@ describe("Hermes adapter schema variants", () => {
     const now = 1700000000000;
     makeSqlite(hermesDb(h), [
       ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER, ended_at INTEGER, source TEXT, cwd TEXT, git_repo_root TEXT, parent_session_id TEXT)"],
+      ["CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT)"],
       ["INSERT INTO sessions VALUES ('ended', ?, ?, ?, 'cli', '/repo/sub', '/repo', 'parent')", now / 1000 - 100000, now / 1000, now / 1000],
       ["INSERT INTO sessions VALUES ('idle', ?, ?, NULL, 'telegram', NULL, NULL, NULL)", now / 1000 - 100000, now / 1000 - 13 * 3600],
       ["INSERT INTO sessions VALUES ('open', ?, ?, NULL, 'cli', NULL, NULL, NULL)", now / 1000 - 100000, now / 1000 - 3600],
