@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { collectFollowup } from "./followup.js";
+import { collectFollowup, touchedPaths } from "./followup.js";
 import { cutoffMs, discoverTranscripts, readTranscriptEvents, sessionEndMs, transcriptRevision } from "./harnesses.js";
 import { distill } from "./distill.js";
 import { mockInvoke } from "./mock.js";
@@ -39,15 +39,18 @@ export function outcomeSnapshot(session, events, revision) {
     texts: events.filter((e) => e.kind === "message" && ["user", "assistant"].includes(e.role) && typeof e.text === "string")
       .flatMap((e) => { const text = said(e.text).trim(); return [text.slice(0, 4800), text.slice(-1000)]; }),
     firstUserMessage: said(events.find((e) => e.kind === "message" && e.role === "user" && e.text)?.text || "").slice(0, 500),
+    touched: touchedPaths(events),
   };
 }
 
 const DAY = 86400000;
-const labels = new Set(["advanced", "stalled", "regressed", "unclear"]);
+const labels = new Set(["advanced", "stalled", "regressed", "answered", "unclear"]);
+// A label that claims nothing about what happened next needs no citation.
+const uncited = new Set(["answered", "unclear"]);
 const time = (v) => v == null || v === "" ? NaN : typeof v === "number" ? v : Date.parse(v);
 
 export function validateOutcome(reply, trace, followup, traceTexts = []) {
-  if (!reply || typeof reply.aim !== "string" || !reply.aim.trim() || typeof reply.reason !== "string" || !reply.reason.trim() || !labels.has(reply.label) || !Array.isArray(reply.evidence) || (reply.label !== "unclear" && !reply.evidence.length)) return false;
+  if (!reply || typeof reply.aim !== "string" || !reply.aim.trim() || typeof reply.reason !== "string" || !reply.reason.trim() || !labels.has(reply.label) || !Array.isArray(reply.evidence) || (!uncited.has(reply.label) && !reply.evidence.length)) return false;
   const sources = new Map(Object.values(followup).flat().map((item) => [item.ref, [item.firstUser, item.lastAssistant, item.subject, item.text].filter((v) => typeof v === "string")]));
   return reply.evidence.every(({ ref, quote } = {}) => typeof ref === "string" && typeof quote === "string" && quote.trim() && (ref === "trace" ? trace.includes(quote) && traceTexts.some((text) => text.includes(quote)) : sources.has(ref) && sources.get(ref).some((value) => value.includes(quote))));
 }
@@ -99,9 +102,9 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
       const revision = transcriptRevision(session);
       const snapshot = unanalyzed ? outcomeSnapshot(session, await readTranscriptEvents(session), revision) : saved;
       if (!snapshot?.revision || !revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session snapshot unavailable or changed");
-      const { trace, firstUserMessage, texts } = snapshot;
+      const { trace, firstUserMessage, texts, touched } = snapshot;
       if (typeof trace !== "string" || !Array.isArray(texts)) throw new Error("invalid original session snapshot");
-      const followup = await collect({ session: record, firstUserMessage, matureDays: days, home, stateDir, originalLocation: session, candidates: discovered });
+      const followup = await collect({ session: record, firstUserMessage, matureDays: days, home, stateDir, originalLocation: session, candidates: discovered, touched });
       if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(session))) throw new Error("original session changed");
       const prompt = renderPrompt("outcome", { TRACE: trace, FOLLOWUP: JSON.stringify(followup, null, 2) });
       const valid = (reply) => validateOutcome(reply, trace, followup, texts);

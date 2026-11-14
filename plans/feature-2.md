@@ -17,6 +17,11 @@ text below, decided while building:
 - **The trace is a snapshot from analysis time**, valid while the session's
   messages are unchanged. A dry run reads unanalyzed sessions directly, which
   is what makes the backtest possible on a fresh CA home.
+- **A fifth label, `answered`.** The first backtest rows scored quick
+  questions as `advanced` because nothing contradicted them. A question the
+  reply settled now gets its own label and stays out of verdicts.
+- **Commits come from the repositories a session's tool calls touched**, not
+  only from a recorded repository, which most Hermes sessions lack.
 - **Journal evidence is keyword search and will rarely match.** Linking
   sessions and notes by topic similarity is a later plan addition.
 

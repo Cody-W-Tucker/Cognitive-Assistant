@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
@@ -8,6 +9,9 @@ const execFileAsync = promisify(execFile);
 const DAY_MS = 86400_000;
 const MESSAGE_LIMIT = 2000;
 const MAX_SESSIONS = 8;
+const MAX_TOUCHED = 60;
+const MAX_REPOS = 4;
+const MAX_COMMITS = 30;
 const SOURCES = new Set(["desktop", "tui", "cli"]);
 
 // Do not include attached context, tools, or unbounded transcript text.
@@ -33,6 +37,46 @@ function repoRoot(row) {
   return null;
 }
 
+/**
+ * Absolute paths named in a session's tool calls (file arguments, shell
+ * commands), in first-seen order. Most Hermes sessions record no directory,
+ * so this is how the repositories a session worked in are found.
+ */
+export function touchedPaths(events) {
+  const seen = new Set();
+  const visit = (value, depth) => {
+    if (seen.size >= MAX_TOUCHED || depth > 4) return;
+    if (typeof value === "string") {
+      for (const [found] of value.matchAll(/(?<![\w.~/-])\/[\w.@+-]+(?:\/[\w.@+-]+)+/g)) {
+        if (seen.size < MAX_TOUCHED && found.length <= 300) seen.add(found);
+      }
+    } else if (value && typeof value === "object") {
+      for (const item of Object.values(value)) visit(item, depth + 1);
+    }
+  };
+  for (const event of events || []) if (event?.kind === "tool") visit(event.input, 0);
+  return [...seen];
+}
+
+/** Repositories to read commits from: the session's own, then those it touched. */
+function reposOf(session, touched) {
+  const roots = [];
+  const tried = new Set();
+  const add = (dir) => {
+    if (roots.length >= MAX_REPOS || typeof dir !== "string" || !path.isAbsolute(dir) || tried.has(dir)) return;
+    tried.add(dir);
+    const root = repoRoot({ cwd: dir });
+    if (root && !roots.includes(root)) roots.push(root);
+  };
+  add(repoRoot(session));
+  for (const item of Array.isArray(touched) ? touched : []) {
+    if (typeof item !== "string") continue;
+    // A named file may be new or gone; its directory is what locates the repo.
+    add(fs.statSync(item, { throwIfNoEntry: false })?.isDirectory() ? item : path.dirname(item));
+  }
+  return roots;
+}
+
 function noteDate(row) {
   // A date-only note is admissible only if its entire UTC day is in the window.
   const explicit = typeof row.date === "string" ? row.date : "";
@@ -55,8 +99,11 @@ function noteDate(row) {
  * whether one continues the same aim. Other harnesses are matched by repo or
  * directory. The earliest MAX_SESSIONS are kept. `candidates` (an array, or a
  * function returning one) lets a caller discover once for many sessions.
+ *
+ * Commits: from the session's repository and from the repositories its tool
+ * calls touched (`touched`, see touchedPaths), each tagged with its `repo`.
  */
-export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null, candidates = null } = {}) {
+export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null, candidates = null, touched = [] } = {}) {
   const start = time(session?.endedAt);
   if (!Number.isFinite(start)) throw new Error("followup: session endedAt is required");
   if (typeof matureDays !== "number" || !Number.isFinite(matureDays) || matureDays < 0) throw new Error("followup: matureDays must be non-negative");
@@ -97,18 +144,20 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
     } catch { /* unreadable session */ }
   }
 
-  if (typeof root === "string" && path.isAbsolute(root)) {
+  for (const repo of reposOf(session, touched)) {
     try {
-      const { stdout } = await execFileAsync("git", ["-C", root, "log", "--since-as-filter=" + new Date(start).toISOString(), "--format=%H%x00%cI%x00%s%x00"], { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const { stdout } = await execFileAsync("git", ["-C", repo, "log", "--since-as-filter=" + new Date(start).toISOString(), "--format=%H%x00%cI%x00%s%x00"], { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
       const fields = stdout.split("\0");
       for (let i = 0; i + 2 < fields.length; i += 3) {
         const hash = fields[i].trim();
         const date = fields[i + 1];
         const at = time(date);
-        if (/^[a-f0-9]{40,64}$/.test(hash) && at >= start && at <= end) result.commits.push({ ref: `commit:${hash}`, date, subject: message(fields[i + 2]) });
+        if (/^[a-f0-9]{40,64}$/.test(hash) && at >= start && at <= end) result.commits.push({ ref: `commit:${hash}`, repo: path.basename(repo), date, subject: message(fields[i + 2]).slice(0, 300) });
       }
     } catch { /* no readable repository */ }
   }
+  // A busy repository has more commits than fit: keep those nearest the session.
+  result.commits = result.commits.sort((a, b) => time(a.date) - time(b.date)).slice(0, MAX_COMMITS);
 
   const query = message(firstUserMessage).replace(/\s+/g, " ").slice(0, 500);
   if (query) {

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { collectFollowup } from "../src/followup.js";
+import { collectFollowup, touchedPaths } from "../src/followup.js";
 import { tmpDir, writeJsonl } from "./helpers.mjs";
 
 const start = Date.parse("2025-01-01T00:00:00Z");
@@ -60,8 +60,28 @@ it("filters commits by inclusive committer timestamps", async () => {
     execFileSync("git", ["-C", root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", `commit ${i}`], { env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
   }
   const result = await collectFollowup({ session: { ...base, gitRepoRoot: root }, home: tmpDir() });
-  assert.deepEqual(result.commits.map((c) => c.subject), ["commit 2", "commit 1"]);
+  assert.deepEqual(result.commits.map((c) => c.subject), ["commit 1", "commit 2"]);
   assert.ok(result.commits.every((c) => /^commit:[a-f0-9]{40}$/.test(c.ref)));
+});
+
+it("reads commits from the repositories a session's tool calls touched", async () => {
+  const repo = tmpDir(), plain = tmpDir();
+  execFileSync("git", ["init", "-q", repo]);
+  fs.mkdirSync(path.join(repo, "modules"));
+  const date = new Date(start + day).toISOString();
+  execFileSync("git", ["-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "apply the change"], { env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+  const touched = touchedPaths([
+    { kind: "message", role: "user", text: `not a tool: ${plain}/ignored` },
+    { kind: "tool", name: "write_file", input: { path: path.join(repo, "modules", "new-file.nix") } },
+    { kind: "tool", name: "terminal", input: { command: `cd ${repo} && ls ${plain}/missing; curl https://example.com/a/b` } },
+    { kind: "tool", name: "terminal", input: `cat ${repo}/modules/new-file.nix` },
+  ]);
+  assert.deepEqual(touched, [path.join(repo, "modules", "new-file.nix"), repo, `${plain}/missing`]);
+  // No directory on the session itself, as with most Hermes sessions.
+  const session = { harness: "hermes", transcriptId: "original", endedAt: new Date(start).toISOString() };
+  const result = await collectFollowup({ session, candidates: [], touched });
+  assert.deepEqual(result.commits.map((c) => [c.repo, c.subject]), [[path.basename(repo), "apply the change"]]);
+  assert.deepEqual((await collectFollowup({ session, candidates: [] })).commits, []);
 });
 
 it("matches a repo root against another harness cwd, but not another repository", async () => {

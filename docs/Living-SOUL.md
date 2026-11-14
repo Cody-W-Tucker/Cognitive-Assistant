@@ -55,8 +55,8 @@ step per run:
    session start, to the generation that was live.
 2. Judge the active generation against the one it replaced. A session is a
    *miss* when its outcome label is `stalled` or `regressed`, and not a miss
-   when it is `advanced`. Sessions labelled `unclear`, and sessions with no
-   outcome yet, count on neither side. The analysis findings (harm,
+   when it is `advanced`. Sessions labelled `answered` or `unclear`, and
+   sessions with no outcome yet, count on neither side. The analysis findings (harm,
    non-compliance, gaps) feed proposals and play no part in the verdict. The
    verdict is `pending` until both generations have `--min-sessions` scored
    Hermes sessions (default 15), then `revert` if the miss rate rose with a

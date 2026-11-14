@@ -18,6 +18,10 @@ test("validates citations and verbatim quotes", () => {
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:later", quote: "invented" }] }, "Fix the bug", followup));
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:later", quote: "session:later" }] }, "Fix the bug", followup));
   assert.ok(!validateOutcome(reply, "Fix the bug", followup, []));
+  // A question the reply settled claims nothing about later, so it cites nothing.
+  assert.ok(validateOutcome({ ...reply, label: "answered", evidence: [] }, "Fix the bug", followup));
+  assert.ok(!validateOutcome({ ...reply, label: "advanced", evidence: [] }, "Fix the bug", followup));
+  assert.ok(!validateOutcome({ ...reply, label: "done" }, "Fix the bug", followup, ["Fix the bug"]));
 });
 test("CLI leaves an unscorable session alone without failing or printing private evidence", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-cli-"));

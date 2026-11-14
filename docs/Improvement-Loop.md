@@ -210,8 +210,10 @@ per-file mapping and license text are in `improve/LICENSE.NOTICE`.
 After analysis, the runtime scores each mature session that has successful
 evidence, once, with a blind outcome prompt: the judge sees the session trace
 and follow-up evidence, never the SOUL, posture or records. A session is mature
-three days after it ended (`--mature-days`). Citations and verbatim quotes are
-checked before an outcome is written. The analyzer's positive, negative and
+three days after it ended (`--mature-days`). The label is one of `advanced`,
+`stalled`, `regressed`, `answered` (a question the reply itself settled, so
+nothing afterwards can show more) or `unclear`. Citations and verbatim quotes
+are checked before an outcome is written; `answered` and `unclear` need none. The analyzer's positive, negative and
 gaps are not touched.
 
 Follow-up evidence is whatever falls inside the window after the session
@@ -222,7 +224,11 @@ ended:
   requirement; the judge decides whether one is about the same aim. Sessions
   from other harnesses are matched by repository or directory. The earliest
   eight are kept, each as its first user message and last agent message.
-- **Commits.** `git log` in the session's repository, when it has one.
+- **Commits.** `git log` in the session's repository when it records one, and
+  in up to four repositories its tool calls touched (absolute paths in file
+  arguments and shell commands). Most Hermes sessions record no directory, so
+  the second is what usually finds them. Each commit carries its `repo`; the
+  judge counts one only when its subject is about the same aim.
 - **Journal.** A keyword `qmd` search of the `Journal` collection, limited to
   notes dated inside the window. This rarely matches; see
   `plans/feature-2.md`.

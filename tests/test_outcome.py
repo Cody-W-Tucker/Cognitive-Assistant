@@ -68,7 +68,8 @@ class OutcomeUnitTests(unittest.TestCase):
         for label in ("stalled", "regressed"):
             self.assertIs(outcome.is_miss({"outcome": {"label": label}}), True)
         self.assertIs(outcome.is_miss({"outcome": {"label": "advanced"}, "gaps": [1]}), False)
-        for evidence in ({"outcome": {"label": "unclear"}}, {"negative": [{"class": "harm"}]},
+        for evidence in ({"outcome": {"label": "unclear"}}, {"outcome": {"label": "answered"}},
+                         {"negative": [{"class": "harm"}]},
                          {"outcome": {"label": "invalid"}}):
             self.assertIsNone(outcome.is_miss(evidence))
 

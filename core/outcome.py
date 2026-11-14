@@ -2,8 +2,8 @@
 """Outcome check: did the latest living SOUL change make sessions go worse?
 
 The signal is the delayed outcome of a session. Stalled and regressed outcomes
-are misses; advanced outcomes are not. Unclear and unscored sessions are
-excluded. Each eligible Hermes session is attributed to its active generation.
+are misses; advanced outcomes are not. Answered (a question settled by the
+reply itself), unclear and unscored sessions are excluded. Each eligible Hermes session is attributed to its active generation.
 The current generation is compared with the one it replaced:
 
 - pending: either side has fewer than ``min_sessions`` sessions.
