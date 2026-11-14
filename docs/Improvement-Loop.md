@@ -21,10 +21,14 @@ improve-run  ->  <CA home>/improve/proposal.json  ->  improve-apply  ->  experie
   absorbed by the bootstrap), so the runtime never reads the
   `experience/authored/` layout itself. `node` must be on `PATH` (the dev
   shell and the `ca` package provide it).
-- `improve/` (Node, zero dependencies) does discovery, analysis and proposal.
-  `improve/bin/ca-improve.js` has two commands, `run` and `synthesize`; both
-  print exactly one JSON proposal on stdout. Progress (`--tui`) and errors go
-  to stderr. `run` and `synthesize` share the tail in `src/propose.js`.
+- `improve/` (Node, zero dependencies) does discovery, analysis, outcome scoring
+  and proposal. `improve/bin/ca-improve.js` has three commands, `run`,
+  `synthesize` and `outcome`: `run` prints exactly one JSON proposal on
+  stdout, `outcome` prints the `{runId, preview, selected, scored,
+  unscored}` summary. Progress (`--tui`) and errors go to stderr. `run` and
+  `synthesize` share the tail in `src/propose.js`; `run` also scores mature
+  sessions in-process via `src/outcome.js` before proposing (see [Delayed
+  outcome scoring](#delayed-outcome-scoring)).
 
 The runtime writes only under its state directory. Session stores are opened
 read-only, and nothing in the repo or in Hermes is modified.
@@ -36,6 +40,7 @@ read-only, and nothing in the repo or in Hermes is modified.
 | discover | `src/harnesses.js` | no |
 | collect + distill | `src/distill.js` | no |
 | analyze | `src/analyze.js`, `prompts/analysis.md` | one per session |
+| outcome | `src/outcome.js`, `src/followup.js`, `prompts/outcome.md` | one per mature session |
 | fold | `src/fold.js` | no |
 | consolidate | `src/consolidate.js`, `prompts/consolidate.md` | one, only with >= 2 gaps |
 | synthesize | `src/synthesize.js`, `prompts/synthesis.md` | one |
@@ -141,7 +146,7 @@ object from a code fence or surrounding prose.
 | --- | --- |
 | `CA_LLM_BASE_URL` | Endpoint base, e.g. `http://127.0.0.1:8080/v1` (required) |
 | `CA_LLM_MODEL` | Model for every role |
-| `CA_LLM_MODEL_<ROLE>` | Per-role override: `ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE` |
+| `CA_LLM_MODEL_<ROLE>` | Per-role override: `ANALYSIS`, `CONSOLIDATE`, `SYNTHESIS`, `ANNOTATE`, `OUTCOME` |
 | `CA_LLM_API_KEY_FILE` | Optional file with a bearer key (use an inference-only key) |
 | `CA_LLM_RETRY_DELAYS_MS` | Backoff for 429, 5xx and network errors (default `5000,20000`) |
 
