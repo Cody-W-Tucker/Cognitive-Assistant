@@ -23,12 +23,13 @@ import json
 import math
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import AbstractSet, Dict, List, Optional, Set, Tuple
 
 from core import journal, living_soul
 from core.paths import improve_dir, soul_dir
 
 MISS_CLASSES = {"harm", "non-compliance"}
+VERDICT_SOURCES = frozenset({"desktop", "tui", "cli"})
 
 
 def _parse_at(value: str) -> float:
@@ -51,16 +52,21 @@ def is_miss(evidence: Dict) -> bool:
     return bool(negatives or evidence.get("gaps"))
 
 
-def session_outcomes(harness: str = "hermes") -> Dict[int, Dict[str, int]]:
-    """Per generation: analyzed session count and sessions with a miss."""
+def _collect_outcomes(
+    harness: str, sources: AbstractSet[str],
+) -> Tuple[Dict[int, Dict[str, int]], Dict[int, Set[Tuple[Optional[str], Optional[str]]]]]:
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
+    rubrics: Dict[int, Set[Tuple[Optional[str], Optional[str]]]] = {}
     for path in sorted((improve_dir() / "evidence").glob("*.json")):
         try:
             evidence = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         if evidence.get("status") != "ok" or evidence.get("harness") != harness:
+            continue
+        source = evidence.get("source")
+        if not isinstance(source, str) or source not in sources:
             continue
         at = evidence.get("sessionAt")
         if not isinstance(at, (int, float)):
@@ -71,6 +77,20 @@ def session_outcomes(harness: str = "hermes") -> Dict[int, Dict[str, int]]:
         bucket = totals.setdefault(generation, {"sessions": 0, "misses": 0})
         bucket["sessions"] += 1
         bucket["misses"] += int(is_miss(evidence))
+        rubric = evidence.get("rubric")
+        if not isinstance(rubric, dict):
+            rubric = {}
+        prompt, model = rubric.get("promptSha"), rubric.get("model")
+        rubrics.setdefault(generation, set()).add((
+            prompt if isinstance(prompt, str) and prompt else None,
+            model if isinstance(model, str) and model else None,
+        ))
+    return totals, rubrics
+
+
+def session_outcomes(harness: str = "hermes", sources: Optional[AbstractSet[str]] = None) -> Dict[int, Dict[str, int]]:
+    """Per generation: eligible analyzed session count and sessions with a miss."""
+    totals, _ = _collect_outcomes(harness, VERDICT_SOURCES if sources is None else sources)
     return totals
 
 
@@ -146,10 +166,16 @@ def evaluate(
         if record:
             _record_verdict(row)
         return row
-    outcomes = session_outcomes()
+    outcomes, rubrics = _collect_outcomes("hermes", VERDICT_SOURCES)
     empty = {"sessions": 0, "misses": 0}
     now, before = outcomes.get(number, empty), outcomes.get(parent, empty)
     row = {**base, "parent": parent, "current": now, "baseline": before}
+    if now["sessions"] and before["sessions"]:
+        used = rubrics[number] | rubrics[parent]
+        mismatches = [name for index, name in enumerate(("promptSha", "model"))
+                      if len({rubric[index] for rubric in used}) > 1]
+        if mismatches:
+            return {**row, "verdict": "pending", "reason": "rubric mismatch: " + ", ".join(mismatches)}
     if now["sessions"] < min_sessions or before["sessions"] < min_sessions:
         return {**row, "verdict": "pending", "reason": f"need {min_sessions} sessions on each side"}
     z = z_score(now, before)

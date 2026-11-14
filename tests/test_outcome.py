@@ -24,7 +24,10 @@ def _ms(when: datetime) -> int:
     return int(when.timestamp() * 1000)
 
 
-def _write_evidence(name: str, when: datetime, miss: bool, harness: str = "hermes") -> None:
+def _write_evidence(
+    name: str, when: datetime, miss: bool, harness: str = "hermes",
+    source: str | None = "cli", rubric: dict | None = None,
+) -> None:
     negative = [{"class": "harm", "quote": "q"}] if miss else []
     payload = {
         "transcriptId": name,
@@ -34,6 +37,8 @@ def _write_evidence(name: str, when: datetime, miss: bool, harness: str = "herme
         "negative": negative,
         "gaps": [],
         "sessionAt": _ms(when),
+        "source": source,
+        "rubric": rubric,
     }
     path = improve_dir() / "evidence" / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +70,7 @@ class OutcomeUnitTests(unittest.TestCase):
 class AutoCycleTests(CAHomeTestCase):
     def _set_activations(self, rows: list[tuple[datetime, int]]) -> None:
         path = soul_dir() / "activations.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "".join(json.dumps({"at": _iso(at), "generation": g}) + "\n" for at, g in rows),
             encoding="utf-8",
@@ -132,6 +138,34 @@ class AutoCycleTests(CAHomeTestCase):
         for i in range(10):
             _write_evidence(f"codex{i}", start + timedelta(minutes=i), miss=True, harness="codex")
         self.assertEqual(outcome.session_outcomes(), before)
+
+    def test_source_allowlist_excludes_unknown_and_missing(self) -> None:
+        self._set_activations([(T0, 1)])
+        for source in ("desktop", "tui", "cli", "cron", "api_server", "subagent", None):
+            _write_evidence(str(source), T0, miss=True, source=source)
+        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 3, "misses": 3}})
+        self.assertEqual(outcome.session_outcomes(sources={"cron"}), {1: {"sessions": 1, "misses": 1}})
+        self.assertEqual(outcome.session_outcomes(sources=set()), {})
+
+    def test_rubric_mismatch_blocks_verdict(self) -> None:
+        proposal = self.run_mock_proposal()
+        self._adopt_after_baseline(proposal, misses=0)
+        current = living_soul.current_generation()
+        start = T0 + timedelta(days=7)
+        self._set_activations([(T0, 1), (start, current["generation"])])
+        stamp = {"promptSha": "p1", "model": "m1", "contextSha": "c1"}
+        for i in range(10):
+            _write_evidence(f"base{i}", T0 + timedelta(minutes=i + 1), False, rubric=stamp)
+            _write_evidence(f"after{i}", start + timedelta(minutes=i + 1), False,
+                            rubric={**stamp, "contextSha": "c2"})
+        self.assertEqual(outcome.evaluate(min_sessions=5, record=False)["verdict"], "keep")
+        for rubric, reason in [({**stamp, "promptSha": "p2"}, "promptSha"),
+                               ({**stamp, "model": "m2"}, "model"), (None, "promptSha")]:
+            _write_evidence("after0", start + timedelta(minutes=1), False, rubric=rubric)
+            verdict = outcome.evaluate(min_sessions=5, record=False)
+            self.assertEqual(verdict["verdict"], "pending")
+            self.assertIn(reason, verdict["reason"])
+        self.assertNotIn(current["generation"], outcome.verdicts())
 
 
 if __name__ == "__main__":

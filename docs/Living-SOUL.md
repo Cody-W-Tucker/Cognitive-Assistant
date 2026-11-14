@@ -46,14 +46,18 @@ ca soul link <hermes-home>
 `improve-run --headless --auto` (what the Home Manager timer runs) makes one
 step per run:
 
-1. Analyze new Hermes sessions. Each evidence record carries `sessionAt`, and
-   `soul/activations.jsonl` maps that time to the generation that was live.
+1. Analyze new Hermes sessions. `soul/activations.jsonl` maps each evidence
+   record's `sessionAt` to the generation that was live. Feature 1 changes the
+   runtime to set this to the session start; older evidence may instead use
+   last activity and is not automatically reattributed.
 2. Judge the active generation against the one it replaced. A session is a
    *miss* when the analysis found a quote-backed harm or non-compliance
    negative, or a gap. The verdict is `pending` until both generations have
    `--min-sessions` analyzed Hermes sessions (default 15), then `revert` if the
    miss rate rose with a one-sided two-proportion z above 1.645, else `keep`.
-   Verdicts are final and recorded in `soul/verdicts.jsonl` and the journal.
+   Only sources `desktop`, `tui` and `cli` count; other or missing sources can
+   still produce gaps but do not count toward a verdict. Verdicts are final and
+   recorded in `soul/verdicts.jsonl` and the journal.
 3. `revert` withdraws the records that generation added (`reverted.jsonl`, kept
    as lineage), logs them in `improve/rejections.jsonl` with reason
    `reverted` so later runs do not propose them again on the same sessions,
@@ -64,10 +68,14 @@ step per run:
    own, since those are the baseline the new change will be judged against.
    On a fresh install the first weeks only build that baseline.
 
-So exactly one change is under test at a time, and every change is judged by
-what happened in sessions after it, scored by the same analysis prompt and
-model as the sessions before it. A generation from a new bootstrap is kept
-untested; rebootstrapping is the person's decision.
+So exactly one change is under test at a time. A comparison stays pending if
+eligible evidence across the two generations has different analysis prompt
+hashes or models, including mixed rubrics within a generation. Unstamped
+evidence is its own rubric and cannot be mixed with stamped evidence; two
+unstamped sides can be compared, but their prompts and models are unknown.
+Context hashes are recorded but need not match: the SOUL and records may have
+changed. A generation from a new bootstrap is kept untested;
+rebootstrapping is the person's decision.
 
 What the metric does not control for: the mix of work changes from week to
 week, and the judge is an LLM. Quote validation is limited to the analysis

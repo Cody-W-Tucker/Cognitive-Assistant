@@ -79,6 +79,21 @@ read-only, and nothing in the repo or in Hermes is modified.
   writes `proposal.json`. An unapplied proposal it replaces is archived to
   `proposals/<id>.json`.
 
+The feature 1 runtime changes in `plans/feature-1.md` also require discovery to
+skip unfinished Hermes sessions until ended or idle for 12 hours, without
+advancing the cursor, and to score successful sessions only once. Distillation
+will retain both the head and tail with an elision marker, including Hermes
+tool events. These runtime changes must be present before relying on that
+behavior.
+
+The corresponding evidence format carries `sessionAt` (session start),
+`startedAt`, `endedAt`, `source`, `cwd`, `gitRepoRoot` and `parentSessionId`,
+plus `rubric: {promptSha, contextSha, model}`. The prompt hash identifies the
+analysis template; the context hash identifies rendered SOUL, posture and
+records contexts. Older evidence may lack these fields. See
+[Living SOUL](Living-SOUL.md#outcome-check-and-autonomous-changes) for how
+missing sources and rubric stamps affect verdicts.
+
 Each edit in the proposal is `{id, kind: "add", title, rationale, evidence,
 record, annotation: {verdict: "keep", reason}, clusterId}`. The proposal also
 records the SOUL it was made against (`soul: {path, sha256, chars}`), stats
