@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { assertMinGapEvidence, evidenceFile, persistPrompt, readJson, readRejections, writeProposal } from "../src/state.js";
+import { assertMinGapEvidence, evidenceFile, persistPrompt, readEvidenceRecords, readJson, readRejections, readSessionEvidence, writeJson, writeProposal } from "../src/state.js";
 import { tmpDir } from "./helpers.mjs";
 
 test("writeProposal archives an unapplied predecessor before replacing it", () => {
@@ -12,6 +12,22 @@ test("writeProposal archives an unapplied predecessor before replacing it", () =
   writeProposal(stateDir, { id: "prop-b", appliedAt: null, edits: [] });
   assert.equal(readJson(path.join(stateDir, "proposal.json")).id, "prop-b");
   assert.equal(readJson(path.join(stateDir, "proposals", "prop-a.json")).id, "prop-a");
+});
+
+test("qualified evidence isolates harnesses and legacy records remain readable without duplication", () => {
+  const stateDir = tmpDir();
+  const legacy = { harness: "hermes", transcriptId: "same", status: "ok" };
+  writeJson(evidenceFile(stateDir, "same"), legacy);
+  assert.deepEqual(readSessionEvidence(stateDir, "hermes", "same"), legacy);
+  assert.equal(readSessionEvidence(stateDir, "codex", "same"), null);
+  const codex = { harness: "codex", transcriptId: "same", status: "ok" };
+  const hermes = { ...legacy, source: "cli" };
+  writeJson(evidenceFile(stateDir, "same", "codex"), codex);
+  writeJson(evidenceFile(stateDir, "same", "hermes"), hermes);
+  assert.deepEqual(readSessionEvidence(stateDir, "hermes", "same"), hermes);
+  assert.deepEqual(new Set(readEvidenceRecords(stateDir).map((r) => r.harness)), new Set(["codex", "hermes"]));
+  assert.equal(readEvidenceRecords(stateDir).length, 2);
+  assert.notEqual(evidenceFile(stateDir, "a/b", "hermes"), evidenceFile(stateDir, "a_b", "hermes"));
 });
 
 test("writeProposal does not archive an applied predecessor", () => {

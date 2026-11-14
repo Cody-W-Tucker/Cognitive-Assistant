@@ -3,6 +3,7 @@
 // repo, tracked files, or live Hermes.
 
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { analyzeTraces, loadContexts } from "./analyze.js";
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
@@ -11,6 +12,7 @@ import { foldEvidence } from "./fold.js";
 import { discoverTranscripts, readTranscriptEvents, SUPPORTED_HARNESSES } from "./harnesses.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
+import { loadPrompt } from "./prompts.js";
 import { propose } from "./propose.js";
 import { readSoulSnapshot } from "./soul.js";
 import {
@@ -19,8 +21,8 @@ import {
   evidenceFile,
   initStateDir,
   readEvidenceRecords,
-  readJson,
   readSessionCheckpoint,
+  readSessionEvidence,
   timestampId,
   writeJson,
 } from "./state.js";
@@ -77,6 +79,16 @@ function countByHarness(transcripts) {
   return counts;
 }
 
+export function sessionEligible(transcript, now, idleHours) {
+  if (transcript.harness !== "hermes" || transcript.endedAt != null) return true;
+  return Number.isFinite(transcript.mtimeMs) && now - transcript.mtimeMs > idleHours * 3600000;
+}
+
+export function stampEvidence(record, session, rubric) {
+  const startedAt = session?.startedAtMs ?? null;
+  return { ...record, sessionAt: startedAt ?? session?.mtimeMs ?? null, startedAt, endedAt: session?.endedAt ?? null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
+}
+
 /**
  * @param invoke `(role, prompt, context) => Promise<object>`; defaults to the
  *   mock or the configured model per `analyzer`. Tests inject their own.
@@ -96,12 +108,15 @@ export async function runPipeline({
   invoke = null,
   progress = null,
   jobs = Number(process.env.CA_IMPROVE_JOBS || 4),
+  idleHours = 12,
 }) {
   const emit = (event, data = {}) => progress?.(event, data);
   const floor = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   if (!stateDir) throw new Error("improve-run: --state-dir is required");
   if (analyzer !== "model" && analyzer !== "mock") throw new Error(`improve-run: --analyzer must be model or mock (got ${JSON.stringify(analyzer)})`);
+  if (idleHours === null || String(idleHours).trim() === "" || !Number.isFinite(Number(idleHours)) || Number(idleHours) < 0) throw new Error("--idle-hours must be a non-negative number");
   const soul = readSoulSnapshot(soulPath);
+  const customInvoke = Boolean(invoke);
   if (!invoke) {
     if (analyzer === "mock") invoke = mockInvoke;
     else {
@@ -114,7 +129,12 @@ export async function runPipeline({
 
   emit("discover:start", { harnesses: harnesses || SUPPORTED_HARNESSES });
   const discovery = discoverTranscripts({ home, stateDir, since, harnesses, strict: strictHarnesses });
-  const transcripts = capOpencode(discovery.transcripts, Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50));
+  const now = Date.now();
+  const eligible = discovery.transcripts.filter((t) => {
+    if (readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok") return false;
+    return sessionEligible(t, now, Number(idleHours));
+  });
+  const transcripts = capOpencode(eligible, Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50));
   const perHarness = countByHarness(transcripts);
   emit("discover:done", { transcripts: transcripts.length, perHarness });
 
@@ -122,19 +142,27 @@ export async function runPipeline({
   const traces = await mapPool(transcripts, jobs, collectTrace);
   // Session time travels with the evidence so outcomes can be attributed to
   // the living SOUL generation that was active when the session happened.
-  const sessionTimes = new Map(transcripts.map((t) => [String(t.id), t.mtimeMs ?? null]));
+  const sessions = new Map(transcripts.map((t) => [checkpointKey(t), t]));
+  const contexts = loadContexts({ soulPath, posturePath, experiencePath });
+  const sha = (value) => createHash("sha256").update(value).digest("hex");
+  const rubric = {
+    promptSha: sha(loadPrompt("analysis")),
+    contextSha: sha(JSON.stringify([contexts.soulBaseline, contexts.interactionPosture, contexts.experienceRecords])),
+    model: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_ANALYSIS || process.env.CA_LLM_MODEL || null),
+  };
   const tally = { done: 0, ok: 0, failed: 0, skipped: 0 };
   const records = await analyzeTraces(traces, {
     invoke,
-    contexts: loadContexts({ soulPath, posturePath, experiencePath }),
+    contexts,
     stateDir,
     runId,
     jobs,
     onRecord: (record) => {
-      const file = evidenceFile(stateDir, record.transcriptId);
+      const file = evidenceFile(stateDir, record.transcriptId, record.harness);
+      const session = sessions.get(checkpointKey({ harness: record.harness, id: record.transcriptId }));
       // A failed or skipped re-analysis never replaces earlier good evidence.
-      if (record.status === "ok" || readJson(file)?.status !== "ok") {
-        writeJson(file, { ...record, sessionAt: sessionTimes.get(String(record.transcriptId)) ?? null });
+      if (record.status === "ok" || readSessionEvidence(stateDir, record.harness, record.transcriptId)?.status !== "ok") {
+        writeJson(file, stampEvidence(record, session, rubric));
       }
       tally.done += 1;
       tally[record.status] += 1;
@@ -177,8 +205,8 @@ export async function runPipeline({
   });
 
   const processed = readSessionCheckpoint(stateDir);
-  const done = new Set(records.filter((r) => r.status === "ok" || r.status === "skipped").map((r) => r.transcriptId));
-  for (const t of transcripts) if (done.has(t.id)) processed[checkpointKey(t)] = t.mtimeMs ?? null;
+  const done = new Set(records.filter((r) => r.status === "ok" || r.status === "skipped").map((r) => checkpointKey({ harness: r.harness, id: r.transcriptId })));
+  for (const t of transcripts) if (done.has(checkpointKey(t))) processed[checkpointKey(t)] = t.mtimeMs ?? null;
   writeJson(path.join(stateDir, "cursor.json"), {
     version: 2,
     lastRun: proposal.createdAt,

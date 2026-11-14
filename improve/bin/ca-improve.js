@@ -8,7 +8,7 @@ import { startTui } from "../src/tui.js";
 
 const USAGE = `usage:
   ca-improve run (--headless|--tui) --state-dir D --soul-path S [--experience-file E] [--posture-path P]
-                 [--since 30d] [--analyzer model|mock] [--min-gap-evidence N] [--home H] [--harness X]...
+                 [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--home H] [--harness X]...
   ca-improve synthesize --state-dir D --soul-path S [--min-gap-evidence N]`;
 
 function parseFlags(args) {
@@ -61,6 +61,7 @@ async function main() {
             posturePath: flags["posture-path"] || null,
             experiencePath: flags["experience-file"] || null,
             since,
+            idleHours: flags["idle-hours"] ?? 12,
             harnesses: flags.harness.length ? flags.harness : null,
             strictHarnesses: flags.harness.length > 0,
             analyzer,
