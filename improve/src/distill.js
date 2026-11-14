@@ -101,7 +101,8 @@ export function distill(events, meta = {}) {
       lines.push("");
     } else if (event.kind === "tool") {
       const input = describeToolInput(event.input);
-      lines.push(`- tool ${event.name || "unknown"}${input ? `: ${input}` : ""}`);
+      const result = event.result == null ? "" : oneLine(typeof event.result === "string" ? event.result : JSON.stringify(event.result), TOOL_OUTPUT_CHARS);
+      lines.push(`- tool ${event.name || "unknown"}${input ? `: ${input}` : ""}${result ? ` => ${result}` : ""}`);
     }
   }
   lines.push(`source: ${meta.path || meta.db || "unknown"}`);

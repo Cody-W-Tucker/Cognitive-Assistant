@@ -127,3 +127,9 @@ test("pre-normalized role:'tool' message normalizes to one-line tool event, empt
   assert.equal(toolLines[0].trim().split("\n").length, 1, "pre-normalized tool event stays one line");
   assert.ok(!trace.includes("## human\n" + toolPayload.slice(0, 20)), "tool content never renders as human block");
 });
+
+test("tool results survive distillation in bounded form", () => {
+  const trace = distill([{ kind: "tool", name: "test", input: { command: "npm test" }, result: `FAIL regression ${"x".repeat(500)}` }]);
+  assert.match(trace, /tool test: npm test => FAIL regression/);
+  assert.ok(!trace.includes("x".repeat(250)));
+});

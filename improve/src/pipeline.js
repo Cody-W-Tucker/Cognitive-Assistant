@@ -86,7 +86,7 @@ export function sessionEligible(transcript, now, idleHours) {
 
 export function stampEvidence(record, session, rubric) {
   const startedAt = session?.startedAtMs ?? null;
-  return { ...record, sessionAt: startedAt ?? session?.mtimeMs ?? null, startedAt, endedAt: session?.endedAt ?? null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
+  return { ...record, sessionAt: startedAt ?? (session?.harness === "hermes" ? null : session?.mtimeMs) ?? null, startedAt, endedAt: session?.endedAt ?? null, source: session?.source ?? null, cwd: session?.cwd ?? null, gitRepoRoot: session?.gitRepoRoot ?? null, parentSessionId: session?.parentSessionId ?? null, rubric };
 }
 
 /**
@@ -128,8 +128,24 @@ export async function runPipeline({
   const runId = timestampId("run");
 
   emit("discover:start", { harnesses: harnesses || SUPPORTED_HARNESSES });
-  const discovery = discoverTranscripts({ home, stateDir, since, harnesses, strict: strictHarnesses });
+  const needsMetadata = (t) => {
+    if (t.harness !== "hermes") return false;
+    const evidence = readSessionEvidence(stateDir, t.harness, t.id);
+    return evidence?.status === "ok" && (evidence.startedAt == null || evidence.source == null);
+  };
   const now = Date.now();
+  const discovery = discoverTranscripts({ home, stateDir, since, harnesses, strict: strictHarnesses, idleHours: Number(idleHours), now, includeCheckpointed: needsMetadata });
+  for (const t of discovery.transcripts) {
+    if (!needsMetadata(t) || t.startedAtMs == null || !t.source) continue;
+    const evidence = readSessionEvidence(stateDir, t.harness, t.id);
+    if (evidence.source != null && evidence.source !== t.source) continue;
+    // No new rubric: the analysis was made under the original, possibly unknown one.
+    writeJson(evidenceFile(stateDir, t.id, t.harness), {
+      ...evidence, sessionAt: evidence.startedAt ?? t.startedAtMs, startedAt: evidence.startedAt ?? t.startedAtMs,
+      source: t.source, endedAt: t.endedAt, cwd: t.cwd,
+      gitRepoRoot: t.gitRepoRoot, parentSessionId: t.parentSessionId,
+    });
+  }
   const eligible = discovery.transcripts.filter((t) => {
     if (readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok") return false;
     return sessionEligible(t, now, Number(idleHours));

@@ -162,6 +162,7 @@ it("uses start and metadata with safe fallbacks", () => {
   assert.deepEqual(stampEvidence({ status: "ok" }, session, { model: "mock" }), { status: "ok", sessionAt: 100, startedAt: 100, endedAt: 300, source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p", rubric: { model: "mock" } });
   assert.equal(stampEvidence({}, { mtimeMs: 200 }, {}).sessionAt, 200);
   assert.equal(stampEvidence({}, {}, {}).startedAt, null);
+  assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200 }, {}).sessionAt, null);
 });
 
 it("gates open Hermes sessions on idle time and leaves them off the cursor", async () => {
@@ -189,3 +190,43 @@ async function paraphrased(context) {
   reply.annotations[0].record.evidence[0].text += " (paraphrased)";
   return reply;
 }
+
+it("repairs checkpointed legacy Hermes metadata without re-analysis or inventing a rubric", async () => {
+  const env = setup(0);
+  const now = Math.floor(Date.now() / 1000);
+  makeSqlite(path.join(env.home, ".hermes", "state.db"), [
+    ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER, ended_at INTEGER, source TEXT)"],
+    ["INSERT INTO sessions VALUES ('old', ?, ?, ?, 'cli')", now - 90000, now - 80000, now - 80000],
+    ["INSERT INTO sessions VALUES ('unknown-start', NULL, ?, ?, 'cli')", now - 80000, now - 80000],
+    ["INSERT INTO sessions VALUES ('unknown-source', ?, ?, ?, NULL)", now - 90000, now - 80000, now - 80000],
+  ]);
+  fs.mkdirSync(path.join(env.stateDir, "evidence"), { recursive: true });
+  for (const id of ["old", "unknown-start", "unknown-source"]) {
+    fs.writeFileSync(path.join(env.stateDir, "evidence", `${id}.json`), JSON.stringify({ harness: "hermes", transcriptId: id, status: "ok", negative: [{ quote: "original" }], gaps: [], sessionAt: 123 }));
+  }
+  fs.writeFileSync(path.join(env.stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "hermes:old": (now - 80000) * 1000, "hermes:unknown-start": (now - 80000) * 1000, "hermes:unknown-source": (now - 80000) * 1000 } }));
+  const invoke = invokeWith();
+  const result = await run(env, { harnesses: ["hermes"], invoke });
+  assert.equal(result.stats.transcripts, 0);
+  assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 0);
+  const repaired = readJson(path.join(env.stateDir, "evidence", "hermes:old.json"));
+  assert.equal(repaired.sessionAt, (now - 90000) * 1000);
+  assert.equal(repaired.source, "cli");
+  assert.deepEqual(repaired.negative, [{ quote: "original" }]);
+  assert.equal(repaired.rubric, undefined);
+  assert.equal(fs.existsSync(path.join(env.stateDir, "evidence", "hermes:unknown-start.json")), false);
+  assert.equal(fs.existsSync(path.join(env.stateDir, "evidence", "hermes:unknown-source.json")), false);
+});
+
+it("passes the configured idle window into discovery", async () => {
+  const env = setup(0);
+  const now = Math.floor(Date.now() / 1000);
+  makeSqlite(path.join(env.home, ".hermes", "state.db"), [
+    ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER)"],
+    ["INSERT INTO sessions VALUES ('idle', ?, ?)", now - 7200, now - 3600],
+    ["CREATE TABLE messages (session_id TEXT, role TEXT, text TEXT)"],
+    ["INSERT INTO messages VALUES ('idle', 'user', 'hello')"],
+  ]);
+  const result = await run(env, { harnesses: ["hermes"], idleHours: 0.5 });
+  assert.equal(result.stats.transcripts, 1);
+});

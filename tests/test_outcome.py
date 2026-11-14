@@ -147,6 +147,18 @@ class AutoCycleTests(CAHomeTestCase):
         self.assertEqual(outcome.session_outcomes(sources={"cron"}), {1: {"sessions": 1, "misses": 1}})
         self.assertEqual(outcome.session_outcomes(sources=set()), {})
 
+    def test_qualified_evidence_wins_over_legacy_before_filtering(self) -> None:
+        self._set_activations([(T0, 1)])
+        _write_evidence("same", T0, miss=True)
+        path = improve_dir() / "evidence" / "hermes:same.json"
+        legacy = json.loads((path.parent / "same.json").read_text(encoding="utf-8"))
+        path.write_text(json.dumps({**legacy, "negative": []}), encoding="utf-8")
+        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 0}})
+        path.write_text(json.dumps({**legacy, "source": "cron"}), encoding="utf-8")
+        self.assertEqual(outcome.session_outcomes(), {})
+        path.write_text(json.dumps({**legacy, "status": "failed"}), encoding="utf-8")
+        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 1}})
+
     def test_rubric_mismatch_blocks_verdict(self) -> None:
         proposal = self.run_mock_proposal()
         self._adopt_after_baseline(proposal, misses=0)

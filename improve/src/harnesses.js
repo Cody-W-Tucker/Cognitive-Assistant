@@ -115,7 +115,13 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
       }
       let header = null;
       let startedAtMs = null;
-      for (const line of head.split("\n")) {
+      let timestampText;
+      try {
+        timestampText = head.includes("\n") ? head : fs.readFileSync(file, "utf8");
+      } catch {
+        continue; // the session may have vanished since its head was read
+      }
+      for (const line of timestampText.split("\n")) {
         try {
           const record = JSON.parse(line);
           startedAtMs = timestampMs(record.timestamp ?? record.time ?? record.payload?.timestamp);
@@ -123,7 +129,7 @@ function listJsonlSessions(harness, roots, cutoff, unwrap = (record) => record) 
         } catch { /* ignore incomplete or foreign lines */ }
       }
       try {
-        header = unwrap(JSON.parse(head.split("\n")[0]));
+        header = unwrap(JSON.parse(timestampText.split("\n")[0]));
       } catch {
         header = null;
       }
@@ -221,7 +227,7 @@ function sessionRows(db, table, cols, { cwdCol, updated, created }) {
     id: String(row[idCol]),
     cwd: cwdCol ? absoluteOrNull(row[cwdCol]) : null,
     mtimeMs: timestampMs(updatedCol ? row[updatedCol] : null) ?? timestampMs(createdCol ? row[createdCol] : null),
-    startedAtMs: timestampMs(createdCol ? row[createdCol] : null) ?? timestampMs(updatedCol ? row[updatedCol] : null),
+    startedAtMs: timestampMs(createdCol ? row[createdCol] : null),
     endedAt: timestampMs(row.ended_at) === null ? null : new Date(timestampMs(row.ended_at)).toISOString(),
     source: row.source ?? null,
     gitRepoRoot: row.git_repo_root ?? null,
@@ -415,7 +421,7 @@ export async function readTranscriptEvents(transcript) {
  * rooted under `stateDir` count as `self` and are dropped; sessions the
  * cursor already holds at the same revision are skipped.
  */
-export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now() } = {}) {
+export function discoverTranscripts({ home, stateDir = null, since = "30d", harnesses = null, strict = false, idleHours = 12, now = Date.now(), includeCheckpointed = null } = {}) {
   if (!Number.isFinite(idleHours) || idleHours < 0) throw new Error("idleHours must be a non-negative number");
   const isolated = Boolean(home);
   const root = isolated ? path.resolve(home) : process.env.HOME || os.homedir();
@@ -451,11 +457,11 @@ export function discoverTranscripts({ home, stateDir = null, since = "30d", harn
       }
       if (harness === "hermes" && !row.endedAt && (row.mtimeMs === null || now - row.mtimeMs <= idleHours * 3600_000)) continue;
       const transcript = { harness, id: row.id, cwd: row.cwd ?? null, ...row.location, mtimeMs: row.mtimeMs,
-        startedAtMs: row.startedAtMs ?? row.mtimeMs ?? null, endedAt: row.endedAt ?? null,
+        startedAtMs: row.startedAtMs ?? (harness === "hermes" ? null : row.mtimeMs) ?? null, endedAt: row.endedAt ?? null,
         source: row.source ?? null, gitRepoRoot: row.gitRepoRoot ?? null, parentSessionId: row.parentSessionId ?? null };
       // Timestamp-less rows have no mutation signal, so the cursor alone owns them.
       const prior = processed[checkpointKey(transcript)];
-      if (prior !== undefined && (prior === null || prior === transcript.mtimeMs)) continue;
+      if (prior !== undefined && (prior === null || prior === transcript.mtimeMs) && !includeCheckpointed?.(transcript)) continue;
       transcripts.push(transcript);
       stats.matched += 1;
     }

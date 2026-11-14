@@ -398,3 +398,13 @@ it("codex sessions read their wrapped header and conversation, not the harness p
   assert.deepEqual(events.filter((e) => e.kind === "message").map((e) => e.text), ["please add the test"]);
   assert.deepEqual(events.filter((e) => e.kind === "tool").map((e) => e.name), ["read", "search", "test"]);
 });
+
+it("reads the timestamp and identity from an oversized first JSONL record", () => {
+  const home = tmpDir();
+  writeJsonl(path.join(home, ".claude", "projects", "large.jsonl"), [
+    { sessionId: "large", text: "x".repeat(70000), timestamp: "2025-01-02T00:00:00Z" },
+  ]);
+  const [row] = discoverTranscripts({ home, harnesses: ["claude"], since: "all" }).transcripts;
+  assert.equal(row.id, "large");
+  assert.equal(row.startedAtMs, Date.parse("2025-01-02T00:00:00Z"));
+});

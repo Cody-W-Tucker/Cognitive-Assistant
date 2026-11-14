@@ -24,6 +24,7 @@ import math
 from datetime import datetime
 from pathlib import Path
 from typing import AbstractSet, Dict, List, Optional, Set, Tuple
+from urllib.parse import quote
 
 from core import journal, living_soul
 from core.paths import improve_dir, soul_dir
@@ -58,12 +59,24 @@ def _collect_outcomes(
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
     rubrics: Dict[int, Set[Tuple[Optional[str], Optional[str]]]] = {}
-    for path in sorted((improve_dir() / "evidence").glob("*.json")):
+    records: Dict[Tuple[str, str], Dict] = {}
+    evidence_dir = improve_dir() / "evidence"
+    for path in sorted(evidence_dir.glob("*.json")):
         try:
             evidence = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if evidence.get("status") != "ok" or evidence.get("harness") != harness:
+        if not isinstance(evidence, dict) or evidence.get("status") != "ok":
+            continue
+        identity = (str(evidence.get("harness")), str(evidence.get("transcriptId")))
+        qualified = evidence_dir / (quote(identity[0], safe="~!*'()") + ":" + quote(identity[1], safe="~!*'()") + ".json")
+        try:
+            preferred = json.loads(qualified.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            preferred = None
+        records[identity] = preferred if isinstance(preferred, dict) and preferred.get("status") == "ok" else evidence
+    for evidence in records.values():
+        if evidence.get("harness") != harness:
             continue
         source = evidence.get("source")
         if not isinstance(source, str) or source not in sources:
