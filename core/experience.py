@@ -10,12 +10,10 @@ them; the living SOUL reads the active ones and a rebootstrap reads them all.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Set
 
-from core.paths import atomic_write, experience_dir
+from core.paths import append_jsonl, atomic_write, experience_dir, read_jsonl, utc_now
 
 RECORD_FIELDS = (
     "id",
@@ -47,7 +45,7 @@ def record_path(record_id: str) -> Path:
 
 
 def render(record: Dict, edit: Dict, proposal_id: str) -> str:
-    created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    created = utc_now()
     lines = [
         "---",
         f"id: {record['id']}",
@@ -134,25 +132,18 @@ def read(record_id: str) -> Dict[str, str]:
 
 def reverted_ids() -> Set[str]:
     """Record ids withdrawn after adoption (kept in lineage as negative evidence)."""
-    path = _reverted_path()
     ids: Set[str] = set()
-    if not path.exists():
-        return ids
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for row in read_jsonl(_reverted_path()):
         try:
-            ids.add(str(json.loads(line)["record"]))
-        except (ValueError, KeyError, TypeError):
+            ids.add(str(row["record"]))
+        except (KeyError, TypeError):
             continue
     return ids
 
 
 def withdraw(record_ids: List[str], reason: str) -> None:
-    path = _reverted_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with open(path, "a", encoding="utf-8") as handle:
-        for record_id in record_ids:
-            handle.write(json.dumps({"at": at, "record": record_id, "reason": reason}, sort_keys=True) + "\n")
+    at = utc_now()
+    append_jsonl(_reverted_path(), [{"at": at, "record": record_id, "reason": reason} for record_id in record_ids])
 
 
 def active(exclude: Set[str]) -> List[Dict[str, str]]:

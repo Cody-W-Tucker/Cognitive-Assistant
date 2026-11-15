@@ -28,11 +28,11 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import AbstractSet, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 from urllib.parse import quote
 
 from core import journal, living_soul
-from core.paths import improve_dir, soul_dir
+from core.paths import append_jsonl, improve_dir, read_jsonl, soul_dir
 
 VERDICT_SOURCES = frozenset({"desktop", "tui", "cli"})
 
@@ -77,7 +77,8 @@ def is_miss(evidence: Dict) -> Optional[bool]:
     return None
 
 
-def _collect_outcomes(harness: str, sources: AbstractSet[str]) -> Outcomes:
+def collect(policy: OutcomePolicy = OutcomePolicy()) -> Outcomes:
+    """Per generation: decisive outcome counts, and the rubrics that scored them."""
     history = living_soul.activations()
     totals: Dict[int, Dict[str, int]] = {}
     rubrics: Dict[int, Set[Tuple]] = {}
@@ -98,10 +99,10 @@ def _collect_outcomes(harness: str, sources: AbstractSet[str]) -> Outcomes:
             preferred = None
         records[identity] = preferred if isinstance(preferred, dict) and preferred.get("status") == "ok" else evidence
     for evidence in records.values():
-        if evidence.get("harness") != harness:
+        if evidence.get("harness") != policy.harness:
             continue
         source = evidence.get("source")
-        if not isinstance(source, str) or source not in sources:
+        if not isinstance(source, str) or source not in policy.sources:
             continue
         at = evidence.get("sessionAt")
         if not isinstance(at, (int, float)):
@@ -118,24 +119,14 @@ def _collect_outcomes(harness: str, sources: AbstractSet[str]) -> Outcomes:
         rubric = evidence["outcome"].get("rubric")
         if not isinstance(rubric, dict):
             rubric = {}
-        prompt, model = rubric.get("promptSha"), rubric.get("model")
+        prompt, model, mature = rubric.get("promptSha"), rubric.get("model"), rubric.get("matureDays")
         rubrics.setdefault(generation, set()).add((
             prompt if isinstance(prompt, str) and prompt else None,
             model if isinstance(model, str) and model else None,
-            rubric.get("matureDays") if isinstance(rubric.get("matureDays"), (int, float)) and not isinstance(rubric.get("matureDays"), bool) and math.isfinite(rubric["matureDays"]) and rubric["matureDays"] >= 0 else None,
+            mature if isinstance(mature, (int, float)) and not isinstance(mature, bool) and math.isfinite(mature) and mature >= 0 else None,
         ))
     return totals, rubrics
 
-
-def collect(policy: OutcomePolicy = OutcomePolicy()) -> Outcomes:
-    """Per generation: decisive outcome counts, and the rubrics that scored them."""
-    return _collect_outcomes(policy.harness, policy.sources)
-
-
-def session_outcomes(harness: str = "hermes", sources: Optional[AbstractSet[str]] = None) -> Dict[int, Dict[str, int]]:
-    """Per generation: decisive outcome count and sessions with a miss."""
-    totals, _ = _collect_outcomes(harness, VERDICT_SOURCES if sources is None else sources)
-    return totals
 
 
 def _verdicts_path() -> Path:
@@ -143,24 +134,11 @@ def _verdicts_path() -> Path:
 
 
 def verdicts() -> Dict[int, Dict]:
-    path = _verdicts_path()
-    if not path.exists():
-        return {}
-    out: Dict[int, Dict] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        out[int(row["generation"])] = row
-    return out
+    return {int(row["generation"]): row for row in read_jsonl(_verdicts_path())}
 
 
 def _record_verdict(row: Dict) -> None:
-    path = _verdicts_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    append_jsonl(_verdicts_path(), [row])
     journal.record(
         "soul_verdict",
         {

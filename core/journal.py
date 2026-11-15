@@ -23,11 +23,10 @@ import os
 import re
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
-from core.paths import improve_dir
+from core.paths import improve_dir, utc_now
 
 JOURNAL_DIRNAME = "journal"
 EVENTS_FILENAME = "events.jsonl"
@@ -157,10 +156,6 @@ def _restrict_file(path: Path) -> None:
         os.chmod(path, 0o600)
     except OSError:
         pass
-
-
-def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _check_view_text(value: str, field: str) -> None:
@@ -316,7 +311,7 @@ def append_event(state_dir: Path, event_type: str, payload: Dict[str, Any]) -> D
         event = {
             "id": f"evt-{next_index:06d}",
             "type": event_type,
-            "at": _utcnow(),
+            "at": utc_now(),
             "payload": json.loads(json.dumps(payload, sort_keys=True)),
         }
         with open(events_path, "a", encoding="utf-8") as handle:

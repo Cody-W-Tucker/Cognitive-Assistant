@@ -16,9 +16,8 @@ from pathlib import Path
 from unittest import mock
 
 from core import experience, improve, journal, living_soul
-from core.cli import main
 from core.paths import improve_dir
-from tests.fixtures import CAHomeTestCase
+from tests.fixtures import CAHomeTestCase, run_cli
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,13 +26,6 @@ def _git_status() -> str:
     return subprocess.run(
         ["git", "status", "--porcelain"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     ).stdout
-
-
-def _run_cli(argv: list[str]) -> tuple[int, str, str]:
-    stdout, stderr = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        code = main(argv)
-    return code, stdout.getvalue(), stderr.getvalue()
 
 
 def _seed_resume_state(state: Path) -> None:
@@ -71,7 +63,7 @@ class RunTests(CAHomeTestCase):
     def test_headless_cli_prints_one_proposal_and_writes_only_ca_home(self) -> None:
         self.langfuse.add_eligible_sessions()
         before = _git_status()
-        code, out, err = _run_cli(["improve-run", "--headless", "--analyzer", "mock"])
+        code, out, err = run_cli(["improve-run", "--headless", "--analyzer", "mock"])
         self.assertEqual(code, 0, err)
         lines = [line for line in out.splitlines() if line.strip()]
         self.assertEqual(len(lines), 1)
@@ -94,14 +86,14 @@ class RunTests(CAHomeTestCase):
 
     def test_manual_route_requires_a_terminal(self) -> None:
         with mock.patch.object(improve, "run") as run, mock.patch.object(sys.stdin, "isatty", return_value=False):
-            code, _, err = _run_cli(["improve-run"])
+            code, _, err = run_cli(["improve-run"])
         self.assertEqual(code, 2)
         self.assertIn("--headless", err)
         run.assert_not_called()
 
     def test_auto_requires_headless(self) -> None:
         with mock.patch.object(improve, "run") as run:
-            code, _, err = _run_cli(["improve-run", "--auto"])
+            code, _, err = run_cli(["improve-run", "--auto"])
         self.assertEqual(code, 2)
         self.assertIn("--auto requires --headless", err)
         run.assert_not_called()
@@ -194,7 +186,7 @@ class ApplyTests(CAHomeTestCase):
 
     def test_rejection_writes_no_record_and_closes_the_proposal(self) -> None:
         vector = " ".join(f"{edit['id']}=rejected:too-narrow" for edit in self.edits)
-        code, out, err = _run_cli(["improve-apply", "--proposal", self.proposal["id"], "--decisions", vector])
+        code, out, err = run_cli(["improve-apply", "--proposal", self.proposal["id"], "--decisions", vector])
         self.assertEqual(code, 0, err)
         self.assertIn(f"0 accepted - {len(self.edits)} rejected", out)
         self.assertEqual(experience.active(exclude=set()), [])
@@ -219,7 +211,7 @@ class ApplyTests(CAHomeTestCase):
         self.assertEqual(experience.active(exclude=set()), [])
 
     def test_cli_requires_the_proposal_id_with_decisions(self) -> None:
-        code, _, err = _run_cli(["improve-apply", "--decisions", f"{self.first['id']}=accepted"])
+        code, _, err = run_cli(["improve-apply", "--decisions", f"{self.first['id']}=accepted"])
         self.assertEqual(code, 2)
         self.assertIn(f"--proposal {self.proposal['id']}", err)
 

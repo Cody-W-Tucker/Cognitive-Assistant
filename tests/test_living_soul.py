@@ -4,15 +4,12 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from core import journal, living_soul
-from core import paths
 from core.paths import improve_dir
+from tests.fixtures import CAHomeTestCase
 
 RECORD = """---
 id: {id}
@@ -38,26 +35,11 @@ def _write_record(experience: Path, record_id: str, title: str, body: str, creat
     path.write_text(RECORD.format(id=record_id, title=title, body=body, created=created), encoding="utf-8")
 
 
-class LivingSoulTests(unittest.TestCase):
+class LivingSoulTests(CAHomeTestCase):
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        root = Path(self._tmp.name)
-        self.home = root / "ca"
-        self.bootstrap_dir = root / "bootstrap"
-        self.bootstrap_dir.mkdir()
-        self.bootstrap = self.bootstrap_dir / "SOUL.md"
-        self.bootstrap.write_text("# SOUL.md\n\nBootstrap voice.\n", encoding="utf-8")
-        self.experience = self.home / "experience"
-        env = {"CA_HOME": str(self.home)}
-        self._env = mock.patch.dict(os.environ, env)
-        self._env.start()
-        self._soul = mock.patch.object(paths, "BOOTSTRAP_SOUL_PATH", self.bootstrap)
-        self._soul.start()
-
-    def tearDown(self) -> None:
-        self._soul.stop()
-        self._env.stop()
-        self._tmp.cleanup()
+        super().setUp()
+        self.bootstrap_dir = self.bootstrap.parent
+        self.experience = self.ca_home / "experience"
 
     def test_first_compile_is_bootstrap_and_is_idempotent(self) -> None:
         first = living_soul.compile_soul()
