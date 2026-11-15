@@ -4,13 +4,13 @@
 // in the same session. Nothing here reads a harness store on disk.
 
 import path from "node:path";
-import { createHash } from "node:crypto";
 
 import { headHasSelfSentinel } from "./sentinel.js";
 import { checkpointKey, readSessionCheckpoint } from "./state.js";
+import { sha256 } from "./util.js";
 
 /** Root observation name per harness. */
-const ROOT_NAMES = { hermes: "Hermes turn", claude: "Conversational Turn", opencode: "opencode.turn" };
+export const ROOT_NAMES = { hermes: "Hermes turn", claude: "Conversational Turn", opencode: "opencode.turn" };
 
 export const SUPPORTED_HARNESSES = Object.keys(ROOT_NAMES);
 
@@ -64,7 +64,7 @@ function byStart(a, b) {
 function rootsRevision(harness, id, roots) {
   if (!roots.length) return null;
   const entries = [...roots].sort(byStart).map((root) => [root.id, root.endTime ?? null]);
-  return { version: 3, source: "langfuse", harness, id, sha256: createHash("sha256").update(JSON.stringify(entries)).digest("hex") };
+  return { version: 3, source: "langfuse", harness, id, sha256: sha256(JSON.stringify(entries)) };
 }
 
 /** True for a revision this module produced; older ones came from local stores. */

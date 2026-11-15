@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,12 +8,12 @@ import { outcomeSnapshot, runOutcome, validateOutcome } from "../src/outcome.js"
 import { evidenceFile, readJson, writeJson } from "../src/state.js";
 import { readTranscript } from "../src/harnesses.js";
 import { fakeLangfuse } from "./fake-langfuse.mjs";
+import { tmpDir } from "./helpers.mjs";
 
 const execFileAsync = promisify(execFile);
 const DAY = 86400000;
 const followup = { sessions: [{ ref: "session:later", firstUser: "Still stuck" }], commits: [], journal: [] };
 const reply = { aim: "Fix the bug", label: "stalled", reason: "It remains", evidence: [{ ref: "trace", quote: "Fix the bug" }] };
-const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
 test("validates citations and verbatim quotes", () => {
   assert.ok(validateOutcome(reply, "Fix the bug", followup, ["Fix the bug"]));
@@ -30,7 +29,7 @@ test("validates citations and verbatim quotes", () => {
 });
 
 test("CLI leaves an unscorable session alone without failing or printing private evidence", async () => {
-  const dir = tmp("outcome-cli-");
+  const dir = tmpDir("outcome-cli-");
   writeJson(evidenceFile(dir, "x", "claude"), { harness: "claude", transcriptId: "x", status: "ok", endedAt: "2020-01-01T00:00:00Z", outcomeSnapshot: { trace: "PRIVATE QUOTE" } });
   const server = await fakeLangfuse().serve();
   try {
@@ -44,7 +43,7 @@ test("CLI leaves an unscorable session alone without failing or printing private
 });
 
 test("maturation, preview, unscored sessions, and explicit rescore", async () => {
-  const dir = tmp("outcome-test-");
+  const dir = tmpDir("outcome-test-");
   const end = Date.parse("2026-01-01T00:00:00Z");
   const lf = fakeLangfuse();
   lf.add("claude", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Looking" }] });
@@ -74,7 +73,7 @@ test("maturation, preview, unscored sessions, and explicit rescore", async () =>
 });
 
 test("a dry run previews finished Hermes sessions that were never analyzed", async () => {
-  const dir = path.join(tmp("outcome-backtest-"), "state"), end = Date.parse("2026-01-01T00:00:00Z"), now = end + 10 * DAY;
+  const dir = path.join(tmpDir("outcome-backtest-"), "state"), end = Date.parse("2026-01-01T00:00:00Z"), now = end + 10 * DAY;
   const lf = fakeLangfuse();
   const turns = [{ user: "Fix the bug", assistant: "On it" }];
   lf.add("hermes", "desk", { start: end - 60_000, platform: "desktop", turns });
@@ -94,7 +93,7 @@ test("a dry run previews finished Hermes sessions that were never analyzed", asy
 });
 
 test("a snapshot cut from a local store is re-cut once from Langfuse; a later turn makes it unscorable", async () => {
-  const dir = tmp("outcome-legacy-");
+  const dir = tmpDir("outcome-legacy-");
   const end = Date.parse("2026-01-01T00:00:00Z");
   const lf = fakeLangfuse();
   lf.add("hermes", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Fixed" }] });
@@ -115,7 +114,7 @@ test("a snapshot cut from a local store is re-cut once from Langfuse; a later tu
 });
 
 test("a re-cut snapshot is verified without an extra pre-check fetch", async () => {
-  const dir = tmp("outcome-recut-calls-");
+  const dir = tmpDir("outcome-recut-calls-");
   const end = Date.parse("2026-01-01T00:00:00Z");
   const lf = fakeLangfuse();
   lf.add("hermes", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Fixed" }] });

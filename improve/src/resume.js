@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
-import { assertModelConfigured, modelInvoke } from "./model.js";
+import { resolveInvoke } from "./model.js";
 import { propose } from "./propose.js";
 import { readSoulSnapshot } from "./soul.js";
 import { assertMinGapEvidence, initStateDir, readEvidenceRecords, readJson, timestampId, writeJson } from "./state.js";
@@ -32,10 +32,7 @@ export async function runSynthesizeResume({ stateDir, soulPath, minGapEvidence =
   }
   const soul = readSoulSnapshot(soulPath);
   const runId = timestampId("run");
-  if (!invoke) {
-    assertModelConfigured();
-    invoke = modelInvoke(resolvedState);
-  }
+  invoke = resolveInvoke({ invoke, stateDir: resolvedState, role: "synthesis" }).invoke;
 
   emit("fold:start");
   const consolidation = await consolidateLedger(

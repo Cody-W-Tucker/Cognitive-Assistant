@@ -104,8 +104,3 @@ export function invokeWith(overrides = {}) {
   invoke.calls = calls;
   return invoke;
 }
-
-export function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value)}\n`, "utf8");
-}

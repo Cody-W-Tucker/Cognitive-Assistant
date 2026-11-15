@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt } from "./state.js";
+import { ask } from "./state.js";
+import { mapPool } from "./util.js";
 
 const CONTEXT_CHARS = 6000;
 
@@ -90,23 +91,17 @@ export async function analyzeTraces(traces, { invoke, contexts, stateDir, runId,
     if (trivial) return record(trace, "skipped", { error: trivial });
     try {
       const prompt = buildAnalysisPrompt(trace, contexts);
-      persistPrompt(stateDir, { runId, name: trace.transcriptId, prompt, meta: { transcriptId: String(trace.transcriptId), harness: String(trace.harness) } });
-      const reply = await invoke("analysis", prompt, { trace });
+      const meta = { transcriptId: String(trace.transcriptId), harness: String(trace.harness) };
+      const reply = await ask(invoke, "analysis", prompt, { trace }, { stateDir, runId, name: trace.transcriptId, meta });
       if (!isEvidence(reply)) return record(trace, "failed", { error: "analyzer returned malformed evidence" });
       return record(trace, "ok", { positive: reply.positive, negative: reply.negative, gaps: reply.gaps });
     } catch (err) {
       return record(trace, "failed", { error: err.message });
     }
   };
-  const records = new Array(traces.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < traces.length) {
-      const index = next++;
-      records[index] = await analyzeOne(traces[index]);
-      onRecord?.(records[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(jobs) || 4, traces.length)) }, worker));
-  return records;
+  return mapPool(traces, jobs, async (trace) => {
+    const result = await analyzeOne(trace);
+    onRecord?.(result);
+    return result;
+  });
 }

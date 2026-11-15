@@ -7,9 +7,9 @@ import { sessionMeta } from "../src/outcome.js";
 import { capSessions, runPipeline } from "../src/pipeline.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { readJson } from "../src/state.js";
+import { HOUR } from "./fake-langfuse.mjs";
 import { invokeWith, setup } from "./helpers.mjs";
 
-const HOUR = 3600_000;
 const run = (env, options = {}) => runPipeline({ ...env, since: "all", analyzer: "mock", ...options });
 
 describe("run with the mock analyzer", () => {

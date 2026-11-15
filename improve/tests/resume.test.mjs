@@ -4,8 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { runSynthesizeResume } from "../src/resume.js";
-import { readJson } from "../src/state.js";
-import { invokeWith, tmpDir, writeJson, writeSoul } from "./helpers.mjs";
+import { readJson, writeJson } from "../src/state.js";
+import { invokeWith, tmpDir, writeSoul } from "./helpers.mjs";
 
 const QUOTE = "sessions re-derive project context from scratch";
 

@@ -5,10 +5,9 @@ import path from "node:path";
 import { cutoffMs, discoverTranscripts, isLangfuseRevision, observationsToEvents, readTranscript, transcriptRevision } from "../src/harnesses.js";
 import { langfuseClient, langfuseConfig } from "../src/langfuse.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
-import { writeJson } from "./helpers.mjs";
-import { fakeLangfuse, sessionObservations } from "./fake-langfuse.mjs";
+import { writeJson } from "../src/state.js";
+import { HOUR, fakeLangfuse, sessionObservations } from "./fake-langfuse.mjs";
 
-const HOUR = 3600_000;
 const now = Date.parse("2026-11-14T12:00:00Z");
 const ago = (hours) => now - hours * HOUR;
 

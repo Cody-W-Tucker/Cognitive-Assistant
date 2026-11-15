@@ -4,9 +4,9 @@ import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
 import { discoverTranscripts, readTranscript } from "./harnesses.js";
+import { ATTACHED_MARKER, DAY_MS, time } from "./util.js";
 
 const execFileAsync = promisify(execFile);
-const DAY_MS = 86400_000;
 const MESSAGE_LIMIT = 2000;
 const MAX_SESSIONS = 8;
 const MAX_TOUCHED = 60;
@@ -17,12 +17,7 @@ const SOURCES = new Set(["desktop", "tui", "cli"]);
 // Do not include attached context, tools, or unbounded transcript text.
 function message(text) {
   if (typeof text !== "string") return "";
-  return text.split("--- Attached Context ---", 1)[0].trim().slice(0, MESSAGE_LIMIT);
-}
-
-function time(value) {
-  if (value === null || value === undefined || value === "") return NaN;
-  return typeof value === "number" ? value : Date.parse(value);
+  return text.split(ATTACHED_MARKER, 1)[0].trim().slice(0, MESSAGE_LIMIT);
 }
 
 function samePath(a, b) {

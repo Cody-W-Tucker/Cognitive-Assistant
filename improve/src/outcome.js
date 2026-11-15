@@ -5,15 +5,15 @@
 // later run tries again, and verdicts ignore it.
 import fs from "node:fs";
 import path from "node:path";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { collectFollowup, touchedPaths } from "./followup.js";
 import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, transcriptRevision } from "./harnesses.js";
 import { distill } from "./distill.js";
 import { langfuseClient } from "./langfuse.js";
-import { mockInvoke } from "./mock.js";
-import { assertModelConfigured, modelInvoke } from "./model.js";
+import { resolveInvoke } from "./model.js";
 import { loadPrompt, renderPrompt } from "./prompts.js";
 import { checkpointKey, evidenceFile, readEvidenceRecords, readJson, writeJson } from "./state.js";
+import { ATTACHED_MARKER, DAY_MS, sha256, time } from "./util.js";
 
 /** What the runtime keeps about when and where a session happened. */
 export function sessionMeta(session) {
@@ -32,7 +32,7 @@ export function sessionMeta(session) {
 
 /** The blind trace the outcome judge reads, tied to the transcript revision it was cut from. */
 export function outcomeSnapshot(session, events, revision) {
-  const said = (text) => text.split("--- Attached Context ---", 1)[0];
+  const said = (text) => text.split(ATTACHED_MARKER, 1)[0];
   return {
     revision,
     location: { harness: session.harness, id: session.id },
@@ -44,11 +44,9 @@ export function outcomeSnapshot(session, events, revision) {
   };
 }
 
-const DAY = 86400000;
 const labels = new Set(["advanced", "stalled", "regressed", "answered", "unclear"]);
 // A label that claims nothing about what happened next needs no citation.
 const uncited = new Set(["answered", "unclear"]);
-const time = (v) => v == null || v === "" ? NaN : typeof v === "number" ? v : Date.parse(v);
 
 export function validateOutcome(reply, trace, followup, traceTexts = []) {
   if (!reply || typeof reply.aim !== "string" || !reply.aim.trim() || typeof reply.reason !== "string" || !reply.reason.trim() || !labels.has(reply.label) || !Array.isArray(reply.evidence) || (!uncited.has(reply.label) && !reply.evidence.length)) return false;
@@ -66,17 +64,16 @@ export function validateOutcome(reply, trace, followup, traceTexts = []) {
  * tied to a local store revision, which can never match again. Such a
  * snapshot (or a missing one) is re-cut once from Langfuse and saved.
  */
-export async function runOutcome({ client = null, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup } = {}) {
+export async function runOutcome({ client = null, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, now = Date.now(), collect = collectFollowup } = {}) {
   if (!stateDir) throw new Error("outcome: --state-dir is required");
   const days = Number(matureDays);
   if (matureDays === "" || !Number.isFinite(days) || days < 0) throw new Error("--mature-days must be non-negative");
   if (limit !== null && (!Number.isInteger(Number(limit)) || Number(limit) < 1)) throw new Error("--limit must be a positive integer");
   if (!["model", "mock"].includes(analyzer)) throw new Error("--analyzer must be model or mock");
   const cutoff = cutoffMs(since, now);
-  const custom = Boolean(invoke);
-  if (!invoke) { if (analyzer === "mock") invoke = mockInvoke; else { assertModelConfigured(); invoke = modelInvoke(stateDir); } }
-  const model = modelName || (custom ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL));
-  const rubric = { promptSha: createHash("sha256").update(loadPrompt("outcome")).digest("hex"), model, matureDays: days };
+  let model;
+  ({ invoke, model } = resolveInvoke({ invoke, analyzer, stateDir, role: "outcome" }));
+  const rubric = { promptSha: sha256(loadPrompt("outcome")), model, matureDays: days };
   client ??= langfuseClient();
   // One discovery serves every lookup in this run, including follow-up.
   let pool = null;
@@ -92,7 +89,7 @@ export async function runOutcome({ client = null, stateDir, since = "all", limit
   }
   const rows = candidates.filter(({ record }) => {
     const ended = time(record.endedAt);
-    return Number.isFinite(ended) && ended >= cutoff && ended + days * DAY <= now;
+    return Number.isFinite(ended) && ended >= cutoff && ended + days * DAY_MS <= now;
   }).sort((a, b) => time(b.record.endedAt) - time(a.record.endedAt));
   const selected = limit === null ? rows : rows.slice(0, Number(limit));
   const runId = `outcome-${new Date(now).toISOString().replace(/[-:.TZ]/g, "")}-${randomBytes(4).toString("hex")}`;
