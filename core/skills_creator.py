@@ -21,7 +21,6 @@ from core.skill_engine import (
     refine_declared_skill_document,
     skill_path,
     validate_declared_skill_document,
-    validate_skill_slug,
     with_generation_metadata,
 )
 
@@ -59,9 +58,8 @@ def scoped_content(profile: LayerProfile, spec: SkillSpec, sections: Dict[str, s
 
 
 async def _build_one(profile: LayerProfile, spec: SkillSpec, sections: Dict[str, str]) -> None:
-    validate_skill_slug(spec.slug)
-    scoped = scoped_content(profile, spec, sections)
     path = skill_path(profile.name, spec.slug)
+    scoped = scoped_content(profile, spec, sections)
     if path.exists():
         content = await refine_declared_skill_document(
             spec=spec,

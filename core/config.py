@@ -38,7 +38,6 @@ class LayerProfile:
     """Static declaration of everything a profile customizes."""
 
     name: str
-    display_name: str
     qmd_collections: List[str]
     prompt_files: dict[str, str]
     skill_specs: List[SkillSpec]
@@ -136,7 +135,6 @@ _SHARED_PROMPTS = {
 
 EXISTENTIAL_PROFILE = LayerProfile(
     name="existential",
-    display_name="Existential Layer",
     qmd_collections=["Journal", "Personal"],
     prompt_files=dict(_SHARED_PROMPTS),
     section_header_template="# Understanding: **{category}**",
@@ -162,7 +160,6 @@ EXISTENTIAL_PROFILE = LayerProfile(
 
 OPERATIONAL_PROFILE = LayerProfile(
     name="operational",
-    display_name="Operational Layer",
     qmd_collections=["Base", "Consulting", "Customers"],
     prompt_files={**_SHARED_PROMPTS, "tool_specs_creation_template": "tool_specs_creation_template.md"},
     has_corpus_ingest=True,

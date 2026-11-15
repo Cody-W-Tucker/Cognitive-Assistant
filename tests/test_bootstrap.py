@@ -331,12 +331,6 @@ class RepoHealthTests(RepoSandboxTestCase):
         self.assertEqual((code, out.split()), (0, ["existential", "operational"]))
 
 
-if __name__ == "__main__":
-    import unittest
-
-    unittest.main()
-
-
 class SkillEnhancerTests(RepoSandboxTestCase):
     def test_a_path_to_one_hermes_skill_only_enhances_that_skill(self) -> None:
         import time
@@ -357,3 +351,9 @@ class SkillEnhancerTests(RepoSandboxTestCase):
         self.assertEqual([call["label"] for call in fake.calls], ["enhanced skill alpha"])
         self.assertIn("Enhanced.", (paths.SKILLS_DIR / "workflow" / "alpha" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertNotIn("Enhanced.", (paths.SKILLS_DIR / "workflow" / "beta" / "SKILL.md").read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    import unittest
+
+    unittest.main()

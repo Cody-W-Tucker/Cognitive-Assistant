@@ -59,10 +59,17 @@ def _profile_stage(command: str, profile: LayerProfile, args: argparse.Namespace
     return _run_stage(command, module.requirements(profile), lambda: module.build(profile, **options))
 
 
+def _cross_profile_stage(command: str) -> int:
+    """build-translation-layer or build-alignment-spec (reads every profile)."""
+    if command == "build-translation-layer":
+        from core import translation_layer_creator as module
+    else:
+        from core import alignment_spec as module
+    return _run_stage(command, module.requirements(), module.build)
+
+
 def _update(args: argparse.Namespace) -> int:
     """Every per-profile build stage, then the cross-profile stages."""
-    from core import alignment_spec, translation_layer_creator
-
     profiles = [get_profile(args.profile)] if args.profile else [get_profile(name) for name in list_profiles()]
     for profile in profiles:
         commands = ["build-prompts", "build-skills"]
@@ -72,12 +79,12 @@ def _update(args: argparse.Namespace) -> int:
             code = _profile_stage(command, profile, args)
             if code:
                 return code
-    print("\n>>> build-translation-layer")
-    code = _run_stage("build-translation-layer", translation_layer_creator.requirements(), translation_layer_creator.build)
-    if code:
-        return code
-    print("\n>>> build-alignment-spec")
-    return _run_stage("build-alignment-spec", alignment_spec.requirements(), alignment_spec.build)
+    for command in ("build-translation-layer", "build-alignment-spec"):
+        print(f"\n>>> {command}")
+        code = _cross_profile_stage(command)
+        if code:
+            return code
+    return 0
 
 
 def _print_proposal_summary(proposal: dict, *, file=sys.stdout) -> None:
@@ -209,7 +216,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--profile",
-        required=False,
         help="Layer profile to operate on. Available: " + ", ".join(list_profiles()),
     )
 
@@ -303,7 +309,6 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_run_parser.add_argument(
         "--headless",
         action="store_true",
-        required=False,
         help="Headless run: emit exactly one JSON proposal object on stdout (never touches tracked files or live Hermes).",
     )
     improve_run_parser.add_argument(
@@ -325,7 +330,6 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_run_parser.add_argument(
         "--max-sessions",
         type=_positive_int,
-        default=None,
         help="Analyze and outcome-score at most this many sessions per run (Hermes first, then newest); the rest wait for later runs.",
     )
     improve_run_parser.add_argument(
@@ -336,19 +340,16 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_run_parser.add_argument(
         "--min-sessions",
         type=int,
-        default=None,
         help="--auto: scored sessions needed on each side before judging a change (default 15).",
     )
     improve_run_parser.add_argument(
         "--z-threshold",
         type=float,
-        default=None,
         help="--auto: one-sided z a rise in the miss rate must clear to revert a change (default 1.645).",
     )
     improve_run_parser.add_argument(
         "--harness",
         action="append",
-        default=None,
         help="Only scan this harness's Langfuse sessions (repeatable): hermes, claude, opencode.",
     )
 
@@ -367,7 +368,6 @@ def _build_parser() -> argparse.ArgumentParser:
     improve_apply_parser.add_argument(
         "--decisions",
         action="append",
-        default=None,
         help='Decisions vector, e.g. --decisions "e1=accepted e2=rejected:too-narrow". Repeatable.',
     )
     improve_apply_parser.add_argument(
@@ -423,25 +423,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(name)
         return 0
 
-    if args.command == "build-alignment-spec":
-        from core import alignment_spec
-
-        return _run_stage("build-alignment-spec", alignment_spec.requirements(), alignment_spec.build)
+    if args.command in ("build-translation-layer", "build-alignment-spec"):
+        return _cross_profile_stage(args.command)
 
     if args.command == "enhance-skill":
         from core import skill_enhancer
 
         if _refuse("enhance-skill", skill_enhancer.requirements(args.apply)):
             return 1
-        hermes_path = Path(args.hermes_path).expanduser() if args.hermes_path else None
+        hermes_path = args.hermes_path.expanduser() if args.hermes_path else None
         return skill_enhancer.run(skill_name=args.skill, hermes_path=hermes_path, apply=args.apply)
-
-    if args.command == "build-translation-layer":
-        from core import translation_layer_creator
-
-        return _run_stage(
-            "build-translation-layer", translation_layer_creator.requirements(), translation_layer_creator.build
-        )
 
     if args.command == "review-queue":
         from core import langfuse_review

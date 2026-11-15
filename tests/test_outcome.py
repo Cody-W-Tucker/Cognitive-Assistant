@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import json
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from core import experience, improve, living_soul, outcome
 from core.paths import improve_dir, soul_dir

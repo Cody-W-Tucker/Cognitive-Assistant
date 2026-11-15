@@ -276,7 +276,6 @@ def _build_perplexity_search_records(path: Path) -> tuple[list[dict[str, Any]], 
     skipped = 0
     previous_timestamp: datetime | None = None
     sequence_number = 0
-    sequence_position = 0
 
     with path.open("r", encoding="utf-8", newline="") as file_handle:
         reader = csv.DictReader(file_handle)
@@ -294,9 +293,6 @@ def _build_perplexity_search_records(path: Path) -> tuple[list[dict[str, Any]], 
                 > SEQUENCE_GAP_SECONDS
             ):
                 sequence_number += 1
-                sequence_position = 1
-            else:
-                sequence_position += 1
             previous_timestamp = timestamp_value
 
             records.append(
