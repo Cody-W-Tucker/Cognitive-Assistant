@@ -246,6 +246,14 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
     }
     for (const [id, group] of [...sessions]) {
       if (excludeTranscript?.harness === harness && excludeTranscript.id === id) continue;
+      stats.scanned += 1;
+      if (cutoff) {
+        const windowed = sessionFromRoots(harness, id, group);
+        if (windowed.mtimeMs !== null && now - windowed.mtimeMs <= idleHours * 3600_000) {
+          stats.open += 1;
+          continue;
+        }
+      }
       let full = group;
       if (cutoff) {
         full = (await clientOr(client).observations({ sessionId: id, isRootObservation: true, fields: "core,basic,metadata" }))
@@ -254,7 +262,6 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
         sessions.set(id, full);
       }
       const session = sessionFromRoots(harness, id, full);
-      stats.scanned += 1;
       if (isUnder(session.cwd, stateDir)) {
         stats.self += 1;
         continue;

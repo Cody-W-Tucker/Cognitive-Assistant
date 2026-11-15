@@ -84,6 +84,16 @@ describe("discovery from Langfuse root observations", () => {
     assert.deepEqual(events.map((e) => e.text), ["A", "B", "C", "D"]);
   });
 
+  it("skips a still-open session straddling --since without refetching its roots", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "s", { start: ago(24 * 40), turns: [{ user: "old ask", assistant: "old reply" }] });
+    lf.add("hermes", "s", { start: ago(1), turns: [{ user: "new ask", assistant: "new reply" }] });
+    const { transcripts, perHarness } = await discoverTranscripts({ client: lf.client, since: "30d", harnesses: ["hermes"], now });
+    assert.deepEqual(transcripts, []);
+    assert.equal(perHarness.hermes.open, 1);
+    assert.ok(lf.calls.every((q) => q.sessionId === undefined));
+  });
+
   it("leaves sessions active within the idle window for later", async () => {
     const lf = fakeLangfuse();
     lf.add("claude", "busy", { start: ago(1) });
