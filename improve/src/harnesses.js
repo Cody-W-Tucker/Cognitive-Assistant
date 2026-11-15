@@ -188,10 +188,6 @@ export async function readTranscript(transcript, { client = null } = {}) {
   };
 }
 
-export async function readTranscriptEvents(transcript, options = {}) {
-  return (await readTranscript(transcript, options)).events;
-}
-
 /** The session's current revision, from its root observations alone. */
 export async function transcriptRevision(transcript, { client = null } = {}) {
   const roots = (await clientOr(client).observations({ sessionId: transcript.id, isRootObservation: true, fields: "core,basic,metadata" }))

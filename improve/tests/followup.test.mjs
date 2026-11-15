@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { collectFollowup, touchedPaths } from "../src/followup.js";
+import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { tmpDir } from "./helpers.mjs";
 import { fakeLangfuse } from "./fake-langfuse.mjs";
 
@@ -48,6 +49,17 @@ it("takes later Hermes sessions without a directory, earliest first, up to the c
   const result = await collectFollowup({ session, client });
   assert.deepEqual(result.sessions.map((s) => s.ref), ["s9", "s8", "s7", "s6", "s5", "s4", "s3", "s2"].map((id) => `session:${id}`));
   assert.equal(result.sessions[0].firstUser, "about s9");
+});
+
+it("never cites the runtime's own sessions as follow-up", async () => {
+  const client = langfuseWith((add) => {
+    add("hermes", "later", start + day);
+    add("hermes", "self", start + day, { user: `${SELF_SESSION_SENTINEL}\nrun the improvement loop` });
+    add("hermes", "original", start);
+  });
+  const session = { harness: "hermes", transcriptId: "original", endedAt: new Date(start).toISOString() };
+  const result = await collectFollowup({ session, client });
+  assert.deepEqual(result.sessions.map((s) => s.ref), ["session:later"]);
 });
 
 it("filters commits by inclusive committer timestamps", async () => {

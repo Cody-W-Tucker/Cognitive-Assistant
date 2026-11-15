@@ -123,7 +123,7 @@ export async function runOutcome({ client = null, stateDir, since = "all", limit
       if (!revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session changed since its snapshot");
       const { trace, firstUserMessage, texts, touched } = snapshot;
       if (typeof trace !== "string" || !Array.isArray(texts)) throw new Error("invalid original session snapshot");
-      const followup = await collect({ session: record, firstUserMessage, matureDays: days, client, candidates: discovered, touched });
+      const followup = await collect({ session: record, firstUserMessage, matureDays: days, client, stateDir, candidates: discovered, touched });
       if (JSON.stringify(revision) !== JSON.stringify(await transcriptRevision(session, { client }))) throw new Error("original session changed");
       const prompt = renderPrompt("outcome", { TRACE: trace, FOLLOWUP: JSON.stringify(followup, null, 2) });
       const valid = (reply) => validateOutcome(reply, trace, followup, texts);

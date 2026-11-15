@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
-import { discoverTranscripts, readTranscriptEvents, sessionEndMs } from "./harnesses.js";
+import { discoverTranscripts, readTranscript, sessionEndMs } from "./harnesses.js";
 
 const execFileAsync = promisify(execFile);
 const DAY_MS = 86400_000;
@@ -106,7 +106,7 @@ function noteDate(row) {
  * Commits: from the session's repository and from the repositories its tool
  * calls touched (`touched`, see touchedPaths), each tagged with its `repo`.
  */
-export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, client = null, candidates = null, touched = [] } = {}) {
+export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, client = null, stateDir = null, candidates = null, touched = [] } = {}) {
   const start = time(session?.endedAt);
   if (!Number.isFinite(start)) throw new Error("followup: session endedAt is required");
   if (typeof matureDays !== "number" || !Number.isFinite(matureDays) || matureDays < 0) throw new Error("followup: matureDays must be non-negative");
@@ -118,7 +118,7 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
 
   const located = (typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd));
   const pool = (typeof candidates === "function" ? await candidates() : candidates)
-    ?? (await discoverTranscripts({ client, since: "all", ignoreCheckpoint: true, excludeTranscript: { harness: session.harness, id: session.transcriptId } })).transcripts;
+    ?? (await discoverTranscripts({ client, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: { harness: session.harness, id: session.transcriptId } })).transcripts;
   const later = [];
   for (const candidate of pool) {
     if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
@@ -136,7 +136,8 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   for (const { candidate, began } of later) {
     if (result.sessions.length >= MAX_SESSIONS) break;
     try {
-      const events = await readTranscriptEvents(candidate, { client });
+      const { events, self } = await readTranscript(candidate, { client });
+      if (self) continue;
       const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));
       const assistants = events.filter((e) => e.kind === "message" && e.role === "assistant" && message(e.text));
       if (!users.length && !assistants.length) continue;
