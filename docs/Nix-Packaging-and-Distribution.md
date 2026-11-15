@@ -22,7 +22,9 @@ runs the living SOUL as the same user as Hermes. On activation it runs
 `ca soul link <hermesHome>`; with `improve.enable` (default) it adds a daily
 `ca-improve` user service/timer that runs `ca improve-run --headless`, plus
 `--auto --min-sessions <n>` when `improve.auto` (default) and one `--harness`
-per entry of `improve.harnesses` (default `[ "hermes" ]`). The model endpoint
+per entry of `improve.harnesses` (default `[ "hermes" ]`; `[ ]` scans every
+supported store and skips missing ones), plus `--max-sessions <n>` when
+`improve.maxSessions` is set. The model endpoint
 comes from `llm.baseUrl`, `llm.model`, `llm.roleModels` and `llm.apiKeyFile`,
 exported as the `CA_LLM_*` variables. `hermesHome` is required and its
 `SOUL.md` must not also be declared in `hermesHomeFiles`. Example and

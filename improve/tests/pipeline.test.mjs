@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { runPipeline, sessionEligible, stampEvidence } from "../src/pipeline.js";
+import { capSessions, runPipeline, sessionEligible, stampEvidence } from "../src/pipeline.js";
 import { readJson } from "../src/state.js";
 import { invokeWith, makeSqlite, tmpDir, writeCodexSession, writeSoul } from "./helpers.mjs";
 
@@ -230,4 +230,26 @@ it("passes the configured idle window into discovery", async () => {
   ]);
   const result = await run(env, { harnesses: ["hermes"], idleHours: 0.5 });
   assert.equal(result.stats.transcripts, 1);
+});
+
+it("capSessions keeps Hermes first, then the newest, and leaves an uncapped list alone", () => {
+  const rows = [
+    { id: "c-old", harness: "claude", mtimeMs: 1 },
+    { id: "c-new", harness: "claude", mtimeMs: 9 },
+    { id: "h-old", harness: "hermes", mtimeMs: 2 },
+  ];
+  assert.deepEqual(capSessions(rows, 2).map((t) => t.id), ["h-old", "c-new"]);
+  assert.equal(capSessions(rows, null), rows);
+  assert.equal(capSessions(rows, 3), rows);
+});
+
+it("--max-sessions bounds a run; checkpoints let the next run take the rest", async () => {
+  const env = setup(3);
+  const invoke = invokeWith();
+  const first = await run(env, { invoke, maxSessions: 2 });
+  assert.equal(first.stats.transcripts, 2);
+  const second = await run(env, { invoke, maxSessions: 2 });
+  assert.equal(second.stats.transcripts, 1);
+  assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 3);
+  await assert.rejects(run(env, { maxSessions: 0 }), /--max-sessions must be a positive integer/);
 });

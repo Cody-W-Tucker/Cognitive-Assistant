@@ -9,7 +9,7 @@ import { startTui } from "../src/tui.js";
 
 const USAGE = `usage:
   ca-improve run (--headless|--tui) --state-dir D --soul-path S [--experience-file E] [--posture-path P]
-                 [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--home H] [--harness X]...
+                 [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--max-sessions N] [--home H] [--harness X]...
   ca-improve synthesize --state-dir D --soul-path S [--min-gap-evidence N]
   ca-improve outcome --state-dir D [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--home H] [--analyzer model|mock]`;
 
@@ -64,6 +64,7 @@ async function main() {
             experiencePath: flags["experience-file"] || null,
             since,
             idleHours: flags["idle-hours"] ?? 12,
+            maxSessions: flags["max-sessions"] ?? null,
             harnesses: flags.harness.length ? flags.harness : null,
             strictHarnesses: flags.harness.length > 0,
             analyzer,

@@ -16,6 +16,13 @@ from typing import Awaitable, Callable, List, Sequence
 from core.config import LayerProfile, get_profile, list_profiles
 
 
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer (got {value})")
+    return number
+
+
 def _refuse(name: str, issues: List[str]) -> bool:
     """Print missing configuration; True when there was any."""
     if issues:
@@ -110,6 +117,7 @@ def _improve_run(args: argparse.Namespace) -> int:
         analyzer=args.analyzer,
         min_gap_evidence=args.min_gap_evidence,
         harnesses=args.harness,
+        max_sessions=args.max_sessions,
     )
     if not args.headless:
         _print_proposal_summary(proposal)
@@ -317,6 +325,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=2,
         help="Sessions of shared gap evidence needed before a candidate is proposed.",
+    )
+    improve_run_parser.add_argument(
+        "--max-sessions",
+        type=_positive_int,
+        default=None,
+        help="Analyze and outcome-score at most this many sessions per run (Hermes first, then newest); the rest wait for later runs.",
     )
     improve_run_parser.add_argument(
         "--auto",

@@ -109,6 +109,12 @@ class RunTests(CAHomeTestCase):
         self.assertIn("--auto requires --headless", err)
         run.assert_not_called()
 
+    def test_max_sessions_reaches_the_runtime(self) -> None:
+        with mock.patch.object(improve, "_runtime", return_value={}) as runtime:
+            improve.run(max_sessions=40, analyzer="mock")
+        flags = runtime.call_args.args[1]
+        self.assertEqual(flags[flags.index("--max-sessions") + 1], "40")
+
     def test_a_named_harness_with_no_store_fails_the_run(self) -> None:
         with mock.patch.dict(os.environ, {"HERMES_HOME": str(self.root / "no-hermes-here")}):
             with self.assertRaisesRegex(RuntimeError, "hermes: store missing"):

@@ -129,6 +129,12 @@ are deliberately excluded and naming them is an error. With
 `CA_IMPROVE_HOME` (Python) / `--home` (runtime) every store is looked up under
 that one directory and the ambient `HERMES_HOME` etc. are ignored.
 
+`--max-sessions N` bounds one run's model work: at most N sessions are
+analyzed and at most N mature sessions are outcome-scored. Hermes sessions go
+first, since verdicts are judged on them, then the newest; the rest stay
+uncheckpointed and wait for a later run (a backlog older than `--since` is
+never reached).
+
 Tuning: `CA_IMPROVE_JOBS` (parallel sessions, default 4),
 `CA_IMPROVE_MAX_OPENCODE_EXPORTS` (newest OpenCode sessions per run, default
 50), `CA_IMPROVE_OPENCODE_BIN` (default `opencode`).

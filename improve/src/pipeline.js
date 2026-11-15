@@ -77,6 +77,17 @@ function capOpencode(transcripts, max) {
   return transcripts.filter((t) => t.harness !== "opencode" || allowed.has(t.id));
 }
 
+/**
+ * Bound one run's analysis work. Hermes sessions go first because the
+ * autonomous verdict is judged on them alone; within each group the newest
+ * win. Checkpoints let later runs advance through the rest.
+ */
+export function capSessions(transcripts, max) {
+  if (max == null || transcripts.length <= max) return transcripts;
+  const rank = (t) => (t.harness === "hermes" ? 0 : 1);
+  return [...transcripts].sort((a, b) => rank(a) - rank(b) || (b.mtimeMs || 0) - (a.mtimeMs || 0)).slice(0, max);
+}
+
 function countByHarness(transcripts) {
   const counts = {};
   for (const t of transcripts) counts[t.harness] = (counts[t.harness] || 0) + 1;
@@ -112,11 +123,14 @@ export async function runPipeline({
   progress = null,
   jobs = Number(process.env.CA_IMPROVE_JOBS || 4),
   idleHours = 12,
+  maxSessions = null,
 }) {
   const emit = (event, data = {}) => progress?.(event, data);
   const floor = assertMinGapEvidence(minGapEvidence, "minGapEvidence");
   if (!stateDir) throw new Error("improve-run: --state-dir is required");
   if (analyzer !== "model" && analyzer !== "mock") throw new Error(`improve-run: --analyzer must be model or mock (got ${JSON.stringify(analyzer)})`);
+  if (maxSessions !== null && !(Number.isInteger(Number(maxSessions)) && Number(maxSessions) > 0)) throw new Error("--max-sessions must be a positive integer");
+  const cap = maxSessions === null ? null : Number(maxSessions);
   if (idleHours === null || String(idleHours).trim() === "" || !Number.isFinite(Number(idleHours)) || Number(idleHours) < 0) throw new Error("--idle-hours must be a non-negative number");
   const soul = readSoulSnapshot(soulPath);
   const customInvoke = Boolean(invoke);
@@ -153,7 +167,7 @@ export async function runPipeline({
     if (readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok") return false;
     return sessionEligible(t, now, Number(idleHours));
   });
-  const transcripts = capOpencode(eligible, Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50));
+  const transcripts = capSessions(capOpencode(eligible, Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50)), cap);
   const perHarness = countByHarness(transcripts);
   emit("discover:done", { transcripts: transcripts.length, perHarness });
 
@@ -192,7 +206,7 @@ export async function runPipeline({
   emit("analyze:done", { ...tally });
 
   // Sessions that cannot be scored yet stay without an outcome and never stop the run.
-  await runOutcome({ home, stateDir, since: "all", analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
+  await runOutcome({ home, stateDir, since: "all", limit: cap, analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {

@@ -248,7 +248,19 @@
             improve.harnesses = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [ "hermes" ];
-              description = "Harnesses to scan; a named harness with a missing store fails the run.";
+              description = ''
+                Harnesses to scan; a named harness with a missing store fails the run.
+                An empty list scans every supported store (never Pi) and skips missing ones.
+              '';
+            };
+            improve.maxSessions = lib.mkOption {
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              example = 40;
+              description = ''
+                Sessions one run may analyze, and separately outcome-score: Hermes
+                first, then newest. The rest wait for later runs. Null is no cap.
+              '';
             };
             improve.timerConfig = lib.mkOption {
               type = lib.types.attrs;
@@ -293,6 +305,10 @@
                     "--auto"
                     "--min-sessions"
                     (toString cfg.improve.minSessions)
+                  ]
+                  ++ lib.optionals (cfg.improve.maxSessions != null) [
+                    "--max-sessions"
+                    (toString cfg.improve.maxSessions)
                   ]
                   ++ lib.concatMap (harness: [
                     "--harness"

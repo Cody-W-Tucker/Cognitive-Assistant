@@ -117,6 +117,7 @@ daily user timer with `HERMES_HOME` and the `CA_LLM_*` endpoint variables set.
 Every model call is a tool-free chat completion to `llm.baseUrl` (see
 [Improvement Loop](Improvement-Loop.md)); no agent harness runs. Other options:
 `improve.enable`, `improve.auto`, `improve.minSessions`, `improve.harnesses`,
+`improve.maxSessions`,
 `improve.timerConfig`, `llm.roleModels`, `llm.apiKeyFile`, `package`.
 
 ```nix

@@ -70,6 +70,7 @@ no `--state-dir` or `--soul-path` flags. Details:
 | `--analyzer` | `model` | `model` (configured endpoint) or `mock` (no model calls) |
 | `--min-gap-evidence` | `2` | Distinct sessions a gap needs before it can become a candidate (integer >= 2) |
 | `--harness NAME` | all | Scan only this harness (repeatable); a named harness whose store is missing fails the run |
+| `--max-sessions N` | none | Analyze at most N sessions this run, and outcome-score at most N; Hermes sessions first, then newest. The rest wait for later runs |
 | `--auto` | off | With `--headless`: judge the change under test, then revert, wait, or adopt one record |
 | `--min-sessions` | `15` | `--auto`: scored sessions needed on each side before judging |
 | `--z-threshold` | `1.645` | `--auto`: one-sided z a rise in the miss rate must clear to revert |

@@ -96,6 +96,7 @@ def run(
     analyzer: str = "model",
     min_gap_evidence: int = 2,
     harnesses: Optional[List[str]] = None,
+    max_sessions: Optional[int] = None,
 ) -> Dict:
     """Discover and analyze new sessions, then propose records. Writes only under CA home.
 
@@ -115,6 +116,8 @@ def run(
         "--min-gap-evidence",
         str(min_gap_evidence),
     ]
+    if max_sessions is not None:
+        flags += ["--max-sessions", str(max_sessions)]
     if home is not None:
         flags += ["--home", str(home)]
     for harness in harnesses or []:
