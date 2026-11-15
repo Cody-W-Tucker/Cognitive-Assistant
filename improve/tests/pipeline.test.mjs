@@ -4,17 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { capSessions, runPipeline, sessionEligible, stampEvidence } from "../src/pipeline.js";
+import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { readJson } from "../src/state.js";
-import { invokeWith, makeSqlite, tmpDir, writeCodexSession, writeSoul } from "./helpers.mjs";
+import { invokeWith, setup } from "./helpers.mjs";
 
-/** A HOME with `n` substantial Codex sessions plus a fresh state dir and SOUL. */
-function setup(n = 2) {
-  const root = tmpDir();
-  const home = path.join(root, "home");
-  for (let i = 0; i < n; i += 1) writeCodexSession(home, `codex-${i}`);
-  return { home, stateDir: path.join(root, "state"), soulPath: writeSoul(root) };
-}
-
+const HOUR = 3600_000;
 const run = (env, options = {}) => runPipeline({ ...env, since: "all", analyzer: "mock", ...options });
 
 describe("run with the mock analyzer", () => {
@@ -26,7 +20,7 @@ describe("run with the mock analyzer", () => {
     const [edit] = proposal.edits;
     assert.equal(edit.annotation.verdict, "keep");
     assert.match(edit.record.id, /^exp-[a-z0-9-]+-[0-9a-f]{12}$/);
-    assert.deepEqual(edit.record.sources, ["codex-0", "codex-1"]);
+    assert.deepEqual(edit.record.sources, ["claude-0", "claude-1"]);
     assert.deepEqual(edit.evidence, edit.record.evidence);
     assert.equal(edit.title, `Experience record: ${edit.record.title}`);
     assert.deepEqual(proposal.stats, { transcripts: 2, analyzed: 2, skipped: 0, failed: 0, clusters: 1, eligible: 1 });
@@ -34,9 +28,13 @@ describe("run with the mock analyzer", () => {
     assert.equal(proposal.soul.path, env.soulPath);
     assert.deepEqual(readJson(path.join(env.stateDir, "proposal.json")), proposal);
     assert.deepEqual(invoke.calls.map((c) => c.role), ["analysis", "analysis", "synthesis", "annotate"]);
-    for (const name of ["ledger.json", "open-gaps.json", "cursor.json", "evidence/codex:codex-0.json"]) {
+    for (const name of ["ledger.json", "open-gaps.json", "cursor.json", "evidence/claude:claude-0.json"]) {
       assert.ok(fs.existsSync(path.join(env.stateDir, name)), name);
     }
+    const snapshot = readJson(path.join(env.stateDir, "evidence", "claude:claude-0.json")).outcomeSnapshot;
+    assert.deepEqual(snapshot.location, { harness: "claude", id: "claude-0" });
+    assert.equal(snapshot.revision.source, "langfuse");
+    assert.match(snapshot.trace, /source: langfuse session claude-0/);
   });
 
   it("checkpoints sessions: a second run analyzes only what is new, yet earlier evidence still counts", async () => {
@@ -47,34 +45,29 @@ describe("run with the mock analyzer", () => {
     assert.equal(first.edits.length, 0);
     await run(env, { invoke });
     assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 1, "an unchanged session is not re-analyzed");
-    writeCodexSession(env.home, "codex-later", { day: "13" });
+    env.langfuse.add("claude", "claude-later");
     const third = await run(env, { invoke });
     assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 2);
     assert.equal(third.stats.transcripts, 1);
     assert.equal(third.edits.length, 1, "the new session plus saved evidence reach the floor");
   });
 
-  it("evidence carries session time and rubric, and is never re-analyzed after a revision", async () => {
+  it("evidence carries session time and rubric, and is never re-analyzed after a new turn", async () => {
     const env = setup(1);
-    const file = path.join(env.home, ".codex", "sessions", "2026", "10", "12", "rollout-codex-0.jsonl");
     await run(env);
-    const evidenceFile = path.join(env.stateDir, "evidence", "codex:codex-0.json");
-    assert.equal(typeof readJson(evidenceFile).sessionAt, "number");
+    const evidenceFile = path.join(env.stateDir, "evidence", "claude:claude-0.json");
     const evidence = readJson(evidenceFile);
+    assert.equal(typeof evidence.sessionAt, "number");
     assert.match(evidence.rubric.promptSha, /^[a-f0-9]{64}$/);
     assert.match(evidence.rubric.contextSha, /^[a-f0-9]{64}$/);
     assert.equal(evidence.rubric.model, "mock");
-    fs.appendFileSync(file, `${JSON.stringify({ role: "user", content: "one more thing" })}\n`);
-    const later = new Date(Date.now() + 5000);
-    fs.utimesSync(file, later, later);
-    const failing = invokeWith({
-      analysis: () => {
-        throw new Error("timed out");
-      },
-    });
+    env.langfuse.add("claude", "claude-0", { start: Date.now() - 24 * HOUR, turns: [{ user: "one more thing", assistant: "ok" }] });
+    const failing = invokeWith({ analysis: () => { throw new Error("timed out"); } });
     const proposal = await run(env, { invoke: failing });
     assert.equal(proposal.stats.transcripts, 0);
     assert.deepEqual(readJson(evidenceFile), evidence);
+    const cursor = readJson(path.join(env.stateDir, "cursor.json"));
+    assert.ok(cursor.processed["claude:claude-0"] > evidence.sessionAt, "the session is re-checkpointed at its new activity");
   });
 
   it("sessions without analyzer gaps never produce a cluster", async () => {
@@ -118,7 +111,7 @@ describe("run with the mock analyzer", () => {
     const second = await run(env, { invoke });
     assert.deepEqual(second.edits, []);
     assert.ok(invoke.calls.find((c) => c.role === "synthesis").prompt.includes(`[e1] ${record.title}`), "rejections reach the synthesis prompt");
-    writeCodexSession(env.home, "codex-new", { day: "14" });
+    env.langfuse.add("claude", "claude-new");
     const third = await run(env);
     assert.equal(third.edits.length, 1, "a session the rejection did not cite lifts suppression");
   });
@@ -126,13 +119,13 @@ describe("run with the mock analyzer", () => {
   it("a gap corroborated from an earlier run is marked on the edit", async () => {
     const env = setup(1);
     await run(env);
-    writeCodexSession(env.home, "codex-b", { day: "13" });
-    fs.rmSync(path.join(env.stateDir, "evidence", "codex:codex-0.json"));
+    env.langfuse.add("claude", "claude-b");
+    fs.rmSync(path.join(env.stateDir, "evidence", "claude:claude-0.json"));
     const proposal = await run(env);
     assert.equal(proposal.edits.length, 1);
     assert.equal(proposal.edits[0].corroboratedOpenGap, true);
     assert.match(proposal.edits[0].rationale, /^open-gap corroborated singleton: /);
-    assert.deepEqual(proposal.edits[0].record.sources, ["codex-0", "codex-b"]);
+    assert.deepEqual(proposal.edits[0].record.sources, ["claude-0", "claude-b"]);
   });
 
   it("fails before any work when the SOUL is missing or empty, or the analyzer is unknown", async () => {
@@ -155,6 +148,31 @@ describe("run with the mock analyzer", () => {
     }
     assert.equal(fs.existsSync(path.join(env.stateDir, "evidence")), false);
   });
+
+  it("fails loudly when Langfuse is unconfigured or refuses, rather than finding no sessions", async () => {
+    const env = setup(2);
+    const saved = { ...process.env };
+    for (const name of ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"]) delete process.env[name];
+    try {
+      await assert.rejects(run({ ...env, client: null }), /LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL not set/);
+    } finally {
+      Object.assign(process.env, saved);
+    }
+    env.langfuse.failNext(401);
+    await assert.rejects(run(env), /Langfuse .* returned 401/);
+    assert.equal(fs.existsSync(path.join(env.stateDir, "proposal.json")), false);
+  });
+
+  it("skips and checkpoints the runtime's own sessions", async () => {
+    const env = setup(0);
+    env.langfuse.add("claude", "self-prompt", { turns: [{ user: `${SELF_SESSION_SENTINEL}\nanalyze this`, assistant: "ok", tools: [["a", {}, ""], ["b", {}, ""], ["c", {}, ""]] }] });
+    env.langfuse.add("claude", "self-cwd", { cwd: path.join(env.stateDir, "work") });
+    const invoke = invokeWith();
+    const proposal = await run(env, { invoke });
+    assert.deepEqual([proposal.stats.transcripts, proposal.stats.skipped], [1, 1]);
+    assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 0);
+    assert.deepEqual(Object.keys(readJson(path.join(env.stateDir, "cursor.json")).processed), ["claude:self-prompt"]);
+  });
 });
 
 it("uses start and metadata with safe fallbacks", () => {
@@ -166,20 +184,16 @@ it("uses start and metadata with safe fallbacks", () => {
   assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200 }, {}).sessionAt, null);
 });
 
-it("gates open Hermes sessions on idle time and leaves them off the cursor", async () => {
+it("gates every harness on idle time and leaves open sessions off the cursor", async () => {
   const now = Date.now();
   assert.equal(sessionEligible({ harness: "hermes", mtimeMs: now }, now, 12), false);
-  assert.equal(sessionEligible({ harness: "hermes", mtimeMs: now - 12 * 3600000 - 1 }, now, 12), true);
-  assert.equal(sessionEligible({ harness: "hermes", endedAt: 1 }, now, 12), true);
+  assert.equal(sessionEligible({ harness: "claude", mtimeMs: now }, now, 12), false);
+  assert.equal(sessionEligible({ harness: "opencode", mtimeMs: now - 12 * HOUR - 1 }, now, 12), true);
   assert.equal(sessionEligible({ harness: "hermes" }, now, 12), false);
   const env = setup(0);
-  makeSqlite(path.join(env.home, ".hermes", "state.db"), [
-    ["CREATE TABLE sessions (id TEXT PRIMARY KEY, updated_at INTEGER)"],
-    ["INSERT INTO sessions VALUES ('open', ?)", Math.floor(now / 1000)],
-    ["CREATE TABLE messages (session_id TEXT, role TEXT, text TEXT)"],
-    ["INSERT INTO messages VALUES ('open', 'user', 'hello')"],
-  ]);
-  const proposal = await run(env, { harnesses: ["hermes"] });
+  env.langfuse.add("hermes", "open", { start: now - 5 * 60_000 });
+  env.langfuse.add("opencode", "open-oc", { start: now - 5 * 60_000 });
+  const proposal = await run(env);
   assert.equal(proposal.stats.transcripts, 0);
   assert.deepEqual(readJson(path.join(env.stateDir, "cursor.json")).processed, {});
 });
@@ -194,40 +208,30 @@ async function paraphrased(context) {
 
 it("repairs checkpointed legacy Hermes metadata without re-analysis or inventing a rubric", async () => {
   const env = setup(0);
-  const now = Math.floor(Date.now() / 1000);
-  makeSqlite(path.join(env.home, ".hermes", "state.db"), [
-    ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER, ended_at INTEGER, source TEXT)"],
-    ["INSERT INTO sessions VALUES ('old', ?, ?, ?, 'cli')", now - 90000, now - 80000, now - 80000],
-    ["INSERT INTO sessions VALUES ('unknown-start', NULL, ?, ?, 'cli')", now - 80000, now - 80000],
-    ["INSERT INTO sessions VALUES ('unknown-source', ?, ?, ?, NULL)", now - 90000, now - 80000, now - 80000],
-  ]);
+  const start = Date.now() - 30 * HOUR;
+  env.langfuse.add("hermes", "old", { start, platform: "cli" });
+  env.langfuse.add("hermes", "unknown-source", { start, platform: null });
   fs.mkdirSync(path.join(env.stateDir, "evidence"), { recursive: true });
-  for (const id of ["old", "unknown-start", "unknown-source"]) {
+  for (const id of ["old", "unknown-source"]) {
     fs.writeFileSync(path.join(env.stateDir, "evidence", `${id}.json`), JSON.stringify({ harness: "hermes", transcriptId: id, status: "ok", negative: [{ quote: "original" }], gaps: [], sessionAt: 123 }));
   }
-  fs.writeFileSync(path.join(env.stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "hermes:old": (now - 80000) * 1000, "hermes:unknown-start": (now - 80000) * 1000, "hermes:unknown-source": (now - 80000) * 1000 } }));
+  fs.writeFileSync(path.join(env.stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "hermes:old": 1, "hermes:unknown-source": 1 } }));
   const invoke = invokeWith();
   const result = await run(env, { harnesses: ["hermes"], invoke });
   assert.equal(result.stats.transcripts, 0);
   assert.equal(invoke.calls.filter((c) => c.role === "analysis").length, 0);
   const repaired = readJson(path.join(env.stateDir, "evidence", "hermes:old.json"));
-  assert.equal(repaired.sessionAt, (now - 90000) * 1000);
+  assert.equal(repaired.sessionAt, start);
   assert.equal(repaired.source, "cli");
+  assert.equal(repaired.endedAt, new Date(start + 60_000).toISOString());
   assert.deepEqual(repaired.negative, [{ quote: "original" }]);
   assert.equal(repaired.rubric, undefined);
-  assert.equal(fs.existsSync(path.join(env.stateDir, "evidence", "hermes:unknown-start.json")), false);
   assert.equal(fs.existsSync(path.join(env.stateDir, "evidence", "hermes:unknown-source.json")), false);
 });
 
 it("passes the configured idle window into discovery", async () => {
   const env = setup(0);
-  const now = Math.floor(Date.now() / 1000);
-  makeSqlite(path.join(env.home, ".hermes", "state.db"), [
-    ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER)"],
-    ["INSERT INTO sessions VALUES ('idle', ?, ?)", now - 7200, now - 3600],
-    ["CREATE TABLE messages (session_id TEXT, role TEXT, text TEXT)"],
-    ["INSERT INTO messages VALUES ('idle', 'user', 'hello')"],
-  ]);
+  env.langfuse.add("hermes", "idle", { start: Date.now() - 2 * HOUR });
   const result = await run(env, { harnesses: ["hermes"], idleHours: 0.5 });
   assert.equal(result.stats.transcripts, 1);
 });

@@ -30,8 +30,8 @@ improve-run  ->  <CA home>/improve/proposal.json  ->  improve-apply  ->  experie
   sessions in-process via `src/outcome.js` before proposing (see [Delayed
   outcome scoring](#delayed-outcome-scoring)).
 
-The runtime writes only under its state directory. Session stores are opened
-read-only, and nothing in the repo or in Hermes is modified.
+The runtime writes only under its state directory. Sessions are read from
+Langfuse over its public API, and nothing in the repo or in Hermes is modified.
 
 ## Stages of `improve-run`
 
@@ -47,10 +47,12 @@ read-only, and nothing in the repo or in Hermes is modified.
 | annotate | `src/annotate.js`, `prompts/annotate.md` | one |
 | propose | `src/propose.js` | no |
 
-- **Discover.** Lists sessions from each harness store (below), skipping
-  sessions older than `--since`, sessions the cursor already processed at the
-  same revision, and the runtime's own sessions (marked with
-  `<!-- ca-improve:self-session -->` or rooted under the state directory).
+- **Discover.** Lists sessions from Langfuse (below), skipping sessions whose
+  turns all started before `--since`, sessions still active within
+  `--idle-hours`, sessions the cursor already processed at the same last
+  activity, and the runtime's own sessions (marked with
+  `<!-- ca-improve:self-session -->` in the first user message, or a Claude
+  cwd under the state directory).
 - **Distill.** Deterministically keeps user and assistant messages plus
   one-line tool shapes and drops boilerplate.
 - **Analyze.** Audits each distilled session against the running SOUL, the
@@ -84,19 +86,19 @@ read-only, and nothing in the repo or in Hermes is modified.
   writes `proposal.json`. An unapplied proposal it replaces is archived to
   `proposals/<id>.json`.
 
-Discovery skips an unfinished Hermes session until it has ended or been idle
-for 12 hours (`--idle-hours`), without advancing the cursor, and a session with
+Discovery skips a session still active within `--idle-hours` (default 12
+hours), without advancing the cursor, and a session with
 successful evidence is never analyzed again. The session list is filtered
-before any messages are read, so a run reads the transcripts of new sessions,
-not of the whole store. Distillation keeps the head and the tail of a long
-trace around an elision marker, and includes Hermes tool calls.
+before any observations are read, so a run reads the transcripts of new sessions,
+not of every session in the window. Distillation keeps the head and the tail of a long
+trace around an elision marker, and includes tool calls.
 
 Evidence carries `sessionAt` (session start), `startedAt`, `endedAt`,
 `source`, `cwd`, `gitRepoRoot` and `parentSessionId`, plus
-`rubric: {promptSha, contextSha, model}`. `endedAt` is the session's last
-activity when the store records it: Hermes stamps `ended_at` when it reaps an
-idle session, which can be weeks after the person stopped. `cwd` and
-`gitRepoRoot` are optional; most Hermes sessions have neither. The prompt hash identifies the
+`rubric: {promptSha, contextSha, model}`. Langfuse records no session end,
+so `endedAt` stays null and the last turn's end time (`mtimeMs`) is the last
+known activity. `cwd` and
+`gitRepoRoot` are optional; only Claude sessions record a `cwd`. The prompt hash identifies the
 analysis template; the context hash identifies rendered SOUL, posture and
 records contexts. Older evidence may lack these fields. See
 [Living SOUL](Living-SOUL.md#outcome-check-and-autonomous-changes) for how
@@ -113,21 +115,40 @@ It fails with a message naming the fix when there is no successful evidence,
 no ledger, a corrupt ledger, no eligible cluster, or no configured model
 endpoint.
 
-## Harnesses
+## Sessions come from Langfuse
 
-| Harness | Store |
-| --- | --- |
-| `hermes` | `$HERMES_HOME/state.db` (default `~/.hermes/state.db`) |
-| `claude` | `~/.claude/projects`, plus `$CLAUDE_CONFIG_DIR/projects` |
-| `codex` | `$CODEX_HOME/sessions` (default `~/.codex/sessions`); rollout JSONL whose lines are wrapped as `{type, payload}` |
-| `opencode` | `~/.local/share/opencode/opencode.db`; reads stored messages first, falling back to `opencode export` when none are available |
+The runtime reads every session from the Langfuse public API
+(`src/langfuse.js`, `/api/public/v2/observations` with cursor paging and
+retries on 429/5xx), never from harness stores on disk, so it works from any
+machine. It needs `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
+`LANGFUSE_BASE_URL`; without them, or when Langfuse is unreachable, the run
+fails rather than reporting no sessions.
 
-Each adapter in `src/harnesses.js` both lists sessions and reads one. Without
-`--harness` every store is scanned and missing ones are skipped; a harness
-named with `--harness` must be readable or the run fails. Pi, Grok and Cursor
-are deliberately excluded and naming them is an error. With
-`CA_IMPROVE_HOME` (Python) / `--home` (runtime) every store is looked up under
-that one directory and the ambient `HERMES_HOME` etc. are ignored.
+Each harness traces one root observation per turn, and a session is the set of
+roots sharing a `sessionId`:
+
+| Harness | Root observation | Session metadata kept |
+| --- | --- | --- |
+| `hermes` | `Hermes turn` | `metadata.platform` as the session source (desktop, tui, cli, telegram, cron, subagent, ...) |
+| `claude` | `Conversational Turn` with `metadata.source=claude-code` | `metadata.cwd` |
+| `opencode` | `opencode.turn` | none |
+
+`src/harnesses.js` turns one session's observations into events: each turn's
+user text at its start, its `TOOL` observations as they started, and its
+assistant text at its end. A session's revision is a hash of its ordered root
+ids and end times; outcome scoring uses it to check a session has not changed
+since its snapshot was cut. Langfuse records no session end, so a session is
+finished once it has been idle for `--idle-hours` (default 12), for every
+harness.
+
+Left out: Langfuse evaluator runs (environment `langfuse-llm-as-a-judge`),
+Pi turns (`Conversational Turn` with `source=pi`), and OpenCode subagent
+sessions (their turns are nested in the parent's trace, not roots). Codex is
+not traced and is not supported; Pi, Codex, Grok and Cursor are rejected by
+name. Hermes traces are captured `sanitized` and Claude traces may carry
+truncation markers, so a trace can hold less text than the harness's own
+store did. Nothing before Langfuse tracing began (mid-September 2026) is
+reachable.
 
 `--max-sessions N` bounds one run's model work: at most N sessions are
 analyzed and at most N mature sessions are outcome-scored. Hermes sessions go
@@ -135,9 +156,7 @@ first, since verdicts are judged on them, then the newest; the rest stay
 uncheckpointed and wait for a later run (a backlog older than `--since` is
 never reached).
 
-Tuning: `CA_IMPROVE_JOBS` (parallel sessions, default 4),
-`CA_IMPROVE_MAX_OPENCODE_EXPORTS` (newest OpenCode sessions per run, default
-50), `CA_IMPROVE_OPENCODE_BIN` (default `opencode`).
+Tuning: `CA_IMPROVE_JOBS` (parallel sessions, default 4).
 
 ## Model calls
 
@@ -228,7 +247,9 @@ ended:
 - **Later sessions.** Every later Hermes session from the `desktop`, `tui` or
   `cli` sources that is not a continuation of another, with no directory
   requirement; the judge decides whether one is about the same aim. Sessions
-  from other harnesses are matched by repository or directory. The earliest
+  from other harnesses are matched by repository or directory, which in
+  Langfuse only Claude sessions record, so later OpenCode sessions are not
+  found (commits still are, through touched paths). The earliest
   eight are kept, each as its first user message and last agent message.
 - **Commits.** `git log` in the session's repository when it records one, and
   in up to four repositories its tool calls touched (absolute paths in file
@@ -240,10 +261,9 @@ ended:
   `plans/feature-2.md`.
 
 The trace is a snapshot taken when the session was analyzed, used only while
-the session's transcript is unchanged since. For SQLite stores the revision
-covers that session's messages, not its session row or the rest of the
-database, so Hermes reaping an idle session does not invalidate it; new
-messages do. Header-only OpenCode exports cannot be verified and are excluded.
+the session's transcript is unchanged since. The revision is a hash of the
+session's ordered root observation ids and end times, so a new turn or a
+late-arriving end time invalidates it while other sessions' observations do not.
 
 A session that cannot be scored (no known end, a changed transcript, an
 invalid reply, a model error) is left without an outcome. Nothing is written

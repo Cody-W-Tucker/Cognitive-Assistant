@@ -3,14 +3,19 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { DatabaseSync } from "node:sqlite";
-import { runOutcome, validateOutcome } from "../src/outcome.js";
-import { evidenceFile, writeJson } from "../src/state.js";
-import { transcriptRevision } from "../src/harnesses.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { outcomeSnapshot, runOutcome, validateOutcome } from "../src/outcome.js";
+import { evidenceFile, readJson, writeJson } from "../src/state.js";
+import { readTranscript } from "../src/harnesses.js";
+import { fakeLangfuse } from "./fake-langfuse.mjs";
 
+const execFileAsync = promisify(execFile);
+const DAY = 86400000;
 const followup = { sessions: [{ ref: "session:later", firstUser: "Still stuck" }], commits: [], journal: [] };
 const reply = { aim: "Fix the bug", label: "stalled", reason: "It remains", evidence: [{ ref: "trace", quote: "Fix the bug" }] };
+const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+
 test("validates citations and verbatim quotes", () => {
   assert.ok(validateOutcome(reply, "Fix the bug", followup, ["Fix the bug"]));
   assert.ok(!validateOutcome({ ...reply, evidence: [{ ref: "session:other", quote: "Still stuck" }] }, "Fix the bug", followup));
@@ -23,23 +28,31 @@ test("validates citations and verbatim quotes", () => {
   assert.ok(!validateOutcome({ ...reply, label: "advanced", evidence: [] }, "Fix the bug", followup));
   assert.ok(!validateOutcome({ ...reply, label: "done" }, "Fix the bug", followup, ["Fix the bug"]));
 });
-test("CLI leaves an unscorable session alone without failing or printing private evidence", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-cli-"));
+
+test("CLI leaves an unscorable session alone without failing or printing private evidence", async () => {
+  const dir = tmp("outcome-cli-");
   writeJson(evidenceFile(dir, "x", "claude"), { harness: "claude", transcriptId: "x", status: "ok", endedAt: "2020-01-01T00:00:00Z", outcomeSnapshot: { trace: "PRIVATE QUOTE" } });
-  const result = spawnSync(process.execPath, ["bin/ca-improve.js", "outcome", "--state-dir", dir, "--analyzer", "mock"], { cwd: path.resolve("."), encoding: "utf8" });
-  assert.equal(result.status, 0);
-  assert.equal(JSON.parse(result.stdout).unscored, 1);
-  assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE QUOTE/);
+  const server = await fakeLangfuse().serve();
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, ["bin/ca-improve.js", "outcome", "--state-dir", dir, "--analyzer", "mock"], { cwd: path.resolve("."), env: { ...process.env, ...server.env } });
+    assert.equal(JSON.parse(stdout).unscored, 1);
+    assert.doesNotMatch(stdout + stderr, /PRIVATE QUOTE/);
+  } finally {
+    await server.close();
+  }
   assert.deepEqual(fs.readdirSync(dir), ["evidence"]);
 });
+
 test("maturation, preview, unscored sessions, and explicit rescore", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-test-"));
-  const transcript = path.join(dir, "trace.jsonl");
-  fs.writeFileSync(transcript, JSON.stringify({ type: "user", message: { role: "user", content: "Fix the bug" } }) + "\n");
-  const record = { harness: "claude", transcriptId: "x", status: "ok", source: null, startedAt: 5, endedAt: "2026-01-01T00:00:00Z", positive: [1], negative: [], gaps: [], outcomeSnapshot: { revision: transcriptRevision({ harness: "claude", path: transcript }), trace: "Fix the bug", texts: ["Fix the bug"], firstUserMessage: "Fix the bug" } };
+  const dir = tmp("outcome-test-");
+  const end = Date.parse("2026-01-01T00:00:00Z");
+  const lf = fakeLangfuse();
+  lf.add("claude", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Looking" }] });
+  const read = await readTranscript({ harness: "claude", id: "x" }, { client: lf.client });
+  const record = { harness: "claude", transcriptId: "x", status: "ok", source: null, startedAt: 5, endedAt: new Date(end).toISOString(), positive: [1], negative: [], gaps: [], outcomeSnapshot: { revision: read.revision, trace: "Fix the bug", texts: ["Fix the bug"], firstUserMessage: "Fix the bug" } };
   const file = evidenceFile(dir, "x", "claude");
   writeJson(file, record);
-  const options = { stateDir: dir, now: Date.parse("2026-01-04T00:00:00Z"), transcripts: [{ harness: "claude", id: "x", path: transcript }], collect: async () => followup, invoke: async (_role, prompt) => { assert.ok(!prompt.includes("SOUL_BASELINE")); return reply; } };
+  const options = { client: lf.client, stateDir: dir, now: end + 3 * DAY, collect: async () => followup, invoke: async (_role, prompt) => { assert.ok(!prompt.includes("SOUL_BASELINE")); return reply; } };
   const before = fs.readFileSync(file, "utf8");
   const preview = await runOutcome({ ...options, dryRun: true });
   assert.equal(preview.scored, 1);
@@ -51,61 +64,70 @@ test("maturation, preview, unscored sessions, and explicit rescore", async () =>
   assert.equal((await runOutcome({ ...options, invoke: async () => ({ ...reply, evidence: [] }) })).unscored, 1);
   assert.equal(fs.readFileSync(file, "utf8"), before);
   assert.equal((await runOutcome(options)).scored, 1);
-  assert.equal(JSON.parse(fs.readFileSync(file)).outcome.rubric.matureDays, 3);
-  assert.deepEqual(JSON.parse(fs.readFileSync(file)).positive, [1]);
+  assert.equal(readJson(file).outcome.rubric.matureDays, 3);
+  assert.deepEqual(readJson(file).positive, [1]);
   assert.equal((await runOutcome(options)).selected, 0);
   assert.equal((await runOutcome({ ...options, rescore: true })).scored, 1);
-  fs.appendFileSync(transcript, "changed");
+  lf.add("claude", "x", { start: end + DAY, turns: [{ user: "reopened", assistant: "ok" }] });
   assert.equal((await runOutcome({ ...options, rescore: true })).unscored, 1);
-  assert.deepEqual(fs.readdirSync(dir).sort(), ["evidence", "outcome-preview", "trace.jsonl"]);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ["evidence", "outcome-preview"]);
 });
 
-function hermesStore(dir, sessions) {
-  const dbPath = path.join(dir, ".hermes", "state.db");
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const db = new DatabaseSync(dbPath);
-  db.exec("CREATE TABLE sessions (id TEXT, source TEXT, started_at REAL, last_activity_at REAL, ended_at REAL, end_reason TEXT); CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT)");
-  for (const [id, source, started, active, ended] of sessions) {
-    db.prepare("INSERT INTO sessions VALUES (?, ?, ?, ?, ?, NULL)").run(id, source, started / 1000, active / 1000, ended === null ? null : ended / 1000);
-    db.prepare("INSERT INTO messages VALUES (?, 'user', 'Fix the bug')").run(id);
-  }
-  db.close();
-  return dbPath;
-}
-
 test("a dry run previews finished Hermes sessions that were never analyzed", async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-backtest-"));
-  const dir = path.join(home, "state"), end = Date.parse("2026-01-01T00:00:00Z"), now = end + 10 * 86400000;
-  hermesStore(home, [
-    // Reaped a week after the person stopped: last activity is the end.
-    ["reaped", "desktop", end - 3600000, end, end + 7 * 86400000],
-    ["cron", "cron", end - 3600000, end, end],
-    ["fresh", "desktop", now - 3600000, now - 1800000, now - 1800000],
-  ]);
+  const dir = path.join(tmp("outcome-backtest-"), "state"), end = Date.parse("2026-01-01T00:00:00Z"), now = end + 10 * DAY;
+  const lf = fakeLangfuse();
+  const turns = [{ user: "Fix the bug", assistant: "On it" }];
+  lf.add("hermes", "desk", { start: end - 60_000, platform: "desktop", turns });
+  lf.add("hermes", "cron", { start: end - 60_000, platform: "cron", turns });
+  lf.add("hermes", "fresh", { start: now - 30 * 60_000, platform: "desktop", turns });
+  lf.add("claude", "other-harness", { start: end - 60_000, turns });
   const seen = [];
-  const options = { home, stateDir: dir, now, invoke: async () => reply, collect: async ({ session, candidates }) => { seen.push([session.transcriptId, session.endedAt, candidates().length]); return followup; } };
+  const options = { client: lf.client, stateDir: dir, now, invoke: async () => reply, collect: async ({ session, candidates }) => { seen.push([session.transcriptId, session.endedAt, (await candidates()).length]); return followup; } };
   assert.equal((await runOutcome(options)).selected, 0);
   const preview = await runOutcome({ ...options, dryRun: true });
   assert.deepEqual([preview.selected, preview.scored, preview.unscored], [2, 2, 0]);
-  assert.deepEqual(seen.map(([id, ended]) => [id, ended]).sort(), [["cron", new Date(end).toISOString()], ["reaped", new Date(end).toISOString()]]);
-  assert.ok(seen.every(([, , count]) => count === 3));
+  assert.deepEqual(seen.map(([id, ended]) => [id, ended]).sort(), [["cron", new Date(end).toISOString()], ["desk", new Date(end).toISOString()]]);
+  assert.ok(seen.every(([, , count]) => count === 3), "the open session is not a candidate yet");
   const rows = fs.readFileSync(preview.preview, "utf8").trim().split("\n").map((line) => JSON.parse(line));
   assert.deepEqual(rows.map((row) => row.source).sort(), ["cron", "desktop"]);
   assert.ok(!fs.existsSync(path.join(dir, "evidence")));
 });
 
-test("reaping a Hermes session after analysis does not make it unscorable; new messages do", async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "outcome-reap-"));
+test("a snapshot cut from a local store is re-cut once from Langfuse; a later turn makes it unscorable", async () => {
+  const dir = tmp("outcome-legacy-");
   const end = Date.parse("2026-01-01T00:00:00Z");
-  const dbPath = hermesStore(home, [["x", "desktop", end - 3600000, end, null]]);
-  const session = { harness: "hermes", id: "x", db: dbPath };
-  const evidence = evidenceFile(home, "x", "hermes");
-  writeJson(evidence, { harness: "hermes", transcriptId: "x", status: "ok", endedAt: new Date(end).toISOString(), outcomeSnapshot: { location: session, revision: transcriptRevision(session), trace: "Fix the bug", texts: ["Fix the bug"] } });
-  const options = { stateDir: home, now: end + 4 * 86400000, collect: async () => followup, invoke: async () => reply, rescore: true };
-  const db = new DatabaseSync(dbPath);
-  db.exec("UPDATE sessions SET ended_at = 9999999999, end_reason = 'startup_orphan_reap'");
+  const lf = fakeLangfuse();
+  lf.add("hermes", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Fixed" }] });
+  const file = evidenceFile(dir, "x", "hermes");
+  const legacy = { location: { harness: "hermes", id: "x", db: "/home/u/.hermes/state.db" }, revision: { version: 2, harness: "hermes", id: "x", sha256: "abc" }, trace: "Fix the bug", texts: ["Fix the bug"] };
+  writeJson(file, { harness: "hermes", transcriptId: "x", status: "ok", endedAt: new Date(end).toISOString(), outcomeSnapshot: legacy });
+  const options = { client: lf.client, stateDir: dir, now: end + 4 * DAY, collect: async () => followup, invoke: async () => reply, rescore: true };
+  assert.equal((await runOutcome({ ...options, dryRun: true })).scored, 1);
+  assert.deepEqual(readJson(file).outcomeSnapshot, legacy, "a dry run never rewrites evidence");
   assert.equal((await runOutcome(options)).scored, 1);
-  db.exec("INSERT INTO messages VALUES ('x', 'user', 'reopened')");
-  db.close();
+  const saved = readJson(file).outcomeSnapshot;
+  assert.equal(saved.revision.source, "langfuse");
+  assert.deepEqual(saved.location, { harness: "hermes", id: "x" });
+  assert.match(saved.trace, /Fix the bug/);
+  lf.add("hermes", "x", { start: end + DAY, turns: [{ user: "reopened", assistant: "ok" }] });
   assert.deepEqual([(await runOutcome(options)).scored, (await runOutcome(options)).unscored], [0, 1]);
+  assert.deepEqual(readJson(file).outcomeSnapshot, saved, "a changed session is not re-cut");
+});
+
+test("a re-cut snapshot is verified without an extra pre-check fetch", async () => {
+  const dir = tmp("outcome-recut-calls-");
+  const end = Date.parse("2026-01-01T00:00:00Z");
+  const lf = fakeLangfuse();
+  lf.add("hermes", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Fixed" }] });
+  const file = evidenceFile(dir, "x", "hermes");
+  writeJson(file, { harness: "hermes", transcriptId: "x", status: "ok", endedAt: new Date(end).toISOString(), outcomeSnapshot: { revision: { version: 2 }, trace: "stale", texts: ["stale"] } });
+  lf.calls.length = 0;
+  const options = { client: lf.client, stateDir: dir, now: end + 4 * DAY, collect: async () => followup, invoke: async () => reply };
+  assert.equal((await runOutcome(options)).scored, 1);
+  assert.equal(lf.calls.filter((q) => q.sessionId === "x").length, 2, "read plus one post-collect revision check");
+});
+
+test("snapshots keep only the session reference", () => {
+  const snapshot = outcomeSnapshot({ harness: "claude", id: "x", cwd: "/p" }, [{ kind: "message", role: "user", text: "hi" }], { source: "langfuse" });
+  assert.deepEqual(snapshot.location, { harness: "claude", id: "x" });
 });

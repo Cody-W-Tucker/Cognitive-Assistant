@@ -9,7 +9,8 @@ import { analyzeTraces, loadContexts } from "./analyze.js";
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
 import { distill } from "./distill.js";
 import { foldEvidence } from "./fold.js";
-import { discoverTranscripts, readTranscriptEvents, transcriptRevision, SUPPORTED_HARNESSES } from "./harnesses.js";
+import { discoverTranscripts, readTranscript, SUPPORTED_HARNESSES } from "./harnesses.js";
+import { langfuseClient } from "./langfuse.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
 import { outcomeSnapshot, runOutcome, sessionMeta } from "./outcome.js";
@@ -28,15 +29,18 @@ import {
   writeJson,
 } from "./state.js";
 
-/** An unreadable session becomes a failed trace, retried next run rather than checkpointed. */
-async function collectTrace(transcript) {
-  let events;
-  const revision = transcriptRevision(transcript);
+/**
+ * An unreadable session becomes a failed trace, retried next run rather than
+ * checkpointed. The runtime's own sessions are skipped (and checkpointed).
+ */
+async function collectTrace(transcript, client) {
+  let events, revision, self;
   try {
-    events = await readTranscriptEvents(transcript);
+    ({ events, revision, self } = await readTranscript(transcript, { client }));
   } catch (err) {
     return { transcriptId: transcript.id, harness: transcript.harness, readError: `unreadable session: ${err.message}` };
   }
+  if (self) return { transcriptId: transcript.id, harness: transcript.harness, skipReason: "the runtime's own session" };
   const count = (pred) => events.filter(pred).length;
   return {
     transcriptId: transcript.id,
@@ -47,8 +51,8 @@ async function collectTrace(transcript) {
       toolCalls: count((e) => e?.kind === "tool"),
     },
     distilled: distill(events, transcript),
-    outcomeSnapshot: revision && (transcript.endedAt || transcript.activityKnown) && JSON.stringify(revision) === JSON.stringify(transcript.discoveryRevision) && JSON.stringify(revision) === JSON.stringify(transcriptRevision(transcript))
-      ? outcomeSnapshot(transcript, events, revision) : null,
+    // Cut from the same observations as the trace; scoring later checks the session is unchanged.
+    outcomeSnapshot: revision ? outcomeSnapshot(transcript, events, revision) : null,
   };
 }
 
@@ -63,18 +67,6 @@ async function mapPool(items, jobs, fn) {
   };
   await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(jobs) || 4, items.length)) }, worker));
   return out;
-}
-
-/**
- * Header-only OpenCode stores need an `opencode export` per session, which
- * can take minutes for a large store. Bound that work with a newest-first
- * batch; checkpoints let later runs advance to the rest.
- */
-function capOpencode(transcripts, max) {
-  const opencode = transcripts.filter((t) => t.harness === "opencode").sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
-  if (!(Number.isInteger(max) && max > 0) || opencode.length <= max) return transcripts;
-  const allowed = new Set(opencode.slice(0, max).map((t) => t.id));
-  return transcripts.filter((t) => t.harness !== "opencode" || allowed.has(t.id));
 }
 
 /**
@@ -94,8 +86,8 @@ function countByHarness(transcripts) {
   return counts;
 }
 
+/** Langfuse records no session end: a session is finished once it has been idle long enough. */
 export function sessionEligible(transcript, now, idleHours) {
-  if (transcript.harness !== "hermes" || transcript.endedAt != null) return true;
   return Number.isFinite(transcript.mtimeMs) && now - transcript.mtimeMs > idleHours * 3600000;
 }
 
@@ -109,14 +101,13 @@ export function stampEvidence(record, session, rubric) {
  * @returns the proposal (also written to stateDir/proposal.json)
  */
 export async function runPipeline({
-  home,
+  client = null,
   stateDir,
   soulPath,
   posturePath = null,
   experiencePath = null,
   since = "30d",
   harnesses = null,
-  strictHarnesses = false,
   analyzer = "model",
   minGapEvidence = 2,
   invoke = null,
@@ -141,6 +132,7 @@ export async function runPipeline({
       invoke = modelInvoke(stateDir);
     }
   }
+  client ??= langfuseClient();
   initStateDir(stateDir);
   const runId = timestampId("run");
 
@@ -151,7 +143,7 @@ export async function runPipeline({
     return evidence?.status === "ok" && (evidence.startedAt == null || evidence.source == null);
   };
   const now = Date.now();
-  const discovery = discoverTranscripts({ home, stateDir, since, harnesses, strict: strictHarnesses, idleHours: Number(idleHours), now, includeCheckpointed: needsMetadata });
+  const discovery = await discoverTranscripts({ client, stateDir, since, harnesses, idleHours: Number(idleHours), now, includeCheckpointed: needsMetadata });
   for (const t of discovery.transcripts) {
     if (!needsMetadata(t) || t.startedAtMs == null || !t.source) continue;
     const evidence = readSessionEvidence(stateDir, t.harness, t.id);
@@ -159,20 +151,19 @@ export async function runPipeline({
     // No new rubric: the analysis was made under the original, possibly unknown one.
     writeJson(evidenceFile(stateDir, t.id, t.harness), {
       ...evidence, sessionAt: evidence.startedAt ?? t.startedAtMs, startedAt: evidence.startedAt ?? t.startedAtMs,
-      source: t.source, endedAt: t.endedAt, cwd: t.cwd,
-      gitRepoRoot: t.gitRepoRoot, parentSessionId: t.parentSessionId,
+      source: t.source, endedAt: evidence.endedAt ?? sessionMeta(t).endedAt, cwd: evidence.cwd ?? t.cwd,
+      gitRepoRoot: evidence.gitRepoRoot ?? null, parentSessionId: evidence.parentSessionId ?? null,
     });
   }
-  const eligible = discovery.transcripts.filter((t) => {
-    if (readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok") return false;
-    return sessionEligible(t, now, Number(idleHours));
-  });
-  const transcripts = capSessions(capOpencode(eligible, Number(process.env.CA_IMPROVE_MAX_OPENCODE_EXPORTS || 50)), cap);
+  // Sessions already analyzed (say, under an older checkpoint value) are re-checkpointed, never re-analyzed.
+  const analyzed = discovery.transcripts.filter((t) => readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok");
+  const eligible = discovery.transcripts.filter((t) => !analyzed.includes(t) && sessionEligible(t, now, Number(idleHours)));
+  const transcripts = capSessions(eligible, cap);
   const perHarness = countByHarness(transcripts);
   emit("discover:done", { transcripts: transcripts.length, perHarness });
 
   emit("analyze:start", { total: transcripts.length, pending: transcripts.length, analyzer });
-  const traces = await mapPool(transcripts, jobs, collectTrace);
+  const traces = await mapPool(transcripts, jobs, (t) => collectTrace(t, client));
   // Session time travels with the evidence so outcomes can be attributed to
   // the living SOUL generation that was active when the session happened.
   const sessions = new Map(transcripts.map((t) => [checkpointKey(t), t]));
@@ -206,7 +197,7 @@ export async function runPipeline({
   emit("analyze:done", { ...tally });
 
   // Sessions that cannot be scored yet stay without an outcome and never stop the run.
-  await runOutcome({ home, stateDir, since: "all", limit: cap, analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
+  await runOutcome({ client, stateDir, since: "all", limit: cap, analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {
@@ -243,6 +234,7 @@ export async function runPipeline({
   const processed = readSessionCheckpoint(stateDir);
   const done = new Set(records.filter((r) => r.status === "ok" || r.status === "skipped").map((r) => checkpointKey({ harness: r.harness, id: r.transcriptId })));
   for (const t of transcripts) if (done.has(checkpointKey(t))) processed[checkpointKey(t)] = t.mtimeMs ?? null;
+  for (const t of analyzed) processed[checkpointKey(t)] = t.mtimeMs ?? null;
   writeJson(path.join(stateDir, "cursor.json"), {
     version: 2,
     lastRun: proposal.createdAt,

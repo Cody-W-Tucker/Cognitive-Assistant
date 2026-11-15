@@ -184,9 +184,7 @@
               example = "/home/codyt/.local/share/hermes";
               description = ''
                 HERMES_HOME. Its SOUL.md becomes a symlink to the living SOUL, so
-                SOUL.md must not also be declared in hermesHomeFiles. User units
-                do not inherit login-shell session variables, so the improvement
-                pass gets it from here.
+                SOUL.md must not also be declared in hermesHomeFiles.
               '';
             };
             soul.prefix = lib.mkOption {
@@ -249,8 +247,22 @@
               type = lib.types.listOf lib.types.str;
               default = [ "hermes" ];
               description = ''
-                Harnesses to scan; a named harness with a missing store fails the run.
-                An empty list scans every supported store (never Pi) and skips missing ones.
+                Harnesses whose Langfuse sessions to scan: hermes, claude, opencode.
+                An empty list scans all of them (never Pi).
+              '';
+            };
+            langfuse.baseUrl = lib.mkOption {
+              type = lib.types.str;
+              example = "https://cloud.langfuse.com";
+              description = "Langfuse the improvement pass reads harness sessions from.";
+            };
+            langfuse.environmentFile = lib.mkOption {
+              type = lib.types.str;
+              example = "/run/secrets/ca-langfuse.env";
+              description = ''
+                File setting LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY. The pass
+                only reads observations; a key for the project the harnesses
+                trace into is enough. The run fails when Langfuse is unreachable.
               '';
             };
             improve.maxSessions = lib.mkOption {
@@ -288,8 +300,9 @@
               Unit.Description = "CA headless improvement pass over Hermes sessions";
               Service = {
                 Type = "oneshot";
+                EnvironmentFile = cfg.langfuse.environmentFile;
                 Environment = [
-                  "HERMES_HOME=${cfg.hermesHome}"
+                  "LANGFUSE_BASE_URL=${cfg.langfuse.baseUrl}"
                   "CA_LLM_BASE_URL=${cfg.llm.baseUrl}"
                   "CA_LLM_MODEL=${cfg.llm.model}"
                 ]

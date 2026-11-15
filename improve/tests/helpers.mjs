@@ -1,11 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 
 import { mockInvoke } from "../src/mock.js";
-
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+import { fakeLangfuse } from "./fake-langfuse.mjs";
 
 export const QUOTE_A = "alpha quote one";
 export const QUOTE_B = "beta quote two";
@@ -20,46 +18,16 @@ export function writeSoul(dir, text = "# SOUL\n\nBe direct.\n") {
   return file;
 }
 
-export function writeJsonl(file, rows) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${rows.map((r) => JSON.stringify(r)).join("\n")}\n`, "utf8");
-  return file;
+/**
+ * A fake Langfuse holding `n` substantial, finished Claude sessions
+ * (claude-0 ...), plus a fresh state dir and SOUL.
+ */
+export function setup(n = 2) {
+  const root = tmpDir();
+  const langfuse = fakeLangfuse();
+  for (let i = 0; i < n; i += 1) langfuse.add("claude", `claude-${i}`);
+  return { langfuse, client: langfuse.client, stateDir: path.join(root, "state"), soulPath: writeSoul(root) };
 }
-
-/** Codex rollout lines as Codex writes them: every line wraps a payload. */
-export const codex = {
-  meta: (id, cwd = "/tmp/proj") => ({ type: "session_meta", payload: { id, cwd } }),
-  message: (role, text) => ({
-    type: "response_item",
-    payload: { type: "message", role, content: [{ type: role === "user" ? "input_text" : "output_text", text }] },
-  }),
-  tool: (name, input) => ({ type: "response_item", payload: { type: "function_call", name, arguments: JSON.stringify(input) } }),
-};
-
-/** A Codex session substantial enough to pass the trivial-session gate. */
-export function writeCodexSession(home, id, { text = "bootstrap context please", day = "12" } = {}) {
-  const file = path.join(home, ".codex", "sessions", "2026", "10", day, `rollout-${id}.jsonl`);
-  writeJsonl(file, [
-    codex.meta(id),
-    { type: "response_item", payload: { type: "message", role: "developer", content: [{ type: "input_text", text: "harness preamble" }] } },
-    codex.message("user", text),
-    codex.tool("read", { file_path: "a" }),
-    codex.tool("search", { query: "b" }),
-    codex.tool("test", { command: "c" }),
-  ]);
-  return file;
-}
-
-export function makeSqlite(dbPath, statements) {
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  fs.rmSync(dbPath, { force: true });
-  const db = new DatabaseSync(dbPath);
-  for (const [sql, ...params] of statements) db.prepare(sql).run(...params);
-  db.close();
-}
-
-export const nowSec = () => Math.floor(Date.now() / 1000);
-export const daysAgoSec = (days) => nowSec() - days * 86400;
 
 /** One eligible cluster (s1, s2) with distinct per-source quotes, plus an ineligible one. */
 export function ledger() {

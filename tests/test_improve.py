@@ -69,12 +69,9 @@ def _seed_resume_state(state: Path) -> None:
 
 class RunTests(CAHomeTestCase):
     def test_headless_cli_prints_one_proposal_and_writes_only_ca_home(self) -> None:
-        from tests.fixtures import add_eligible_codex_sessions
-
-        add_eligible_codex_sessions(self.user_home)
+        self.langfuse.add_eligible_sessions()
         before = _git_status()
-        with mock.patch.dict(os.environ, {"CA_IMPROVE_HOME": str(self.user_home)}):
-            code, out, err = _run_cli(["improve-run", "--headless", "--analyzer", "mock"])
+        code, out, err = _run_cli(["improve-run", "--headless", "--analyzer", "mock"])
         self.assertEqual(code, 0, err)
         lines = [line for line in out.splitlines() if line.strip()]
         self.assertEqual(len(lines), 1)
@@ -91,7 +88,7 @@ class RunTests(CAHomeTestCase):
         self.assertEqual(proposal["soul"]["sha256"], hashlib.sha256(text.encode()).hexdigest())
 
         living_soul.compile_soul()
-        again = improve.run(home=self.user_home, analyzer="mock")
+        again = improve.run(analyzer="mock")
         self.assertEqual(Path(again["soul"]["path"]), living_soul.current_path())
         self.assertEqual(self.bootstrap.read_text(encoding="utf-8"), text)
 
@@ -115,9 +112,15 @@ class RunTests(CAHomeTestCase):
         flags = runtime.call_args.args[1]
         self.assertEqual(flags[flags.index("--max-sessions") + 1], "40")
 
-    def test_a_named_harness_with_no_store_fails_the_run(self) -> None:
-        with mock.patch.dict(os.environ, {"HERMES_HOME": str(self.root / "no-hermes-here")}):
-            with self.assertRaisesRegex(RuntimeError, "hermes: store missing"):
+    def test_missing_langfuse_credentials_fail_before_the_runtime_starts(self) -> None:
+        with mock.patch.dict(os.environ, {"LANGFUSE_SECRET_KEY": ""}), mock.patch("subprocess.run") as spawn:
+            with self.assertRaisesRegex(RuntimeError, "LANGFUSE_SECRET_KEY not set"):
+                improve.run(analyzer="mock")
+        spawn.assert_not_called()
+
+    def test_unreachable_langfuse_fails_the_run(self) -> None:
+        with mock.patch.dict(os.environ, {"LANGFUSE_BASE_URL": "http://127.0.0.1:9"}):
+            with self.assertRaisesRegex(RuntimeError, "Langfuse unreachable"):
                 improve.run(harnesses=["hermes"], analyzer="mock")
 
 

@@ -33,7 +33,6 @@ adapted from. Actual adapted source mappings in this slice:
   - improve/src/analyze.js <- Backpass src/analyze.js
   - improve/src/prompts.js <- Backpass src/prompts.js
   - improve/prompts/analysis.md <- Backpass src/prompts/analysis.md (operational source)
-  - improve/src/harnesses.js <- Backpass src/discovery/index.js + src/discovery/adapters/{hermes,claude,codex,opencode}.js
   - improve/src/distill.js <- Backpass src/distill.js
   - improve/src/fold.js <- Backpass src/fold.js
   - improve/src/sentinel.js <- Backpass src/sentinel.js
@@ -61,6 +60,6 @@ CA-native (not adapted from Backpass, excluded from the above):
   - improve/bin/ca-improve.js (JSON CLI boundary)
 
 The CA runtime intentionally diverges: it trains only durable experience
-records (never SOUL/memory files directly), supports a narrow harness set
-(hermes, claude, codex, opencode), and keeps all private state under the CA
+records (never SOUL/memory files directly), reads sessions from Langfuse
+for a narrow harness set (hermes, claude, opencode), and keeps all private state under the CA
 state directory.

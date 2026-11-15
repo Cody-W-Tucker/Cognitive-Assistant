@@ -105,7 +105,7 @@ export function distill(events, meta = {}) {
       lines.push(`- tool ${event.name || "unknown"}${input ? `: ${input}` : ""}${result ? ` => ${result}` : ""}`);
     }
   }
-  lines.push(`source: ${meta.path || meta.db || "unknown"}`);
+  lines.push(`source: langfuse session ${meta.id || "unknown"}`);
   const trace = lines.join("\n");
   if (trace.length <= 24000) return trace;
   const head = trace.slice(0, 16000);
