@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { cutoffMs, discoverTranscripts, isLangfuseRevision, observationsToEvents, readTranscript, sessionEndMs, transcriptRevision } from "../src/harnesses.js";
+import { cutoffMs, discoverTranscripts, isLangfuseRevision, observationsToEvents, readTranscript, transcriptRevision } from "../src/harnesses.js";
 import { langfuseClient, langfuseConfig } from "../src/langfuse.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { writeJson } from "./helpers.mjs";
@@ -21,7 +21,7 @@ describe("discovery from Langfuse root observations", () => {
     const { transcripts, perHarness } = await discoverTranscripts({ client: lf.client, since: "all", now });
     assert.deepEqual(transcripts.map((t) => [t.harness, t.id]), [["claude", "c1"], ["hermes", "h1"], ["opencode", "o1"]]);
     const hermes = transcripts.find((t) => t.id === "h1");
-    assert.deepEqual([hermes.startedAtMs, hermes.mtimeMs, hermes.source, hermes.cwd, hermes.activityKnown], [ago(30), ago(30) + 10 * 60_000 + 60_000, "tui", null, true]);
+    assert.deepEqual([hermes.startedAtMs, hermes.mtimeMs, hermes.source, hermes.cwd], [ago(30), ago(30) + 10 * 60_000 + 60_000, "tui", null]);
     assert.equal(transcripts.find((t) => t.id === "c1").cwd, "/work/repo");
     assert.equal(transcripts.find((t) => t.id === "o1").source, null);
     assert.deepEqual(perHarness.hermes, { scanned: 1, matched: 1, self: 0, open: 0 });
@@ -124,14 +124,6 @@ describe("discovery from Langfuse root observations", () => {
     assert.deepEqual([result.transcripts.length, result.perHarness.claude.self], [0, 1]);
   });
 
-  it("excludes one named session", async () => {
-    const lf = fakeLangfuse();
-    lf.add("hermes", "a", { start: ago(20) });
-    lf.add("hermes", "b", { start: ago(20) });
-    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "all", now, excludeTranscript: { harness: "hermes", id: "a" } });
-    assert.deepEqual(transcripts.map((t) => t.id), ["b"]);
-  });
-
   it("parses --since windows", () => {
     assert.equal(cutoffMs("all", now), 0);
     assert.equal(cutoffMs("2d", now), now - 2 * 86400_000);
@@ -193,12 +185,6 @@ describe("reading one session", () => {
 
   it("a session Langfuse does not hold is an error, not an empty transcript", async () => {
     await assert.rejects(readTranscript({ harness: "claude", id: "nope" }, { client: fakeLangfuse().client }), /not found in Langfuse/);
-  });
-
-  it("last activity is the end; an explicit end only counts for legacy records", () => {
-    assert.equal(sessionEndMs({ activityKnown: true, mtimeMs: 5, endedAt: 9 }), 5);
-    assert.equal(sessionEndMs({ endedAt: "1970-01-01T00:00:00.009Z" }), 9);
-    assert.equal(sessionEndMs({}), null);
   });
 });
 

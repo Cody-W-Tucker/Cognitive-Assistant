@@ -107,6 +107,6 @@ export async function propose({
     stats: { ...stats, clusters: ledger.clusters.length, eligible: ledger.clusters.filter((c) => c.eligible).length },
   };
   writeProposal(stateDir, proposal);
-  emit("synthesize:done", { plans: synthesis.plans.length, annotated: annotation.annotated, edits: edits.length, note: annotation.note || synthesis.note });
+  emit("synthesize:done", { plans: synthesis.plans.length, annotated: annotation.annotated, edits: edits.length });
   return proposal;
 }

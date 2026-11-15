@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { collectFollowup, touchedPaths } from "./followup.js";
-import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, sessionEndMs, transcriptRevision } from "./harnesses.js";
+import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, transcriptRevision } from "./harnesses.js";
 import { distill } from "./distill.js";
 import { langfuseClient } from "./langfuse.js";
 import { mockInvoke } from "./mock.js";
@@ -18,7 +18,7 @@ import { checkpointKey, evidenceFile, readEvidenceRecords, readJson, writeJson }
 /** What the runtime keeps about when and where a session happened. */
 export function sessionMeta(session) {
   const startedAt = session?.startedAtMs ?? null;
-  const ended = sessionEndMs(session);
+  const ended = session?.mtimeMs;
   return {
     sessionAt: startedAt ?? (session?.harness === "hermes" ? null : session?.mtimeMs) ?? null,
     startedAt,
@@ -66,7 +66,7 @@ export function validateOutcome(reply, trace, followup, traceTexts = []) {
  * tied to a local store revision, which can never match again. Such a
  * snapshot (or a missing one) is re-cut once from Langfuse and saved.
  */
-export async function runOutcome({ client = null, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup, transcripts = null } = {}) {
+export async function runOutcome({ client = null, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup } = {}) {
   if (!stateDir) throw new Error("outcome: --state-dir is required");
   const days = Number(matureDays);
   if (matureDays === "" || !Number.isFinite(days) || days < 0) throw new Error("--mature-days must be non-negative");
@@ -79,7 +79,7 @@ export async function runOutcome({ client = null, stateDir, since = "all", limit
   const rubric = { promptSha: createHash("sha256").update(loadPrompt("outcome")).digest("hex"), model, matureDays: days };
   client ??= langfuseClient();
   // One discovery serves every lookup in this run, including follow-up.
-  let pool = transcripts;
+  let pool = null;
   const discovered = async () => (pool ??= (await discoverTranscripts({ client, stateDir, since: "all", ignoreCheckpoint: true, now })).transcripts);
   const evidence = readEvidenceRecords(stateDir);
   const candidates = evidence.filter((r) => rescore || !r.outcome).map((record) => ({ record }));

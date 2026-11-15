@@ -27,22 +27,22 @@ export function initialState(meta = {}) {
   return {
     meta,
     discover: { status: "pending", transcripts: 0, perHarness: {} },
-    analyze: { status: "pending", total: 0, pending: 0, done: 0, ok: 0, failed: 0, skipped: 0, analyzer: null },
+    analyze: { status: "pending", pending: 0, done: 0, ok: 0, failed: 0, skipped: 0, analyzer: null },
     fold: { status: "pending", clusters: 0, eligible: 0 },
-    synthesize: { status: "pending", plans: 0, annotated: 0, edits: 0, note: "" },
+    synthesize: { status: "pending", plans: 0, annotated: 0, edits: 0 },
   };
 }
 
 export function reduceEvent(state, event, data = {}) {
-  if (event === "discover:start") state.discover = { ...state.discover, status: "active", harnesses: data.harnesses || [] };
+  if (event === "discover:start") state.discover = { ...state.discover, status: "active" };
   if (event === "discover:done") state.discover = { ...state.discover, status: "done", transcripts: data.transcripts || 0, perHarness: data.perHarness || {} };
-  if (event === "analyze:start") state.analyze = { ...state.analyze, status: "active", total: data.total || 0, pending: data.pending || 0, analyzer: data.analyzer || null };
+  if (event === "analyze:start") state.analyze = { ...state.analyze, status: "active", pending: data.pending || 0, analyzer: data.analyzer || null };
   if (event === "analyze:tick") state.analyze = { ...state.analyze, done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0, skipped: data.skipped || 0 };
   if (event === "analyze:done") state.analyze = { ...state.analyze, status: "done", done: data.done || 0, ok: data.ok || 0, failed: data.failed || 0, skipped: data.skipped || 0 };
   if (event === "fold:start") state.fold = { ...state.fold, status: "active" };
   if (event === "fold:done") state.fold = { ...state.fold, status: "done", clusters: data.clusters || 0, eligible: data.eligible || 0 };
   if (event === "synthesize:start") state.synthesize = { ...state.synthesize, status: "active" };
-  if (event === "synthesize:done") state.synthesize = { ...state.synthesize, status: "done", plans: data.plans || 0, annotated: data.annotated || 0, edits: data.edits || 0, note: data.note || "" };
+  if (event === "synthesize:done") state.synthesize = { ...state.synthesize, status: "done", plans: data.plans || 0, annotated: data.annotated || 0, edits: data.edits || 0 };
   return state;
 }
 

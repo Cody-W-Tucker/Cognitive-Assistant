@@ -9,7 +9,7 @@ import { analyzeTraces, loadContexts } from "./analyze.js";
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
 import { distill } from "./distill.js";
 import { foldEvidence } from "./fold.js";
-import { discoverTranscripts, readTranscript, SUPPORTED_HARNESSES } from "./harnesses.js";
+import { discoverTranscripts, readTranscript } from "./harnesses.js";
 import { langfuseClient } from "./langfuse.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
@@ -52,7 +52,7 @@ async function collectTrace(transcript, client) {
     },
     distilled: distill(events, transcript),
     // Cut from the same observations as the trace; scoring later checks the session is unchanged.
-    outcomeSnapshot: revision ? outcomeSnapshot(transcript, events, revision) : null,
+    outcomeSnapshot: outcomeSnapshot(transcript, events, revision),
   };
 }
 
@@ -86,15 +86,6 @@ function countByHarness(transcripts) {
   return counts;
 }
 
-/** Langfuse records no session end: a session is finished once it has been idle long enough. */
-export function sessionEligible(transcript, now, idleHours) {
-  return Number.isFinite(transcript.mtimeMs) && now - transcript.mtimeMs > idleHours * 3600000;
-}
-
-export function stampEvidence(record, session, rubric) {
-  return { ...record, ...sessionMeta(session), rubric };
-}
-
 /**
  * @param invoke `(role, prompt, context) => Promise<object>`; defaults to the
  *   mock or the configured model per `analyzer`. Tests inject their own.
@@ -122,7 +113,8 @@ export async function runPipeline({
   if (analyzer !== "model" && analyzer !== "mock") throw new Error(`improve-run: --analyzer must be model or mock (got ${JSON.stringify(analyzer)})`);
   if (maxSessions !== null && !(Number.isInteger(Number(maxSessions)) && Number(maxSessions) > 0)) throw new Error("--max-sessions must be a positive integer");
   const cap = maxSessions === null ? null : Number(maxSessions);
-  if (idleHours === null || String(idleHours).trim() === "" || !Number.isFinite(Number(idleHours)) || Number(idleHours) < 0) throw new Error("--idle-hours must be a non-negative number");
+  const idle = idleHours === null || String(idleHours).trim() === "" ? NaN : Number(idleHours);
+  if (!Number.isFinite(idle) || idle < 0) throw new Error("--idle-hours must be a non-negative number");
   const soul = readSoulSnapshot(soulPath);
   const customInvoke = Boolean(invoke);
   if (!invoke) {
@@ -136,14 +128,14 @@ export async function runPipeline({
   initStateDir(stateDir);
   const runId = timestampId("run");
 
-  emit("discover:start", { harnesses: harnesses || SUPPORTED_HARNESSES });
+  emit("discover:start");
   const needsMetadata = (t) => {
     if (t.harness !== "hermes") return false;
     const evidence = readSessionEvidence(stateDir, t.harness, t.id);
     return evidence?.status === "ok" && (evidence.startedAt == null || evidence.source == null);
   };
   const now = Date.now();
-  const discovery = await discoverTranscripts({ client, stateDir, since, harnesses, idleHours: Number(idleHours), now, includeCheckpointed: needsMetadata });
+  const discovery = await discoverTranscripts({ client, stateDir, since, harnesses, idleHours: idle, now, includeCheckpointed: needsMetadata });
   for (const t of discovery.transcripts) {
     if (!needsMetadata(t) || t.startedAtMs == null || !t.source) continue;
     const evidence = readSessionEvidence(stateDir, t.harness, t.id);
@@ -157,12 +149,12 @@ export async function runPipeline({
   }
   // Sessions already analyzed (say, under an older checkpoint value) are re-checkpointed, never re-analyzed.
   const analyzed = discovery.transcripts.filter((t) => readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok");
-  const eligible = discovery.transcripts.filter((t) => !analyzed.includes(t) && sessionEligible(t, now, Number(idleHours)));
-  const transcripts = capSessions(eligible, cap);
+  // Discovery returns only sessions idle for `idleHours`, so the rest are all eligible.
+  const transcripts = capSessions(discovery.transcripts.filter((t) => !analyzed.includes(t)), cap);
   const perHarness = countByHarness(transcripts);
   emit("discover:done", { transcripts: transcripts.length, perHarness });
 
-  emit("analyze:start", { total: transcripts.length, pending: transcripts.length, analyzer });
+  emit("analyze:start", { pending: transcripts.length, analyzer });
   const traces = await mapPool(transcripts, jobs, (t) => collectTrace(t, client));
   // Session time travels with the evidence so outcomes can be attributed to
   // the living SOUL generation that was active when the session happened.
@@ -187,7 +179,7 @@ export async function runPipeline({
       // A failed or skipped re-analysis never replaces earlier good evidence.
       if (record.status === "ok" || readSessionEvidence(stateDir, record.harness, record.transcriptId)?.status !== "ok") {
         const snapshot = traces.find((t) => t.harness === record.harness && t.transcriptId === record.transcriptId)?.outcomeSnapshot;
-        writeJson(file, { ...stampEvidence(record, session, rubric), outcomeSnapshot: snapshot ?? null });
+        writeJson(file, { ...record, ...sessionMeta(session), rubric, outcomeSnapshot: snapshot ?? null });
       }
       tally.done += 1;
       tally[record.status] += 1;
