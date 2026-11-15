@@ -118,20 +118,15 @@ def _truncate_user_text(text: str, max_length: int = MAX_USER_TEXT_LENGTH) -> st
 
 def _summarize_repeated_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped_records: dict[str, int] = {}
-    ordered_texts: list[str] = []
 
     for record in records:
         user_text = _truncate_user_text(_normalize_text(record.get("user_text", "")))
         if not user_text:
             continue
-        if user_text not in grouped_records:
-            grouped_records[user_text] = 0
-            ordered_texts.append(user_text)
-        grouped_records[user_text] += 1
+        grouped_records[user_text] = grouped_records.get(user_text, 0) + 1
 
     summarized_records: list[dict[str, Any]] = []
-    for user_text in ordered_texts:
-        repeat_count = grouped_records[user_text]
+    for user_text, repeat_count in grouped_records.items():
         record = {"user_text": user_text}
         if repeat_count > 1:
             record["repeated"] = repeat_count
