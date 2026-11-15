@@ -29,9 +29,9 @@ from core.config import TIMESTAMP_FORMAT, LayerProfile
 
 
 SCHEMA_VERSION = "2026-05-01.1"
-SEQUENCE_GAP_SECONDS = 30 * 60
 SUPPORTED_OPEN_WEBUI_GLOB = "chat-export-*.json"
 MAX_USER_TEXT_LENGTH = 2000
+_FALSY = {"", "0", "0.0", "False", "false", None}
 
 
 @dataclass
@@ -44,14 +44,6 @@ class SourceResult:
     records_written: int
     records_skipped: int
     notes: list[str]
-
-
-def _ensure_parent(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _load_json_file(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _strip_reasoning_blocks(text: str) -> str:
@@ -110,17 +102,17 @@ def _normalize_text(value: Any) -> str:
     return text.strip()
 
 
-def _truncate_user_text(text: str, max_length: int = MAX_USER_TEXT_LENGTH) -> str:
-    if len(text) <= max_length:
+def _truncate_user_text(text: str) -> str:
+    if len(text) <= MAX_USER_TEXT_LENGTH:
         return text
-    return text[: max_length - 3].rstrip() + "..."
+    return text[: MAX_USER_TEXT_LENGTH - 3].rstrip() + "..."
 
 
-def _summarize_repeated_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def _summarize_repeated_records(texts: Iterable[str]) -> list[dict[str, Any]]:
     grouped_records: dict[str, int] = {}
 
-    for record in records:
-        user_text = _truncate_user_text(_normalize_text(record.get("user_text", "")))
+    for text in texts:
+        user_text = _truncate_user_text(_normalize_text(text))
         if not user_text:
             continue
         grouped_records[user_text] = grouped_records.get(user_text, 0) + 1
@@ -134,59 +126,52 @@ def _summarize_repeated_records(records: Iterable[dict[str, Any]]) -> list[dict[
     return summarized_records
 
 
-def _safe_json_dumps(record: dict[str, Any]) -> str:
-    return json.dumps(record, ensure_ascii=True, sort_keys=True)
-
-
 def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> int:
-    _ensure_parent(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with path.open("w", encoding="utf-8") as file_handle:
         for record in records:
-            file_handle.write(_safe_json_dumps(record) + "\n")
+            file_handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True) + "\n")
             count += 1
     return count
 
 
-def _build_opencode_records(path: Path) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _first_child(node: dict[str, Any], key: str, mapping: dict[str, Any]) -> dict[str, Any] | None:
+    """The first child id under ``node[key]`` that resolves in ``mapping``."""
+    for child_id in node.get(key, []):
+        child = mapping.get(child_id)
+        if child is not None:
+            return child
+    return None
+
+
+def _build_opencode_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
 
     with path.open("r", encoding="utf-8") as file_handle:
         for line in file_handle:
             payload = json.loads(line)
-            messages = payload.get("messages", [])
-            title = payload.get("title", "")
-
-            for message in messages:
+            for message in payload.get("messages", []):
                 if message.get("role") != "user":
                     continue
                 user_text = _normalize_text(message.get("content", ""))
                 if not user_text:
                     skipped += 1
                     continue
-                records.append(
-                    {
-                        "timestamp": message.get("timestamp"),
-                        "title": title,
-                        "user_text": user_text,
-                    }
-                )
+                texts.append(user_text)
 
-    return records, skipped
+    return texts, skipped
 
 
-def _build_cursor_records(path: Path) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _build_cursor_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
 
     with path.open("r", encoding="utf-8") as file_handle:
         for line in file_handle:
             payload = json.loads(line)
-            messages = payload.get("messages", [])
-            workspace_id = payload.get("workspace_id", "")
-
-            user_messages = [m for m in messages if m.get("role") == "user"]
+            user_messages = [m for m in payload.get("messages", []) if m.get("role") == "user"]
             if not user_messages:
                 skipped += 1
                 continue
@@ -196,24 +181,14 @@ def _build_cursor_records(path: Path) -> tuple[list[dict[str, Any]], int]:
                 if not user_text:
                     skipped += 1
                     continue
-                records.append(
-                    {
-                        "timestamp": None,
-                        "title": workspace_id,
-                        "user_text": user_text,
-                    }
-                )
+                texts.append(user_text)
 
-    return records, skipped
+    return texts, skipped
 
 
-def _flatten_open_webui_chat(
-    chat_item: dict[str, Any]
-) -> list[dict[str, Any]]:
-    chat = chat_item.get("chat", {})
-    history = chat.get("history", {})
-    messages_map = history.get("messages", {})
-    interactions: list[dict[str, Any]] = []
+def _flatten_open_webui_chat(chat_item: dict[str, Any]) -> list[str]:
+    messages_map = chat_item.get("chat", {}).get("history", {}).get("messages", {})
+    texts: list[str] = []
 
     roots = [m for m in messages_map.values() if m.get("parentId") is None]
     roots.sort(key=lambda item: item.get("timestamp", 0))
@@ -224,43 +199,27 @@ def _flatten_open_webui_chat(
             if current.get("role") == "user":
                 user_text = _normalize_text(current.get("content", ""))
                 if user_text:
-                    interactions.append(
-                        {
-                            "timestamp": current.get("timestamp"),
-                            "title": chat.get("title", ""),
-                            "user_text": user_text,
-                        }
-                    )
+                    texts.append(user_text)
+            current = _first_child(current, "childrenIds", messages_map)
 
-            next_node = None
-            for child_id in current.get("childrenIds", []):
-                child = messages_map.get(child_id)
-                if child is None:
-                    continue
-                next_node = child
-                break
-            current = next_node
-
-    return interactions
+    return texts
 
 
-def _build_open_webui_records(
-    directory: Path,
-) -> tuple[list[dict[str, Any]], int, list[str]]:
-    records: list[dict[str, Any]] = []
+def _build_open_webui_records(directory: Path) -> tuple[list[str], int, list[str]]:
+    texts: list[str] = []
     skipped = 0
     notes: list[str] = []
 
     for path in sorted(directory.glob(SUPPORTED_OPEN_WEBUI_GLOB)):
         try:
-            chat_items = _load_json_file(path)
+            chat_items = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             skipped += 1
             notes.append(f"Skipped invalid JSON export: {path.name}")
             continue
 
         for chat_item in chat_items:
-            records.extend(_flatten_open_webui_chat(chat_item))
+            texts.extend(_flatten_open_webui_chat(chat_item))
 
     snapshots = sorted(directory.glob("*.snapshot"))
     if snapshots:
@@ -268,59 +227,39 @@ def _build_open_webui_records(
             f"Ignored {len(snapshots)} .snapshot files (unsupported binary/source format)"
         )
 
-    return records, skipped, notes
+    return texts, skipped, notes
 
 
-def _build_perplexity_search_records(path: Path) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _build_perplexity_search_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
-    previous_timestamp: datetime | None = None
-    sequence_number = 0
 
     with path.open("r", encoding="utf-8", newline="") as file_handle:
-        reader = csv.DictReader(file_handle)
-        for row in reader:
+        for row in csv.DictReader(file_handle):
             query_text = _normalize_text(row.get("QUERY_STRING", ""))
             timestamp_text = row.get("CREATED", "")
             if not query_text or not timestamp_text:
                 skipped += 1
                 continue
+            datetime.fromisoformat(timestamp_text)  # a malformed export fails loudly
+            texts.append(query_text)
 
-            timestamp_value = datetime.fromisoformat(timestamp_text)
-            if (
-                previous_timestamp is None
-                or (timestamp_value - previous_timestamp).total_seconds()
-                > SEQUENCE_GAP_SECONDS
-            ):
-                sequence_number += 1
-            previous_timestamp = timestamp_value
-
-            records.append(
-                {
-                    "timestamp": timestamp_text,
-                    "title": f"search_sequence:{sequence_number:05d}",
-                    "user_text": query_text,
-                }
-            )
-
-    return records, skipped
+    return texts, skipped
 
 
-def _build_perplexity_memory_records(path: Path) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _build_perplexity_memory_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
 
     with path.open("r", encoding="utf-8", newline="") as file_handle:
-        reader = csv.DictReader(file_handle)
-        for row in reader:
-            falsy = {"", "0", "0.0", "False", "false", None}
-            if row.get("IS_DELETED") not in falsy:
+        for row in csv.DictReader(file_handle):
+            if row.get("IS_DELETED") not in _FALSY:
                 skipped += 1
                 continue
-            if row.get("IS_FORGOTTEN") not in falsy:
+            if row.get("IS_FORGOTTEN") not in _FALSY:
                 skipped += 1
                 continue
-            if row.get("IS_INVISIBLE") not in falsy:
+            if row.get("IS_INVISIBLE") not in _FALSY:
                 skipped += 1
                 continue
 
@@ -330,27 +269,17 @@ def _build_perplexity_memory_records(path: Path) -> tuple[list[dict[str, Any]], 
                 skipped += 1
                 continue
 
-            records.append(
-                {
-                    "timestamp": row.get("LAST_UPDATED_AT", ""),
-                    "title": memory_key,
-                    "user_text": _normalize_text(row.get("LAST_UPDATED_QUERY", ""))
-                    or memory_key,
-                }
-            )
+            texts.append(_normalize_text(row.get("LAST_UPDATED_QUERY", "")) or memory_key)
 
-    return records, skipped
+    return texts, skipped
 
 
-def _build_perplexity_conversation_records(
-    path: Path,
-) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _build_perplexity_conversation_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
 
     with path.open("r", encoding="utf-8", newline="") as file_handle:
-        reader = csv.DictReader(file_handle)
-        for row in reader:
+        for row in csv.DictReader(file_handle):
             title = _normalize_text(row.get("TITLE", ""))
             output_payload = row.get("OUTPUT_STR", "")
             if not title or not output_payload:
@@ -365,67 +294,33 @@ def _build_perplexity_conversation_records(
             if not answer_text:
                 skipped += 1
                 continue
-            records.append(
-                {
-                    "timestamp": row.get("CREATED", ""),
-                    "title": title,
-                    "user_text": title,
-                }
-            )
+            texts.append(title)
 
-    return records, skipped
+    return texts, skipped
 
 
-def _first_openai_root(mapping: dict[str, Any]) -> dict[str, Any] | None:
-    roots = [node for node in mapping.values() if node.get("parent") is None]
-    if not roots:
-        return None
-    roots.sort(key=lambda item: ((item.get("message") or {}).get("create_time") or 0))
-    return roots[0]
-
-
-def _next_openai_node(
-    node: dict[str, Any], mapping: dict[str, Any]
-) -> dict[str, Any] | None:
-    for child_id in node.get("children", []):
-        child = mapping.get(child_id)
-        if child is not None:
-            return child
-    return None
-
-
-def _flatten_openai_conversation(
-    conversation: dict[str, Any]
-) -> list[dict[str, Any]]:
+def _flatten_openai_conversation(conversation: dict[str, Any]) -> list[str]:
     mapping = conversation.get("mapping", {})
-    root = _first_openai_root(mapping)
-    if root is None:
-        return []
+    roots = [node for node in mapping.values() if node.get("parent") is None]
+    roots.sort(key=lambda item: ((item.get("message") or {}).get("create_time") or 0))
 
-    interactions: list[dict[str, Any]] = []
-    current = root
+    texts: list[str] = []
+    current = roots[0] if roots else None
     while current:
         message = current.get("message") or {}
         author = message.get("author") or {}
-        role = author.get("role")
-        if role == "user":
+        if author.get("role") == "user":
             content = message.get("content") or {}
             user_text = _normalize_text(content.get("parts", []))
             if user_text:
-                interactions.append(
-                    {
-                        "timestamp": message.get("create_time"),
-                        "title": conversation.get("title", ""),
-                        "user_text": user_text,
-                    }
-                )
-        current = _next_openai_node(current, mapping)
+                texts.append(user_text)
+        current = _first_child(current, "children", mapping)
 
-    return interactions
+    return texts
 
 
-def _build_openai_records(path: Path) -> tuple[list[dict[str, Any]], int]:
-    records: list[dict[str, Any]] = []
+def _build_openai_records(path: Path) -> tuple[list[str], int]:
+    texts: list[str] = []
     skipped = 0
 
     with ZipFile(path) as archive:
@@ -434,35 +329,16 @@ def _build_openai_records(path: Path) -> tuple[list[dict[str, Any]], int]:
 
     for conversation in conversations:
         try:
-            records.extend(_flatten_openai_conversation(conversation))
+            texts.extend(_flatten_openai_conversation(conversation))
         except Exception:
             skipped += 1
 
-    return records, skipped
+    return texts, skipped
 
 
-def _grok_timestamp_to_iso(value: Any) -> str | None:
-    if not isinstance(value, dict):
-        return None
-    date_value = value.get("$date")
-    if isinstance(date_value, dict):
-        raw_value = date_value.get("$numberLong")
-    else:
-        raw_value = date_value
-    if raw_value in {None, ""}:
-        return None
-    try:
-        timestamp = datetime.fromtimestamp(int(raw_value) / 1000)
-    except (TypeError, ValueError, OSError):
-        return None
-    return timestamp.isoformat()
-
-
-def _build_grok_records(
-    path: Path,
-) -> tuple[list[dict[str, Any]], int, list[str]]:
+def _build_grok_records(path: Path) -> tuple[list[str], int, list[str]]:
     notes: list[str] = []
-    records: list[dict[str, Any]] = []
+    texts: list[str] = []
     skipped = 0
 
     with ZipFile(path) as archive:
@@ -471,7 +347,7 @@ def _build_grok_records(
         ]
         if not backend_members:
             notes.append("No prod-grok-backend.json member found in export")
-            return records, skipped, notes
+            return texts, skipped, notes
         with archive.open(backend_members[0]) as file_handle:
             payload = json.load(file_handle)
 
@@ -479,11 +355,6 @@ def _build_grok_records(
         payload.get("conversations", []) if isinstance(payload, dict) else []
     )
     for conversation_item in conversations:
-        conversation = conversation_item.get("conversation", {})
-        title = (
-            _normalize_text(conversation.get("title", ""))
-            or conversation.get("id", "")
-        )
         responses = conversation_item.get("responses", [])
         if not isinstance(responses, list):
             skipped += 1
@@ -497,13 +368,7 @@ def _build_grok_records(
             if not user_text:
                 skipped += 1
                 continue
-            records.append(
-                {
-                    "timestamp": _grok_timestamp_to_iso(response.get("create_time")),
-                    "title": title,
-                    "user_text": user_text,
-                }
-            )
+            texts.append(user_text)
 
     media_posts = (
         payload.get("media_posts", []) if isinstance(payload, dict) else []
@@ -514,7 +379,7 @@ def _build_grok_records(
             "extracted conversation prompts only"
         )
 
-    return records, skipped, notes
+    return texts, skipped, notes
 
 
 def _newest(intake_dir: Path, pattern: str) -> Path | None:
@@ -552,9 +417,9 @@ async def build(profile: LayerProfile) -> None:
         path = _newest(intake_dir, pattern)
         if path is None:
             continue
-        records, skipped, *extra = builder(path)
+        texts, skipped, *extra = builder(path)
         output_path = ready_dir / source / f"{stem}_{timestamp}.jsonl"
-        written = _write_jsonl(output_path, _summarize_repeated_records(records))
+        written = _write_jsonl(output_path, _summarize_repeated_records(texts))
         result = results.setdefault(source, SourceResult(source, "processed", [], 0, 0, []))
         result.output_files.append(str(output_path))
         result.records_written += written
@@ -562,7 +427,7 @@ async def build(profile: LayerProfile) -> None:
         result.notes.extend(extra[0] if extra else [])
 
     manifest_path = ready_dir / f"preprocessing_manifest_{timestamp}.json"
-    _ensure_parent(manifest_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest = {
         "generated_at": datetime.now().isoformat(),
         "intake_dir": str(intake_dir),
