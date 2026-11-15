@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
-import { discoverTranscripts, readTranscriptEvents, sessionEndMs, transcriptRevision } from "./harnesses.js";
+import { discoverTranscripts, readTranscriptEvents, sessionEndMs } from "./harnesses.js";
 
 const execFileAsync = promisify(execFile);
 const DAY_MS = 86400_000;
@@ -96,14 +96,17 @@ function noteDate(row) {
  *
  * Later sessions: every Hermes session inside the window is a candidate, with
  * no directory requirement (most Hermes sessions have none); the judge decides
- * whether one continues the same aim. Other harnesses are matched by repo or
- * directory. The earliest MAX_SESSIONS are kept. `candidates` (an array, or a
- * function returning one) lets a caller discover once for many sessions.
+ * whether one continues the same aim. Hermes subagent sessions carry the
+ * `subagent` platform as their source and are left out. Other harnesses are
+ * matched by repo or directory, which only Claude sessions record in Langfuse.
+ * The earliest MAX_SESSIONS are kept. `candidates` (an array, or a function
+ * returning one or a promise of one) lets a caller discover once for many
+ * sessions.
  *
  * Commits: from the session's repository and from the repositories its tool
  * calls touched (`touched`, see touchedPaths), each tagged with its `repo`.
  */
-export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, home, stateDir, originalLocation = null, candidates = null, touched = [] } = {}) {
+export async function collectFollowup({ session, firstUserMessage = "", matureDays = 3, client = null, candidates = null, touched = [] } = {}) {
   const start = time(session?.endedAt);
   if (!Number.isFinite(start)) throw new Error("followup: session endedAt is required");
   if (typeof matureDays !== "number" || !Number.isFinite(matureDays) || matureDays < 0) throw new Error("followup: matureDays must be non-negative");
@@ -114,8 +117,8 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   const cwd = session.cwd;
 
   const located = (typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd));
-  const pool = typeof candidates === "function" ? candidates() : candidates
-    ?? discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: originalLocation ? { ...originalLocation, id: session.transcriptId } : null }).transcripts;
+  const pool = (typeof candidates === "function" ? await candidates() : candidates)
+    ?? (await discoverTranscripts({ client, since: "all", ignoreCheckpoint: true, excludeTranscript: { harness: session.harness, id: session.transcriptId } })).transcripts;
   const later = [];
   for (const candidate of pool) {
     if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
@@ -133,10 +136,7 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
   for (const { candidate, began } of later) {
     if (result.sessions.length >= MAX_SESSIONS) break;
     try {
-      const revision = transcriptRevision(candidate);
-      if (!revision || JSON.stringify(revision) !== JSON.stringify(candidate.discoveryRevision)) continue;
-      const events = await readTranscriptEvents(candidate);
-      if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(candidate))) continue;
+      const events = await readTranscriptEvents(candidate, { client });
       const users = events.filter((e) => e.kind === "message" && e.role === "user" && message(e.text));
       const assistants = events.filter((e) => e.kind === "message" && e.role === "assistant" && message(e.text));
       if (!users.length && !assistants.length) continue;

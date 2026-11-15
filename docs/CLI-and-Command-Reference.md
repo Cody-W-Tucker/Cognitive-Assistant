@@ -69,14 +69,15 @@ no `--state-dir` or `--soul-path` flags. Details:
 | `--since` | `30d` | Only sessions newer than this (`12h`, `2w`, `all`) |
 | `--analyzer` | `model` | `model` (configured endpoint) or `mock` (no model calls) |
 | `--min-gap-evidence` | `2` | Distinct sessions a gap needs before it can become a candidate (integer >= 2) |
-| `--harness NAME` | all | Scan only this harness (repeatable); a named harness whose store is missing fails the run |
+| `--harness NAME` | all | Scan only this harness's Langfuse sessions (repeatable): `hermes`, `claude`, `opencode` |
 | `--max-sessions N` | none | Analyze at most N sessions this run, and outcome-score at most N; Hermes sessions first, then newest. The rest wait for later runs |
 | `--auto` | off | With `--headless`: judge the change under test, then revert, wait, or adopt one record |
 | `--min-sessions` | `15` | `--auto`: scored sessions needed on each side before judging |
 | `--z-threshold` | `1.645` | `--auto`: one-sided z a rise in the miss rate must clear to revert |
 
-`CA_IMPROVE_HOME`, when set, scopes every session store under that one home
-directory (used for hermetic runs).
+`improve-run` and `improve-outcome` read sessions from Langfuse and need
+`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_BASE_URL`; they
+fail before starting without them.
 
 | Command | What it does |
 | --- | --- |

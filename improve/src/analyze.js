@@ -85,6 +85,7 @@ export async function analyzeTraces(traces, { invoke, contexts, stateDir, runId,
   });
   const analyzeOne = async (trace) => {
     if (trace.readError) return record(trace, "failed", { error: trace.readError });
+    if (trace.skipReason) return record(trace, "skipped", { error: trace.skipReason });
     const trivial = trivialReason(trace.activity);
     if (trivial) return record(trace, "skipped", { error: trivial });
     try {

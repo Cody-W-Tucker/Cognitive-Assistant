@@ -99,8 +99,6 @@ def _print_proposal_summary(proposal: dict, *, file=sys.stdout) -> None:
 
 
 def _improve_run(args: argparse.Namespace) -> int:
-    import os
-
     from core import improve
 
     if args.auto and not args.headless:
@@ -109,10 +107,8 @@ def _improve_run(args: argparse.Namespace) -> int:
     if not args.headless and not (sys.stdin.isatty() and sys.stdout.isatty()):
         print("improve-run: manual route requires a TTY; automation should use `improve-run --headless`", file=sys.stderr)
         return 2
-    home = os.environ.get("CA_IMPROVE_HOME")
     proposal = improve.run(
         tui=not args.headless,
-        home=Path(home).expanduser() if home else None,
         since=args.since,
         analyzer=args.analyzer,
         min_gap_evidence=args.min_gap_evidence,
@@ -353,7 +349,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--harness",
         action="append",
         default=None,
-        help="Only scan this harness (repeatable). A named harness whose store is missing fails the run.",
+        help="Only scan this harness's Langfuse sessions (repeatable): hermes, claude, opencode.",
     )
 
     improve_outcome_parser = subparsers.add_parser("improve-outcome", help="Score mature session outcomes, or preview a backfill.")

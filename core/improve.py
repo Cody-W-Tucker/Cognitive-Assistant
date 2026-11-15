@@ -40,11 +40,26 @@ def _proposal_path() -> Path:
     return improve_dir() / "proposal.json"
 
 
+LANGFUSE_VARIABLES = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
+
+
+def _require_langfuse() -> None:
+    """The runtime reads every harness session from Langfuse; refuse early without it."""
+    missing = [name for name in LANGFUSE_VARIABLES if not os.environ.get(name)]
+    if missing:
+        raise RuntimeError(
+            f"{', '.join(missing)} not set: the improvement runtime reads sessions from Langfuse"
+            " (see .env.template)"
+        )
+
+
 def _runtime(command: str, flags: List[str], *, tui: bool = False) -> Dict:
     """Run one runtime command and return the proposal it prints.
 
     With ``tui`` the runtime paints progress on the inherited stderr.
     """
+    if command in ("run", "outcome"):
+        _require_langfuse()
     node = shutil.which("node")
     if not node:
         raise RuntimeError("node not found on PATH; run under the repo Nix dev shell, which provides nodejs")
@@ -91,7 +106,6 @@ def _write_experience_context() -> Path:
 def run(
     *,
     tui: bool = False,
-    home: Optional[Path] = None,
     since: str = "30d",
     analyzer: str = "model",
     min_gap_evidence: int = 2,
@@ -100,8 +114,7 @@ def run(
 ) -> Dict:
     """Discover and analyze new sessions, then propose records. Writes only under CA home.
 
-    ``home`` scopes discovery to one directory; without it the runtime finds
-    stores via HERMES_HOME / CLAUDE_CONFIG_DIR / CODEX_HOME.
+    Sessions come from Langfuse (``LANGFUSE_*``), never from harness stores on disk.
     """
     flags = [
         "--tui" if tui else "--headless",
@@ -118,8 +131,6 @@ def run(
     ]
     if max_sessions is not None:
         flags += ["--max-sessions", str(max_sessions)]
-    if home is not None:
-        flags += ["--home", str(home)]
     for harness in harnesses or []:
         flags += ["--harness", harness]
     return _runtime("run", flags, tui=tui)
@@ -134,15 +145,13 @@ def synthesize_resume(*, min_gap_evidence: int = 2) -> Dict:
 def score_outcomes(*, since: str = "all", limit: Optional[int] = None, dry_run: bool = False,
                    rescore: bool = False, mature_days: float = 3, analyzer: str = "model") -> Dict:
     """Score mature sessions or write a private preview without changing evidence."""
-    flags = ["--since", since, "--mature-days", str(mature_days), "--analyzer", analyzer]
+    flags =["--since", since, "--mature-days", str(mature_days), "--analyzer", analyzer]
     if limit is not None:
         flags += ["--limit", str(limit)]
     if dry_run:
         flags.append("--dry-run")
     if rescore:
         flags.append("--rescore")
-    if os.environ.get("CA_IMPROVE_HOME"):
-        flags += ["--home", os.environ["CA_IMPROVE_HOME"]]
     return _runtime("outcome", flags)
 
 

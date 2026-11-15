@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // CA improvement runtime CLI, called by core/improve.py. Prints exactly one
 // JSON proposal on stdout; progress (--tui) and errors go to stderr.
+// Sessions come from Langfuse (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY,
+// LANGFUSE_BASE_URL).
 
 import { runOutcome } from "../src/outcome.js";
 import { runPipeline } from "../src/pipeline.js";
@@ -9,9 +11,14 @@ import { startTui } from "../src/tui.js";
 
 const USAGE = `usage:
   ca-improve run (--headless|--tui) --state-dir D --soul-path S [--experience-file E] [--posture-path P]
-                 [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--max-sessions N] [--home H] [--harness X]...
+                 [--since 30d] [--idle-hours 12] [--analyzer model|mock] [--min-gap-evidence N] [--max-sessions N] [--harness X]...
   ca-improve synthesize --state-dir D --soul-path S [--min-gap-evidence N]
-  ca-improve outcome --state-dir D [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--home H] [--analyzer model|mock]`;
+  ca-improve outcome --state-dir D [--since 70d] [--limit N] [--mature-days 3] [--dry-run] [--rescore] [--analyzer model|mock]`;
+
+const VALUE_FLAGS = new Set([
+  "state-dir", "soul-path", "experience-file", "posture-path", "since", "idle-hours", "analyzer",
+  "min-gap-evidence", "max-sessions", "harness", "limit", "mature-days",
+]);
 
 function parseFlags(args, command) {
   const flags = { harness: [] };
@@ -23,6 +30,7 @@ function parseFlags(args, command) {
     }
     if (!arg.startsWith("--") || args[i + 1] === undefined) throw new Error(`unexpected argument ${JSON.stringify(arg)}`);
     const name = arg.slice(2);
+    if (!VALUE_FLAGS.has(name)) throw new Error(`unknown flag ${arg}`);
     const value = args[(i += 1)];
     if (name === "harness") flags.harness.push(value);
     else flags[name] = value;
@@ -57,7 +65,6 @@ async function main() {
     const proposal =
       command === "run"
         ? await runPipeline({
-            home: flags.home,
             stateDir: flags["state-dir"],
             soulPath: flags["soul-path"],
             posturePath: flags["posture-path"] || null,
@@ -66,12 +73,11 @@ async function main() {
             idleHours: flags["idle-hours"] ?? 12,
             maxSessions: flags["max-sessions"] ?? null,
             harnesses: flags.harness.length ? flags.harness : null,
-            strictHarnesses: flags.harness.length > 0,
             analyzer,
             minGapEvidence,
             progress: tui?.event,
           })
-        : command === "outcome" ? await runOutcome({ home: flags.home, stateDir: flags["state-dir"], since: flags.since || "all", limit: flags.limit ?? null, matureDays: flags["mature-days"] ?? 3, dryRun: !!flags["dry-run"], rescore: !!flags.rescore, analyzer })
+        : command === "outcome" ? await runOutcome({ stateDir: flags["state-dir"], since: flags.since || "all", limit: flags.limit ?? null, matureDays: flags["mature-days"] ?? 3, dryRun: !!flags["dry-run"], rescore: !!flags.rescore, analyzer })
         : await runSynthesizeResume({
             stateDir: flags["state-dir"],
             soulPath: flags["soul-path"],

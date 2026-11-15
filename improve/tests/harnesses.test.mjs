@@ -1,431 +1,192 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
-import { cutoffMs, discoverTranscripts, opencodeExportToEvents, readTranscriptEvents, transcriptRevision } from "../src/harnesses.js";
-import { codex, daysAgoSec, makeSqlite, nowSec, tmpDir, writeCodexSession, writeJsonl } from "./helpers.mjs";
+import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, sessionEndMs, transcriptRevision } from "../src/harnesses.js";
+import { langfuseClient, langfuseConfig } from "../src/langfuse.js";
+import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
+import { writeJson } from "./helpers.mjs";
+import { fakeLangfuse, sessionObservations } from "./fake-langfuse.mjs";
 
-const OPENCODE_V2 = [
-  ["CREATE TABLE session_v2 (id TEXT PRIMARY KEY, project_id TEXT, directory TEXT, title TEXT, time_created INTEGER, time_updated INTEGER)"],
-  ["CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, time_created INTEGER, time_updated INTEGER, data TEXT)"],
-];
-const HERMES_SESSIONS = "CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, source TEXT, created_at INTEGER, updated_at INTEGER)";
-const HERMES_MESSAGES = "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, text BLOB)";
+const HOUR = 3600_000;
+const now = Date.parse("2026-11-14T12:00:00Z");
+const ago = (hours) => now - hours * HOUR;
 
-const opencodeDb = (home) => path.join(home, ".local", "share", "opencode", "opencode.db");
-const hermesDb = (home) => path.join(home, ".hermes", "state.db");
-const ids = (result) => result.transcripts.map((t) => t.id);
-
-it("SQLite revisions are session-scoped and detect reopening, including OpenCode", () => {
-  const { home: root } = fixtureHome();
-  for (const harness of ["hermes", "opencode"]) {
-    const session = discoverTranscripts({ home: root, since: "all", harnesses: [harness] }).transcripts[0];
-    const revision = transcriptRevision(session);
-    assert.ok(revision);
-    assert.deepEqual(revision, session.discoveryRevision);
-    const db = new DatabaseSync(session.db);
-    if (harness === "hermes") db.exec("INSERT INTO messages VALUES ('other', 'other', 'user', 'unrelated')");
-    else db.exec("INSERT INTO session_message VALUES ('other', 'other', 'user', 0, 0, 0, '{}')");
-    assert.deepEqual(transcriptRevision(session), revision);
-    if (harness === "hermes") db.exec("INSERT INTO messages VALUES ('new', 'hermes-1', 'user', 'reopened')");
-    else db.exec("INSERT INTO session_message VALUES ('new', 'opencode-1', 'user', 1, 0, 0, '{}')");
-    assert.notDeepEqual(transcriptRevision(session), revision);
-    db.close();
-  }
-});
-
-/** A fake HOME with one session per supported store plus excluded-store and self-session traps. */
-function fixtureHome() {
-  const root = tmpDir();
-  const home = path.join(root, "fakehome");
-  writeJsonl(path.join(home, ".claude", "projects", "-tmp-proj", "claude-1.jsonl"), [
-    { cwd: "/tmp/proj", sessionId: "claude-1", type: "user", message: { content: "fix the bug" } },
-    { cwd: "/tmp/proj", sessionId: "claude-1", type: "assistant", message: { content: "fixed" } },
-  ]);
-  writeJsonl(path.join(home, ".codex", "sessions", "2026", "10", "11", "rollout-001-codex-1.jsonl"), [
-    codex.meta("codex-1"),
-    codex.message("user", "add a test"),
-  ]);
-  writeJsonl(path.join(home, ".codex", "sessions", "2026", "10", "11", "rollout-002-self.jsonl"), [
-    codex.meta("self-1"),
-    codex.message("user", "<!-- ca-improve:self-session --> analyze this"),
-  ]);
-  const now = nowSec();
-  makeSqlite(opencodeDb(home), [
-    ...OPENCODE_V2,
-    ["INSERT INTO session_v2 VALUES ('opencode-1', 'p1', '/tmp/proj', 't', ?, ?)", now, now],
-    ["INSERT INTO session_message VALUES ('m1', 'opencode-1', 'user', 0, ?, ?, ?)", now, now, JSON.stringify({ role: "user", text: "review this diff" })],
-  ]);
-  makeSqlite(hermesDb(home), [
-    [HERMES_SESSIONS],
-    ["INSERT INTO sessions VALUES ('hermes-1', '/tmp/proj', 'cli', ?, ?)", now - 86400, now - 86400],
-    [HERMES_MESSAGES],
-    ["INSERT INTO messages VALUES ('hm1', 'hermes-1', 'user', 'check the logs')"],
-  ]);
-  writeJsonl(path.join(home, ".pi", "agent", "sessions", "-tmp-proj", "2026-10-11T00-00-00_pi-1.jsonl"), [
-    { type: "session", cwd: "/tmp/proj", id: "pi-1" },
-    { role: "user", content: "help me refactor this" },
-  ]);
-  writeJsonl(path.join(home, ".grok", "sessions", "grok-1.jsonl"), [{ role: "user", content: "grok session" }]);
-  writeJsonl(path.join(home, ".cursor", "sessions", "cursor-1.jsonl"), [{ role: "user", content: "cursor session" }]);
-  return { root, home, stateDir: path.join(root, "state") };
-}
-
-describe("discovery across harness stores", () => {
-  it("finds all four supported stores under HOME regardless of cwd, and ignores excluded stores", () => {
-    const { root, home, stateDir } = fixtureHome();
-    const elsewhere = path.join(root, "elsewhere");
-    fs.mkdirSync(elsewhere);
-    const cwd = process.cwd();
-    process.chdir(elsewhere);
-    let result;
-    try {
-      result = discoverTranscripts({ home, stateDir });
-    } finally {
-      process.chdir(cwd);
-    }
-    assert.deepEqual(new Set(result.transcripts.map((t) => t.harness)), new Set(["claude", "codex", "opencode", "hermes"]));
-    for (const id of ["pi-1", "grok-1", "cursor-1", "self-1"]) assert.ok(!ids(result).includes(id), `${id} must not be discovered`);
-    for (const harness of ["pi", "grok", "cursor"]) assert.ok(harness in result.excluded);
-    for (const t of result.transcripts) assert.ok((t.path || t.db).startsWith(home), `${t.id} is not under HOME`);
-    assert.equal(result.perHarness.codex.self, 1);
+describe("discovery from Langfuse root observations", () => {
+  it("groups roots into sessions per harness, with times and per-harness metadata", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "h1", { start: ago(30), platform: "tui", turns: [{ user: "a", assistant: "b" }, { user: "c", assistant: "d" }] });
+    lf.add("claude", "c1", { start: ago(20), cwd: "/work/repo" });
+    lf.add("opencode", "o1", { start: ago(15) });
+    const { transcripts, perHarness } = await discoverTranscripts({ client: lf.client, since: "all", now });
+    assert.deepEqual(transcripts.map((t) => [t.harness, t.id]), [["claude", "c1"], ["hermes", "h1"], ["opencode", "o1"]]);
+    const hermes = transcripts.find((t) => t.id === "h1");
+    assert.deepEqual([hermes.startedAtMs, hermes.mtimeMs, hermes.source, hermes.cwd, hermes.activityKnown], [ago(30), ago(30) + 10 * 60_000 + 60_000, "tui", null, true]);
+    assert.equal(transcripts.find((t) => t.id === "c1").cwd, "/work/repo");
+    assert.equal(transcripts.find((t) => t.id === "o1").source, null);
+    assert.deepEqual(perHarness.hermes, { scanned: 1, matched: 1, self: 0, open: 0 });
+    assert.ok(lf.calls.every((q) => q.isRootObservation === "true" && /metadata/.test(q.fields)), "discovery pages roots only");
   });
 
-  it("rejects an explicitly named excluded harness", () => {
-    const { home, stateDir } = fixtureHome();
-    assert.throws(() => discoverTranscripts({ home, stateDir, harnesses: ["pi"] }), /machine\/automation/);
-    assert.throws(() => discoverTranscripts({ home, stateDir, harnesses: ["vim"] }), /unknown harness/);
+  it("drops evaluator runs, Pi turns and roots without a session", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "pi-session", { start: ago(20), source: "pi" });
+    lf.add("claude", "judge", { start: ago(20), environment: "langfuse-llm-as-a-judge" });
+    lf.observations.push(...sessionObservations("hermes", null, { start: ago(20) }));
+    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "all", now });
+    assert.deepEqual(transcripts, []);
   });
 
-  it("--since drops old timestamped OpenCode and Hermes rows", () => {
-    const root = tmpDir();
-    const home = path.join(root, "fakehome");
-    const [old, now] = [daysAgoSec(90), nowSec()];
-    makeSqlite(opencodeDb(home), [
-      ...OPENCODE_V2,
-      ["INSERT INTO session_v2 VALUES ('opencode-old', 'p1', '/tmp/proj', 'old', ?, ?)", old, old],
-      ["INSERT INTO session_v2 VALUES ('opencode-new', 'p1', '/tmp/proj', 'new', ?, ?)", now, now],
-    ]);
-    makeSqlite(hermesDb(home), [
-      [HERMES_SESSIONS],
-      ["INSERT INTO sessions VALUES ('hermes-old', '/tmp/proj', 'cli', ?, ?)", old, old],
-      ["INSERT INTO sessions VALUES ('hermes-new', '/tmp/proj', 'cli', ?, ?)", now - 86400, now - 86400],
-    ]);
-    const found = ids(discoverTranscripts({ home, stateDir: path.join(root, "state"), since: "30d" }));
-    assert.deepEqual(found.sort(), ["hermes-new", "opencode-new"]);
+  it("rejects excluded and unknown harnesses by name", async () => {
+    const lf = fakeLangfuse();
+    await assert.rejects(discoverTranscripts({ client: lf.client, harnesses: ["pi"] }), /machine\/automation/);
+    await assert.rejects(discoverTranscripts({ client: lf.client, harnesses: ["codex"] }), /not traced to Langfuse/);
+    await assert.rejects(discoverTranscripts({ client: lf.client, harnesses: ["vim"] }), /unknown harness/);
   });
 
-  it("skips a session the cursor already processed", () => {
-    const root = tmpDir();
-    const home = path.join(root, "fakehome");
-    makeSqlite(hermesDb(home), [
-      ["CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT, ended_at INTEGER)"],
-      ["INSERT INTO sessions VALUES ('hermes-seen', '/tmp/proj', 1)"],
-      ["INSERT INTO sessions VALUES ('hermes-fresh', '/tmp/proj', 1)"],
-    ]);
-    const stateDir = path.join(root, "state");
-    fs.mkdirSync(stateDir);
-    fs.writeFileSync(path.join(stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "hermes:hermes-seen": null } }));
-    assert.deepEqual(ids(discoverTranscripts({ home, stateDir, since: "30d" })), ["hermes-fresh"]);
+  it("--since asks Langfuse for roots started inside the window", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "old", { start: ago(24 * 40) });
+    lf.add("hermes", "recent", { start: ago(24 * 2) });
+    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "30d", harnesses: ["hermes"], now });
+    assert.deepEqual(transcripts.map((t) => t.id), ["recent"]);
+    assert.equal(lf.calls[0].fromStartTime, new Date(cutoffMs("30d", now)).toISOString());
   });
 
-  it("re-discovers a timestamped session whose revision changed since the cursor", () => {
-    const root = tmpDir();
-    const home = path.join(root, "fakehome");
-    const file = writeJsonl(path.join(home, ".codex", "sessions", "a.jsonl"), [{ id: "c1" }, { role: "user", content: "x" }]);
-    const stateDir = path.join(root, "state");
-    fs.mkdirSync(stateDir);
-    const mtimeMs = Math.round(fs.statSync(file).mtimeMs);
-    fs.writeFileSync(path.join(stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "codex:c1": mtimeMs } }));
-    assert.deepEqual(ids(discoverTranscripts({ home, stateDir, harnesses: ["codex"] })), []);
-    fs.writeFileSync(path.join(stateDir, "cursor.json"), JSON.stringify({ version: 2, processed: { "codex:c1": mtimeMs - 1000 } }));
-    assert.deepEqual(ids(discoverTranscripts({ home, stateDir, harnesses: ["codex"] })), ["c1"]);
+  it("leaves sessions active within the idle window for later", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "busy", { start: ago(1) });
+    lf.add("claude", "done", { start: ago(13) });
+    const result = await discoverTranscripts({ client: lf.client, since: "all", now, idleHours: 12 });
+    assert.deepEqual(result.transcripts.map((t) => t.id), ["done"]);
+    assert.equal(result.perHarness.claude.open, 1);
+    assert.equal((await discoverTranscripts({ client: lf.client, since: "all", now, idleHours: 0.5 })).transcripts.length, 2);
   });
 
-  it("sessions rooted in the state dir are the runtime's own", () => {
-    const root = tmpDir();
-    const home = path.join(root, "fakehome");
-    const stateDir = path.join(root, "state");
-    writeJsonl(path.join(home, ".codex", "sessions", "own.jsonl"), [{ id: "own", cwd: path.join(stateDir, "x") }]);
-    const result = discoverTranscripts({ home, stateDir, harnesses: ["codex"] });
-    assert.deepEqual(ids(result), []);
-    assert.equal(result.perHarness.codex.self, 1);
+  it("skips sessions the cursor holds at the same last activity, and re-finds those with a new turn", async (t) => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "s", { start: ago(30) });
+    const stateDir = (await import("./helpers.mjs")).tmpDir();
+    const [session] = (await discoverTranscripts({ client: lf.client, stateDir, since: "all", now })).transcripts;
+    writeJson(path.join(stateDir, "cursor.json"), { version: 2, processed: { "claude:s": session.mtimeMs } });
+    assert.equal((await discoverTranscripts({ client: lf.client, stateDir, since: "all", now })).transcripts.length, 0);
+    assert.equal((await discoverTranscripts({ client: lf.client, stateDir, since: "all", now, ignoreCheckpoint: true })).transcripts.length, 1);
+    assert.equal((await discoverTranscripts({ client: lf.client, stateDir, since: "all", now, includeCheckpointed: () => true })).transcripts.length, 1);
+    lf.add("claude", "s", { start: ago(20) });
+    assert.equal((await discoverTranscripts({ client: lf.client, stateDir, since: "all", now })).transcripts.length, 1);
   });
 
-  it("a missing store is reported softly by default and fails when the harness is named", () => {
-    const home = tmpDir();
-    const stateDir = path.join(tmpDir(), "state");
-    assert.throws(() => discoverTranscripts({ home, stateDir, harnesses: ["hermes"], strict: true }), /hermes: store missing/);
-    assert.equal(discoverTranscripts({ home, stateDir, harnesses: ["hermes"] }).perHarness.hermes.error, "store missing");
+  it("sessions rooted in the state dir are the runtime's own", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "mine", { start: ago(20), cwd: "/state/dir/run" });
+    const result = await discoverTranscripts({ client: lf.client, stateDir: "/state/dir", since: "all", now });
+    assert.deepEqual([result.transcripts.length, result.perHarness.claude.self], [0, 1]);
   });
 
-  it("keeps readable siblings when a JSONL descendant vanishes or is inaccessible", (t) => {
-    const readdir = fs.readdirSync;
-    for (const harness of ["claude", "codex"]) {
-      for (const code of ["ENOENT", "EACCES"]) {
-        const home = tmpDir();
-        const root = path.join(home, `.${harness}`, harness === "claude" ? "projects" : "sessions");
-        const bad = path.join(root, "bad");
-        fs.mkdirSync(bad, { recursive: true });
-        writeJsonl(path.join(root, "good", "session.jsonl"), [{ id: "readable" }]);
-        const mock = t.mock.method(fs, "readdirSync", (dir, options) => {
-          if (dir === bad) throw Object.assign(new Error(code), { code });
-          return readdir(dir, options);
-        });
-        try {
-          const found = discoverTranscripts({ home, harnesses: [harness], since: "all", strict: true });
-          assert.deepEqual(ids(found), ["readable"]);
-        } finally {
-          mock.mock.restore();
-        }
-      }
-    }
-  });
-
-  it("isolates configured Claude root failures but reports a wholly inaccessible store", (t) => {
-    const home = tmpDir();
-    const config = path.join(home, "config");
-    const defaultRoot = path.join(home, ".claude", "projects");
-    const configRoot = path.join(config, "projects");
-    writeJsonl(path.join(defaultRoot, "default.jsonl"), [{ id: "default" }]);
-    writeJsonl(path.join(configRoot, "config.jsonl"), [{ id: "config" }]);
-    const oldHome = process.env.HOME;
-    const oldConfig = process.env.CLAUDE_CONFIG_DIR;
-    const stat = fs.statSync;
-    const readdir = fs.readdirSync;
-    process.env.HOME = home;
-    process.env.CLAUDE_CONFIG_DIR = config;
-    try {
-      for (const operation of ["stat", "readdir"]) {
-        for (const badRoot of [defaultRoot, configRoot, "both"]) {
-          const method = operation === "stat" ? "statSync" : "readdirSync";
-          const original = operation === "stat" ? stat : readdir;
-          const mock = t.mock.method(fs, method, (file, options) => {
-            if (file === badRoot || (badRoot === "both" && [defaultRoot, configRoot].includes(file))) {
-              throw Object.assign(new Error("access denied"), { code: "EACCES" });
-            }
-            return original(file, options);
-          });
-          try {
-            const discover = () => discoverTranscripts({ harnesses: ["claude"], since: "all", strict: true });
-            if (badRoot === "both") assert.throws(discover, /unreadable store/);
-            else assert.deepEqual(ids(discover()), [badRoot === defaultRoot ? "config" : "default"]);
-          } finally {
-            mock.mock.restore();
-          }
-        }
-      }
-    } finally {
-      if (oldHome === undefined) delete process.env.HOME;
-      else process.env.HOME = oldHome;
-      if (oldConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-      else process.env.CLAUDE_CONFIG_DIR = oldConfig;
-    }
+  it("excludes one named session", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "a", { start: ago(20) });
+    lf.add("hermes", "b", { start: ago(20) });
+    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "all", now, excludeTranscript: { harness: "hermes", id: "a" } });
+    assert.deepEqual(transcripts.map((t) => t.id), ["b"]);
   });
 
   it("parses --since windows", () => {
-    assert.equal(cutoffMs("all"), 0);
-    assert.equal(cutoffMs("2d", 10 * 86400_000), 8 * 86400_000);
-    assert.throws(() => cutoffMs("yesterday"), /--since/);
+    assert.equal(cutoffMs("all", now), 0);
+    assert.equal(cutoffMs("2d", now), now - 2 * 86400_000);
+    assert.equal(cutoffMs("1w", now), now - 7 * 86400_000);
+    assert.throws(() => cutoffMs("yesterday", now), /--since/);
   });
 });
 
-describe("OpenCode adapter", () => {
-  const home = () => tmpDir("opencode-");
+describe("reading one session", () => {
+  const tools = [["terminal", { command: "ls /etc/nixos" }, "flake.nix"], ["read_file", { path: "/etc/nixos/flake.nix" }, "{ inputs }"]];
 
-  it("legacy session table prefers time_updated, falls back to time_created, and leaves untimed rows to the cursor", () => {
-    const h = home();
-    const day = 86400;
-    makeSqlite(opencodeDb(h), [
-      ["CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, time_created INTEGER, time_updated INTEGER)"],
-      ["INSERT INTO session VALUES ('fresh', '/tmp/a', ?, ?)", nowSec() - 2 * day, nowSec() - day],
-      ["INSERT INTO session VALUES ('stale', '/tmp/b', ?, ?)", nowSec() - 2 * day, nowSec() - 40 * day],
-      ["INSERT INTO session VALUES ('created-only', '/tmp/c', ?, NULL)", nowSec() - 5 * day],
-      ["INSERT INTO session VALUES ('created-stale', '/tmp/d', ?, NULL)", nowSec() - 60 * day],
-    ]);
-    const found = discoverTranscripts({ home: h, since: "30d", harnesses: ["opencode"] });
-    assert.deepEqual(ids(found).sort(), ["created-only", "fresh"]);
-    assert.equal(found.transcripts.find((t) => t.id === "fresh").mtimeMs, (nowSec() - day) * 1000);
-
-    makeSqlite(opencodeDb(h), [["CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT)"], ["INSERT INTO session VALUES ('no-time', '/tmp/x')"]]);
-    const untimed = discoverTranscripts({ home: h, since: "1d", harnesses: ["opencode"] });
-    assert.deepEqual(ids(untimed), ["no-time"]);
-    assert.equal(untimed.transcripts[0].mtimeMs, null);
-  });
-
-  it("reads message events from session_message in order", async () => {
-    const h = home();
-    makeSqlite(opencodeDb(h), [
-      ...OPENCODE_V2,
-      ["INSERT INTO session_v2 VALUES ('s', 'p', '/tmp', 't', ?, ?)", nowSec(), nowSec()],
-      ["INSERT INTO session_message VALUES ('m2', 's', 'a', 1, 0, 0, ?)", JSON.stringify({ role: "assistant", text: "done" })],
-      ["INSERT INTO session_message VALUES ('m1', 's', 'u', 0, 0, 0, ?)", JSON.stringify({ role: "user", text: "please" })],
-    ]);
-    const [transcript] = discoverTranscripts({ home: h, harnesses: ["opencode"] }).transcripts;
-    assert.deepEqual(await readTranscriptEvents(transcript), [
-      { kind: "message", role: "user", text: "please" },
-      { kind: "message", role: "assistant", text: "done" },
-    ]);
-  });
-
-  it("normalizes `opencode export` output when SQLite has only session headers", () => {
-    const events = opencodeExportToEvents({
-      info: { model: { id: "gpt-5.6-terra" } },
-      messages: [
-        { info: { role: "user" }, parts: [{ type: "text", text: "Investigate the failure" }] },
-        {
-          info: { role: "assistant" },
-          parts: [
-            { type: "text", text: "I will inspect the trace." },
-            { type: "tool", tool: "read_file", state: { input: { path: "trace.json" }, output: "read ok", status: "completed" } },
-          ],
-        },
-        { info: { role: "system" }, parts: [{ type: "text", text: "ignored" }] },
-      ],
+  for (const harness of ["hermes", "claude", "opencode"]) {
+    it(`normalizes ${harness} turns and tool calls into ordered events`, async () => {
+      const lf = fakeLangfuse();
+      lf.add(harness, "s", { start: ago(30), turns: [{ user: "first ask", assistant: "first reply", tools }, { user: "second ask", assistant: "second reply" }] });
+      const { events, revision, self } = await readTranscript({ harness, id: "s" }, { client: lf.client });
+      assert.equal(self, false);
+      assert.deepEqual(events, [
+        { kind: "message", role: "user", text: "first ask" },
+        { kind: "tool", name: "terminal", input: { command: "ls /etc/nixos" }, result: "flake.nix" },
+        { kind: "tool", name: "read_file", input: { path: "/etc/nixos/flake.nix" }, result: "{ inputs }" },
+        { kind: "message", role: "assistant", text: "first reply" },
+        { kind: "message", role: "user", text: "second ask" },
+        { kind: "message", role: "assistant", text: "second reply" },
+      ]);
+      assert.ok(isLangfuseRevision(revision));
+      assert.deepEqual(await transcriptRevision({ harness, id: "s" }, { client: lf.client }), revision);
     });
-    assert.equal(events.model, "gpt-5.6-terra");
-    assert.deepEqual(events.events, [
-      { kind: "message", role: "user", text: "Investigate the failure" },
-      { kind: "message", role: "assistant", text: "I will inspect the trace." },
-      { kind: "tool", name: "read_file", input: { path: "trace.json" }, result: "read ok", status: "completed" },
-    ]);
+  }
+
+  it("a Hermes turn that ended on tool calls has no assistant text", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "s", { start: ago(30) });
+    lf.observations.find((o) => o.isRootObservation).output = JSON.stringify({ content: null, tool_calls: [{ name: "x" }] });
+    const { events } = await readTranscript({ harness: "hermes", id: "s" }, { client: lf.client });
+    assert.ok(!events.some((e) => e.kind === "message" && e.role === "assistant"));
+  });
+
+  it("the revision changes with a new turn or a late end time, not with other sessions", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "s", { start: ago(30) });
+    const session = { harness: "claude", id: "s" };
+    const before = await transcriptRevision(session, { client: lf.client });
+    lf.add("claude", "other", { start: ago(30) });
+    assert.deepEqual(await transcriptRevision(session, { client: lf.client }), before);
+    lf.observations.find((o) => o.sessionId === "s" && o.isRootObservation).endTime = new Date(ago(1)).toISOString();
+    const late = await transcriptRevision(session, { client: lf.client });
+    assert.notDeepEqual(late, before);
+    lf.add("claude", "s", { start: ago(2) });
+    assert.notDeepEqual(await transcriptRevision(session, { client: lf.client }), late);
+    assert.equal(await transcriptRevision({ harness: "claude", id: "missing" }, { client: lf.client }), null);
+  });
+
+  it("recognizes the runtime's own session from its first user message", async () => {
+    const lf = fakeLangfuse();
+    lf.add("opencode", "s", { start: ago(30), turns: [{ user: `${SELF_SESSION_SENTINEL}\nprompt`, assistant: "ok" }] });
+    assert.equal((await readTranscript({ harness: "opencode", id: "s" }, { client: lf.client })).self, true);
+  });
+
+  it("a session Langfuse does not hold is an error, not an empty transcript", async () => {
+    await assert.rejects(readTranscript({ harness: "claude", id: "nope" }, { client: fakeLangfuse().client }), /not found in Langfuse/);
+  });
+
+  it("last activity is the end; an explicit end only counts for legacy records", () => {
+    assert.equal(sessionEndMs({ activityKnown: true, mtimeMs: 5, endedAt: 9 }), 5);
+    assert.equal(sessionEndMs({ endedAt: "1970-01-01T00:00:00.009Z" }), 9);
+    assert.equal(sessionEndMs({}), null);
   });
 });
 
-describe("Hermes adapter schema variants", () => {
-  const CURRENT_SESSIONS = "CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at INTEGER, last_activity_at INTEGER, cwd TEXT)";
-  const CURRENT_MESSAGES = "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp INTEGER)";
-
-  it("discovers ended or idle sessions with start and metadata, without cursoring open ones", () => {
-    const h = tmpDir("hermes-");
-    const now = 1700000000000;
-    makeSqlite(hermesDb(h), [
-      ["CREATE TABLE sessions (id TEXT, started_at INTEGER, last_activity_at INTEGER, ended_at INTEGER, source TEXT, cwd TEXT, git_repo_root TEXT, parent_session_id TEXT)"],
-      ["CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT)"],
-      ["INSERT INTO sessions VALUES ('ended', ?, ?, ?, 'cli', '/repo/sub', '/repo', 'parent')", now / 1000 - 100000, now / 1000, now / 1000],
-      ["INSERT INTO sessions VALUES ('idle', ?, ?, NULL, 'telegram', NULL, NULL, NULL)", now / 1000 - 100000, now / 1000 - 13 * 3600],
-      ["INSERT INTO sessions VALUES ('open', ?, ?, NULL, 'cli', NULL, NULL, NULL)", now / 1000 - 100000, now / 1000 - 3600],
-    ]);
-    const stateDir = path.join(h, "state");
-    const found = discoverTranscripts({ home: h, stateDir, since: "all", harnesses: ["hermes"], now });
-    assert.deepEqual(ids(found), ["ended", "idle"]);
-    assert.ok(found.transcripts[0].discoveryRevision);
-    assert.deepEqual({ ...found.transcripts[0], db: undefined, discoveryRevision: undefined }, {
-      harness: "hermes", id: "ended", cwd: "/repo/sub", db: undefined,
-      startedAtMs: now - 100000000, mtimeMs: now, endedAt: new Date(now).toISOString(),
-      source: "cli", gitRepoRoot: "/repo", parentSessionId: "parent", activityKnown: true, discoveryRevision: undefined,
-    });
-    assert.equal(fs.existsSync(path.join(stateDir, "cursor.json")), false);
-    assert.deepEqual(ids(discoverTranscripts({ home: h, since: "all", harnesses: ["hermes"], now, idleHours: 0 })), ["ended", "idle", "open"]);
+describe("Langfuse client", () => {
+  it("follows cursor pages", async () => {
+    const lf = fakeLangfuse([], { pageSize: 2 });
+    for (let i = 0; i < 5; i += 1) lf.add("claude", `s${i}`, { start: ago(30) });
+    assert.equal((await lf.client.observations({ isRootObservation: true })).length, 5);
+    assert.equal(lf.calls.length, 3);
   });
 
-  it("reads active messages, calls and tool results without session metadata", async () => {
-    const h = tmpDir("hermes-");
-    makeSqlite(hermesDb(h), [
-      ["CREATE TABLE sessions (id TEXT, started_at INTEGER, ended_at INTEGER)"],
-      ["INSERT INTO sessions VALUES ('s', 100, 200)"],
-      ["CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, active INTEGER, tool_calls TEXT, tool_name TEXT)"],
-      ["INSERT INTO messages VALUES ('s', 'session_meta', 'metadata', 1, NULL, NULL)"],
-      ["INSERT INTO messages VALUES ('s', 'user', 'deleted', 0, NULL, NULL)"],
-      ["INSERT INTO messages VALUES ('s', 'assistant', 'checking', 1, ?, NULL)", JSON.stringify([{ function: { name: "read", arguments: '{"path":"a"}' } }])],
-      ["INSERT INTO messages VALUES ('s', 'tool', 'contents', 1, NULL, 'read')"],
-    ]);
-    const [transcript] = discoverTranscripts({ home: h, since: "all", harnesses: ["hermes"] }).transcripts;
-    assert.deepEqual(await readTranscriptEvents(transcript), [
-      { kind: "message", role: "assistant", text: "checking" },
-      { kind: "tool", name: "read", input: { path: "a" } },
-      { kind: "tool", name: "read", result: "contents" },
-    ]);
+  it("retries 429 and 5xx, and fails on other errors", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "s", { start: ago(30) });
+    lf.failNext(429, 503);
+    assert.equal((await lf.client.observations({ isRootObservation: true })).length, 1);
+    lf.failNext(403);
+    await assert.rejects(lf.client.observations({}), /returned 403/);
+    lf.failNext(500, 500, 500, 500, 500);
+    await assert.rejects(lf.client.observations({}), /returned 500/);
   });
 
-  it("current schema filters by last_activity_at, falling back to started_at", () => {
-    const h = tmpDir("hermes-");
-    makeSqlite(hermesDb(h), [
-      [CURRENT_SESSIONS],
-      [CURRENT_MESSAGES],
-      ["INSERT INTO sessions VALUES ('recent', ?, ?, '/tmp')", daysAgoSec(29), daysAgoSec(1)],
-      ["INSERT INTO sessions VALUES ('stale', ?, ?, '/tmp')", daysAgoSec(90), daysAgoSec(60)],
-      ["INSERT INTO sessions VALUES ('started-only', ?, NULL, '/tmp')", daysAgoSec(1)],
-      ["INSERT INTO sessions VALUES ('started-stale', ?, NULL, '/tmp')", daysAgoSec(60)],
-    ]);
-    assert.deepEqual(ids(discoverTranscripts({ home: h, since: "30d", harnesses: ["hermes"] })).sort(), ["recent", "started-only"]);
+  it("reports an unreachable server", async () => {
+    const client = langfuseClient({ baseUrl: "http://x", publicKey: "p", secretKey: "s", retryDelayMs: 1, fetch: async () => { throw new Error("ECONNREFUSED"); } });
+    await assert.rejects(client.observations({}), /Langfuse unreachable at http:\/\/x: ECONNREFUSED/);
   });
 
-  it("reads messages.content with roles, and legacy messages.text", async () => {
-    const h = tmpDir("hermes-");
-    makeSqlite(hermesDb(h), [
-      [CURRENT_SESSIONS],
-      [CURRENT_MESSAGES],
-      ["INSERT INTO sessions VALUES ('s1', ?, ?, '/tmp')", daysAgoSec(1), daysAgoSec(1)],
-      ["INSERT INTO messages VALUES ('m1', 's1', 'user', 'hermes content marker', 0)"],
-      ["INSERT INTO messages VALUES ('m2', 's1', 'assistant', 'reply here', 0)"],
-    ]);
-    let [transcript] = discoverTranscripts({ home: h, harnesses: ["hermes"] }).transcripts;
-    assert.deepEqual(await readTranscriptEvents(transcript), [
-      { kind: "message", role: "user", text: "hermes content marker" },
-      { kind: "message", role: "assistant", text: "reply here" },
-    ]);
-
-    makeSqlite(hermesDb(h), [
-      [CURRENT_SESSIONS],
-      ["CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, text TEXT)"],
-      ["INSERT INTO sessions VALUES ('legacy', ?, ?, '/tmp')", daysAgoSec(1), daysAgoSec(1)],
-      ["INSERT INTO messages VALUES ('m1', 'legacy', 'user', 'legacy hello')"],
-    ]);
-    [transcript] = discoverTranscripts({ home: h, harnesses: ["hermes"] }).transcripts;
-    assert.deepEqual(await readTranscriptEvents(transcript), [{ kind: "message", role: "user", text: "legacy hello" }]);
+  it("needs all three variables", () => {
+    assert.throws(() => langfuseConfig({ LANGFUSE_PUBLIC_KEY: "p" }), /LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL not set/);
+    assert.deepEqual(langfuseConfig({ LANGFUSE_PUBLIC_KEY: "p", LANGFUSE_SECRET_KEY: "s", LANGFUSE_BASE_URL: "u" }), { baseUrl: "u", publicKey: "p", secretKey: "s" });
   });
-
-  it("timestamp-less open sessions are not assumed finished", () => {
-    const h = tmpDir("hermes-");
-    makeSqlite(hermesDb(h), [["CREATE TABLE sessions (id TEXT PRIMARY KEY, cwd TEXT)"], ["INSERT INTO sessions VALUES ('notemporal', '/tmp')"]]);
-    assert.deepEqual(ids(discoverTranscripts({ home: h, since: "1d", harnesses: ["hermes"] })), []);
-  });
-
-  it("a self session is recognized from its first Hermes message", () => {
-    const h = tmpDir("hermes-");
-    makeSqlite(hermesDb(h), [
-      [HERMES_SESSIONS],
-      [HERMES_MESSAGES],
-      ["INSERT INTO sessions VALUES ('mine', '/tmp', 'cli', ?, ?)", nowSec(), nowSec()],
-      ["INSERT INTO messages VALUES ('m', 'mine', 'user', '<!-- ca-improve:self-session -->\nanalyze')"],
-    ]);
-    const result = discoverTranscripts({ home: h, harnesses: ["hermes"] });
-    assert.deepEqual(ids(result), []);
-    assert.equal(result.perHarness.hermes.self, 1);
-  });
-});
-
-it("uses the first timestamped JSONL event for attribution, falling back to mtime", () => {
-  const home = tmpDir();
-  writeJsonl(path.join(home, ".claude", "projects", "a.jsonl"), [{ sessionId: "a" }, { timestamp: "2025-01-02T00:00:00Z" }]);
-  writeJsonl(path.join(home, ".codex", "sessions", "b.jsonl"), [{ type: "session_meta", timestamp: "2025-02-02T00:00:00Z", payload: { id: "b" } }]);
-  writeJsonl(path.join(home, ".codex", "sessions", "c.jsonl"), [{ id: "c" }]);
-  const found = discoverTranscripts({ home, since: "all", harnesses: ["claude", "codex"] }).transcripts;
-  assert.equal(found.find((t) => t.id === "a").startedAtMs, Date.parse("2025-01-02T00:00:00Z"));
-  assert.equal(found.find((t) => t.id === "b").startedAtMs, Date.parse("2025-02-02T00:00:00Z"));
-  assert.equal(found.find((t) => t.id === "c").startedAtMs, found.find((t) => t.id === "c").mtimeMs);
-});
-
-it("codex sessions read their wrapped header and conversation, not the harness preamble", async () => {
-  const home = path.join(tmpDir(), "home");
-  writeCodexSession(home, "codex-real", { text: "please add the test" });
-  const [transcript] = discoverTranscripts({ home, harnesses: ["codex"], since: "all" }).transcripts;
-  assert.equal(transcript.id, "codex-real");
-  assert.equal(transcript.cwd, "/tmp/proj");
-  const events = await readTranscriptEvents(transcript);
-  assert.deepEqual(events.filter((e) => e.kind === "message").map((e) => e.text), ["please add the test"]);
-  assert.deepEqual(events.filter((e) => e.kind === "tool").map((e) => e.name), ["read", "search", "test"]);
-});
-
-it("reads the timestamp and identity from an oversized first JSONL record", () => {
-  const home = tmpDir();
-  writeJsonl(path.join(home, ".claude", "projects", "large.jsonl"), [
-    { sessionId: "large", text: "x".repeat(70000), timestamp: "2025-01-02T00:00:00Z" },
-  ]);
-  const [row] = discoverTranscripts({ home, harnesses: ["claude"], since: "all" }).transcripts;
-  assert.equal(row.id, "large");
-  assert.equal(row.startedAtMs, Date.parse("2025-01-02T00:00:00Z"));
 });

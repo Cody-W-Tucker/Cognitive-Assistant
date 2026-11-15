@@ -113,7 +113,8 @@ learned section on the next compile. See
 from `hermesHomeFiles`, which would overwrite the link), compiles on
 activation (`ca soul compile` then `ca soul link`), and runs
 `ca improve-run --headless --auto --min-sessions <n> --harness hermes` from a
-daily user timer with `HERMES_HOME` and the `CA_LLM_*` endpoint variables set.
+daily user timer with `LANGFUSE_BASE_URL`, the Langfuse keys from
+`langfuse.environmentFile`, and the `CA_LLM_*` endpoint variables set.
 Every model call is a tool-free chat completion to `llm.baseUrl` (see
 [Improvement Loop](Improvement-Loop.md)); no agent harness runs. Other options:
 `improve.enable`, `improve.auto`, `improve.minSessions`, `improve.harnesses`,
@@ -129,6 +130,10 @@ services.cognitive-assistant = {
   llm = {
     baseUrl = "http://127.0.0.1:8081/v1";   # llama-swap on the NAS
     model = "qwen-3.6-35b-a3b";
+  };
+  langfuse = {
+    baseUrl = "https://cloud.langfuse.com";
+    environmentFile = config.sops.secrets.ca-langfuse-env.path;  # LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
   };
 };
 ```

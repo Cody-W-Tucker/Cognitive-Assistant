@@ -108,6 +108,10 @@ UPPER_CASE for constants.
 **Configuration:** Environment variables for secrets (.env):
 `<PROVIDER>_API_KEY` / `_MODEL` / `_MAX_OUTPUT` for bootstrap stages
 (`core/llm.py`), `CA_LLM_*` for the improvement runtime (`improve/src/model.js`).
+The improvement runtime reads harness sessions only from Langfuse
+(`LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL`, `improve/src/langfuse.js`),
+never from harness stores on disk; runtime tests use a fake Langfuse
+(`improve/tests/fake-langfuse.mjs`, `tests/fixtures.py`).
 All layer-specific behavior is declared once in `core/config.py` as a
 `LayerProfile` and looked up by name; its paths derive from its name. Shared
 locations (skill store, alignment artifacts, CA home) are in `core/paths.py`.

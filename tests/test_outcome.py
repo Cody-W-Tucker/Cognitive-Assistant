@@ -124,7 +124,7 @@ class AutoCycleTests(CAHomeTestCase):
         self.assertEqual(living_soul.activations()[-1]["generation"], 1)
 
         # The next run must not bring the withdrawn change straight back.
-        again = improve.run(home=self.user_home, analyzer="mock")
+        again = improve.run(analyzer="mock")
         self.assertNotIn(adopted[0], [edit["record"]["id"] for edit in again["edits"]])
         self.assertNotEqual(improve.auto_cycle(proposal=again, policy=FIVE).get("records"), adopted)
 

@@ -7,8 +7,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { collectFollowup, touchedPaths } from "./followup.js";
-import { cutoffMs, discoverTranscripts, readTranscriptEvents, sessionEndMs, transcriptRevision } from "./harnesses.js";
+import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, sessionEndMs, transcriptRevision } from "./harnesses.js";
 import { distill } from "./distill.js";
+import { langfuseClient } from "./langfuse.js";
 import { mockInvoke } from "./mock.js";
 import { assertModelConfigured, modelInvoke } from "./model.js";
 import { loadPrompt, renderPrompt } from "./prompts.js";
@@ -34,7 +35,7 @@ export function outcomeSnapshot(session, events, revision) {
   const said = (text) => text.split("--- Attached Context ---", 1)[0];
   return {
     revision,
-    location: { harness: session.harness, id: session.id, path: session.path, db: session.db },
+    location: { harness: session.harness, id: session.id },
     trace: distill(events, session),
     texts: events.filter((e) => e.kind === "message" && ["user", "assistant"].includes(e.role) && typeof e.text === "string")
       .flatMap((e) => { const text = said(e.text).trim(); return [text.slice(0, 4800), text.slice(-1000)]; }),
@@ -60,8 +61,12 @@ export function validateOutcome(reply, trace, followup, traceTexts = []) {
  * `dryRun` writes a preview file instead of touching evidence, and also
  * previews finished Hermes sessions that were never analyzed, reading their
  * transcripts as they stand: that is the backtest.
+ *
+ * Evidence analyzed before sessions came from Langfuse carries a snapshot
+ * tied to a local store revision, which can never match again. Such a
+ * snapshot (or a missing one) is re-cut once from Langfuse and saved.
  */
-export async function runOutcome({ home, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup, transcripts = null } = {}) {
+export async function runOutcome({ client = null, stateDir, since = "all", limit = null, dryRun = false, rescore = false, matureDays = 3, analyzer = "model", invoke = null, modelName = null, now = Date.now(), collect = collectFollowup, transcripts = null } = {}) {
   if (!stateDir) throw new Error("outcome: --state-dir is required");
   const days = Number(matureDays);
   if (matureDays === "" || !Number.isFinite(days) || days < 0) throw new Error("--mature-days must be non-negative");
@@ -72,14 +77,15 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
   if (!invoke) { if (analyzer === "mock") invoke = mockInvoke; else { assertModelConfigured(); invoke = modelInvoke(stateDir); } }
   const model = modelName || (custom ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL));
   const rubric = { promptSha: createHash("sha256").update(loadPrompt("outcome")).digest("hex"), model, matureDays: days };
+  client ??= langfuseClient();
   // One discovery serves every lookup in this run, including follow-up.
   let pool = transcripts;
-  const discovered = () => (pool ??= discoverTranscripts({ home, stateDir, since: "all", ignoreCheckpoint: true }).transcripts);
+  const discovered = async () => (pool ??= (await discoverTranscripts({ client, stateDir, since: "all", ignoreCheckpoint: true, now })).transcripts);
   const evidence = readEvidenceRecords(stateDir);
   const candidates = evidence.filter((r) => rescore || !r.outcome).map((record) => ({ record }));
   if (dryRun) {
     const analyzed = new Set(evidence.map((r) => checkpointKey({ harness: r.harness, id: r.transcriptId })));
-    for (const session of discovered()) {
+    for (const session of await discovered()) {
       if (session.harness !== "hermes" || analyzed.has(checkpointKey(session))) continue;
       candidates.push({ record: { harness: session.harness, transcriptId: session.id, ...sessionMeta(session) }, session });
     }
@@ -93,29 +99,36 @@ export async function runOutcome({ home, stateDir, since = "all", limit = null, 
   const preview = dryRun ? path.join(stateDir, "outcome-preview", `${runId}.jsonl`) : null;
   if (preview) { fs.mkdirSync(path.dirname(preview), { recursive: true, mode: 0o700 }); fs.writeFileSync(preview, "", { mode: 0o600 }); }
   const results = [];
-  for (const { record, session: unanalyzed } of selected) {
+  const evidencePath = (record) => {
+    const qualified = evidenceFile(stateDir, record.transcriptId, record.harness);
+    return readJson(qualified)?.status === "ok" ? qualified : evidenceFile(stateDir, record.transcriptId);
+  };
+  for (const { record: candidate, session: unanalyzed } of selected) {
+    let record = candidate;
     try {
-      const saved = record.outcomeSnapshot;
-      const session = unanalyzed ?? (saved?.location ? { ...saved.location, id: record.transcriptId }
-        : (transcripts ?? []).find((t) => checkpointKey(t) === checkpointKey({ harness: record.harness, id: record.transcriptId })));
-      if (!session || session.harness !== record.harness) throw new Error("original session unavailable");
-      const revision = transcriptRevision(session);
-      const snapshot = unanalyzed ? outcomeSnapshot(session, await readTranscriptEvents(session), revision) : saved;
-      if (!snapshot?.revision || !revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session snapshot unavailable or changed");
+      const session = unanalyzed ?? { harness: record.harness, id: record.transcriptId };
+      let snapshot = unanalyzed ? null : record.outcomeSnapshot;
+      if (!isLangfuseRevision(snapshot?.revision)) {
+        const read = await readTranscript(session, { client });
+        if (read.self) throw new Error("the runtime's own session");
+        snapshot = outcomeSnapshot(session, read.events, read.revision);
+        if (!unanalyzed && !dryRun) {
+          record = { ...record, outcomeSnapshot: snapshot };
+          writeJson(evidencePath(record), record);
+        }
+      }
+      const revision = await transcriptRevision(session, { client });
+      if (!revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session changed since its snapshot");
       const { trace, firstUserMessage, texts, touched } = snapshot;
       if (typeof trace !== "string" || !Array.isArray(texts)) throw new Error("invalid original session snapshot");
-      const followup = await collect({ session: record, firstUserMessage, matureDays: days, home, stateDir, originalLocation: session, candidates: discovered, touched });
-      if (JSON.stringify(revision) !== JSON.stringify(transcriptRevision(session))) throw new Error("original session changed");
+      const followup = await collect({ session: record, firstUserMessage, matureDays: days, client, candidates: discovered, touched });
+      if (JSON.stringify(revision) !== JSON.stringify(await transcriptRevision(session, { client }))) throw new Error("original session changed");
       const prompt = renderPrompt("outcome", { TRACE: trace, FOLLOWUP: JSON.stringify(followup, null, 2) });
       const valid = (reply) => validateOutcome(reply, trace, followup, texts);
       const reply = await invoke("outcome", prompt, { trace, followup, validate: valid });
       if (!valid(reply)) throw new Error("invalid outcome reply");
       const outcome = { aim: reply.aim, label: reply.label, reason: reply.reason, evidence: reply.evidence, rubric, scoredAt: new Date(now).toISOString() };
-      if (!dryRun) {
-        const qualified = evidenceFile(stateDir, record.transcriptId, record.harness);
-        const file = readJson(qualified)?.status === "ok" ? qualified : evidenceFile(stateDir, record.transcriptId);
-        writeJson(file, { ...record, outcome });
-      }
+      if (!dryRun) writeJson(evidencePath(record), { ...record, outcome });
       const result = {
         harness: record.harness, transcriptId: record.transcriptId, source: record.source ?? null,
         startedAt: record.startedAt ?? null, endedAt: record.endedAt,
