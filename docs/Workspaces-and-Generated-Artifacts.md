@@ -44,7 +44,7 @@ skill store and alignment paths from `core/paths.py`.
 <CA home>/
   improve/                       improvement runtime state (Improvement-Loop.md)
     cursor.json                  processed sessions per harness (last Langfuse activity)
-    evidence/<session>.json      one analysis per session (with sessionAt and a Langfuse-revision outcome snapshot)
+    evidence/<harness>:<session>.json  one analysis per session (with sessionAt and a Langfuse-revision outcome snapshot)
     open-gaps.json               gaps carried between runs
     ledger.json                  folded/consolidated gap clusters
     experience-context.md        active records rendered for the analysis prompt (rewritten each run)

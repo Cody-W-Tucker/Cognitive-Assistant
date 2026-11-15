@@ -87,7 +87,7 @@ Langfuse over its public API, and nothing in the repo or in Hermes is modified.
   `proposals/<id>.json`.
 
 Discovery skips a session still active within `--idle-hours` (default 12
-hours), without advancing the cursor, and a session with
+hours; a flag of the Node runtime, not exposed by `python -m core`), without advancing the cursor, and a session with
 successful evidence is never analyzed again. The session list is filtered
 before any observations are read, so a run reads the transcripts of new sessions,
 not of every session in the window. Distillation keeps the head and the tail of a long

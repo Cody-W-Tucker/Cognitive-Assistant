@@ -77,6 +77,7 @@ python -m core --profile operational build-tool-specs
 python -m core enhance-skill
 python -m core build-translation-layer
 python -m core build-alignment-spec
+python -m core review-queue [--dry-run]   # refill the Langfuse review queue
 
 # Everything after ask-questions, for every profile
 python -m core update
