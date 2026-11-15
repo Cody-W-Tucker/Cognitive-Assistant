@@ -6,17 +6,13 @@
 // read-only context; nothing here writes SOUL, memory files, or skills.
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt } from "./state.js";
+import { ask } from "./state.js";
+import { oneLine } from "./util.js";
 
 export const MAX_PLANS = 16;
 const MAX_INTENT_CHARS = 500;
 const PLAN_KEYS = new Set(["id", "kind", "clusterId", "provisionalIntent", "provisionalSources", "provisionalCount"]);
 const SAFE_PLAN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-
-function oneLine(text, max = 240) {
-  const flat = String(text || "").replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max)}...` : flat;
-}
 
 function renderEvidence(ledger, evidenceIndex) {
   const lines = [];
@@ -25,7 +21,7 @@ function renderEvidence(ledger, evidenceIndex) {
     lines.push(`- [${c.id}] sessions=${c.sources.length} :: ${c.proposedInstruction}`);
     for (const source of c.sources.slice(0, 4)) {
       const quote = c.perSource?.[source]?.quote || evidenceIndex.get(source)?.[0]?.quote || c.representativeQuote;
-      lines.push(`    "${oneLine(quote)}" (${source})`);
+      lines.push(`    "${oneLine(quote || "", 240)}" (${source})`);
     }
   }
   return lines.length ? lines.join("\n") : "(no eligible gap clusters)";
@@ -138,8 +134,7 @@ export async function synthesize(ledger, { invoke, stateDir, runId, floor, soul,
   let reply;
   try {
     const prompt = buildSynthesisPrompt(ledger, { evidenceIndex, rejections, transcriptCount, harnessSummary, runNote, soul });
-    persistPrompt(stateDir, { runId, name: "synthesis", prompt, meta: { stage: "synthesis" } });
-    reply = await invoke("synthesis", prompt, { ledger, floor });
+    reply = await ask(invoke, "synthesis", prompt, { ledger, floor }, { stateDir, runId });
   } catch (err) {
     return { plans: [], failed: true, note: `synthesis failed (${err.message}); no candidate edits for this run` };
   }

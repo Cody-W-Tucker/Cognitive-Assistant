@@ -4,7 +4,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createHash } from "node:crypto";
+
+import { sha256 } from "./util.js";
 
 export function initStateDir(stateDir) {
   fs.mkdirSync(path.join(stateDir, "evidence"), { recursive: true });
@@ -38,7 +39,7 @@ export function timestampId(prefix, now = new Date()) {
 }
 
 export function shortHash(text) {
-  return createHash("sha256").update(String(text)).digest("hex").slice(0, 12);
+  return sha256(String(text)).slice(0, 12);
 }
 
 export function slugify(text) {
@@ -99,6 +100,12 @@ export function persistPrompt(stateDir, { runId, name, prompt, meta = {} }) {
   const sidecar = { version: 1, runId: String(runId), name: String(name), ...meta, promptFile: `${base}.md`, createdAt: new Date().toISOString() };
   fs.writeFileSync(path.join(dir, `${base}.json`), `${JSON.stringify(sidecar, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   return promptFile;
+}
+
+/** Persist a stage prompt, then send it: `invoke(role, prompt, context)`. */
+export function ask(invoke, role, prompt, context, { stateDir, runId, name = role, meta = { stage: role } }) {
+  persistPrompt(stateDir, { runId, name, prompt, meta });
+  return invoke(role, prompt, context);
 }
 
 /** A session id is only unique inside one harness store. */

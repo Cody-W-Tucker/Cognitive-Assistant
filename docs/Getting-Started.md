@@ -76,8 +76,10 @@ as `python -m unittest tests.test_improve`.
 | `tests/test_improve.py` | `improve-run` (mock analyzer over fixture sessions), `improve-synthesize`, decision parsing, `improve-apply` |
 | `tests/test_living_soul.py` | generations, rollback, absorbed records, linking |
 | `tests/test_outcome.py` | miss rate, z-test, `--auto` cycle |
+| `tests/test_outcome_cli.py` | `improve-outcome` parser and flags forwarded to the runtime |
 | `tests/test_journal.py` | journal sanitization, concurrent appends, compaction |
 | `tests/test_langfuse_review.py` | review queue selection |
+| `tests/test_ingest_corpus.py` | `ingest-corpus` output for every source format, repeated-record summary |
 | `tests/test_ascii.py` | strict ASCII for code, root `*.md`, alignment prompts/artifacts and selected docs |
 
 Tests run against a temporary CA home (`CA_HOME`) and a temporary bootstrap

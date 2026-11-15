@@ -14,9 +14,12 @@ changes at runtime lives under CA home, which ``$CA_HOME`` overrides:
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Iterable, List
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = REPO_ROOT / "workspaces" / "skills"
@@ -59,3 +62,29 @@ def atomic_write(path: Path, content: str) -> None:
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
         raise
+
+
+def utc_now() -> str:
+    """Current UTC time as ISO-8601 to the second."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def append_jsonl(path: Path, rows: Iterable[Dict], *, sort_keys: bool = True) -> None:
+    """Append one JSON line per row to ``path``, creating its directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=sort_keys) + "\n")
+
+
+def read_jsonl(path: Path) -> List[Any]:
+    """Parsed lines of ``path``, skipping unparseable ones; [] when it is missing."""
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
+    return rows

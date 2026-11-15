@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import csv
-import io
 import json
 import os
 import stat
@@ -15,9 +13,8 @@ from unittest import mock
 
 from core import alignment_spec, experience, living_soul, llm, paths, prompt_creator, question_asker
 from core import skills_creator, tool_specs_creator, translation_layer_creator
-from core.cli import main
 from core.config import EXISTENTIAL_PROFILE, OPERATIONAL_PROFILE
-from tests.fixtures import RepoSandboxTestCase
+from tests.fixtures import RepoSandboxTestCase, run_cli
 
 
 def _skill(slug: str, group: str, profile: str, body: str = "Body.") -> str:
@@ -30,13 +27,6 @@ def _skill(slug: str, group: str, profile: str, body: str = "Body.") -> str:
 
 def _human_profile(headings: list[str]) -> str:
     return "# Profile\n\n" + "".join(f"## {heading}\n\nAbout {heading}.\n\n" for heading in headings)
-
-
-def _run(argv: list[str]) -> tuple[int, str]:
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-        code = main(argv)
-    return code, out.getvalue()
 
 
 class PromptCreatorTests(RepoSandboxTestCase):
@@ -69,9 +59,9 @@ class PromptCreatorTests(RepoSandboxTestCase):
         self._write_answers()
         self.fake_llm(lambda prompt, label: "" if label == "xai draft" else "text")
         with mock.patch.object(prompt_creator, "requirements", return_value=[]):
-            code, out = _run(["--profile", "existential", "build-prompts"])
+            code, _, err = run_cli(["--profile", "existential", "build-prompts"])
         self.assertEqual(code, 1)
-        self.assertIn("unexpectedly short", out)
+        self.assertIn("unexpectedly short", err)
         self.assertFalse(EXISTENTIAL_PROFILE.human_profile_path.exists())
 
 
@@ -232,7 +222,7 @@ class ToolSpecsTests(RepoSandboxTestCase):
         self.assertFalse(OPERATIONAL_PROFILE.tool_specs_dir.exists())
 
     def test_a_profile_without_tools_refuses(self) -> None:
-        code, out = _run(["--profile", "existential", "build-tool-specs"])
+        code, out, _ = run_cli(["--profile", "existential", "build-tool-specs"])
         self.assertEqual(code, 1)
         self.assertIn("does not generate tool specs", out)
 
@@ -327,14 +317,8 @@ class RepoHealthTests(RepoSandboxTestCase):
         self.assertEqual(len(slugs), len(set(slugs)))
 
     def test_list_profiles(self) -> None:
-        code, out = _run(["list-profiles"])
-        self.assertEqual((code, out.split()), (0, ["existential", "operational"]))
-
-
-if __name__ == "__main__":
-    import unittest
-
-    unittest.main()
+        code, out, err = run_cli(["list-profiles"])
+        self.assertEqual((code, out.split(), err), (0, ["existential", "operational"], ""))
 
 
 class SkillEnhancerTests(RepoSandboxTestCase):
@@ -357,3 +341,9 @@ class SkillEnhancerTests(RepoSandboxTestCase):
         self.assertEqual([call["label"] for call in fake.calls], ["enhanced skill alpha"])
         self.assertIn("Enhanced.", (paths.SKILLS_DIR / "workflow" / "alpha" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertNotIn("Enhanced.", (paths.SKILLS_DIR / "workflow" / "beta" / "SKILL.md").read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    import unittest
+
+    unittest.main()

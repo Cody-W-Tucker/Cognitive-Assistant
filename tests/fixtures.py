@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -16,10 +18,19 @@ from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 from core import improve, paths
+from core.cli import main
 
 
 def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def run_cli(argv: List[str]) -> tuple[int, str, str]:
+    """Run ``python -m core`` in-process; return the exit code, stdout and stderr."""
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        code = main(argv)
+    return code, stdout.getvalue(), stderr.getvalue()
 
 
 class FakeLangfuse:

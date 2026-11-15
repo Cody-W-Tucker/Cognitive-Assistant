@@ -16,9 +16,11 @@
 // parseable reply is cached under sha256(request), so re-running an
 // unchanged prompt returns the identical reply without a call.
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+
+import { mockInvoke } from "./mock.js";
+import { sha256 } from "./util.js";
 
 const ROLES = {
   analysis: { timeoutSec: 180, maxTokens: 4000 },
@@ -38,26 +40,31 @@ export function modelConfig(role, env = process.env) {
   return { baseUrl, model, apiKeyFile: env.CA_LLM_API_KEY_FILE || null };
 }
 
-/** Preflight for a real run: every role is configured; no model traffic. */
-export function checkModelConfigured(env = process.env) {
+/** Preflight for a real run: throws unless every role is configured; no model traffic. */
+export function assertModelConfigured(env = process.env) {
   try {
     for (const role of Object.keys(ROLES)) modelConfig(role, env);
   } catch (err) {
-    return { ok: false, error: `${err.message}. No traces were analyzed and no evidence was written.` };
+    throw new Error(`${err.message}. No traces were analyzed and no evidence was written.`);
   }
   if (env.CA_LLM_API_KEY_FILE) {
     try {
       fs.accessSync(env.CA_LLM_API_KEY_FILE, fs.constants.R_OK);
     } catch {
-      return { ok: false, error: `CA_LLM_API_KEY_FILE is not readable: ${env.CA_LLM_API_KEY_FILE}` };
+      throw new Error(`CA_LLM_API_KEY_FILE is not readable: ${env.CA_LLM_API_KEY_FILE}`);
     }
   }
-  return { ok: true };
 }
 
-export function assertModelConfigured(env = process.env) {
-  const result = checkModelConfigured(env);
-  if (!result.ok) throw new Error(result.error);
+/**
+ * The invoke a run uses and the model label its rubric records: an injected
+ * invoke is "custom", the mock is "mock", else the configured model for `role`.
+ */
+export function resolveInvoke({ invoke = null, analyzer = "model", stateDir, role }) {
+  if (invoke) return { invoke, model: "custom" };
+  if (analyzer === "mock") return { invoke: mockInvoke, model: "mock" };
+  assertModelConfigured();
+  return { invoke: modelInvoke(stateDir), model: modelConfig(role).model };
 }
 
 /** The exact request body: no tools, no functions, deterministic sampling. */
@@ -153,7 +160,7 @@ async function postWithRetry(url, init, deadline) {
 export async function invokeStage(role, prompt, { cacheDir = null, validate = null } = {}) {
   const config = modelConfig(role);
   const body = buildChatRequest({ role, model: config.model, prompt });
-  const key = createHash("sha256").update(JSON.stringify({ url: config.baseUrl, body })).digest("hex");
+  const key = sha256(JSON.stringify({ url: config.baseUrl, body }));
   const cacheFile = cacheDir ? path.join(cacheDir, `${key}.txt`) : null;
   if (cacheFile) {
     try {

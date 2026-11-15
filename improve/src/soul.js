@@ -3,7 +3,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { createHash } from "node:crypto";
+
+import { sha256 } from "./util.js";
 
 const SOUL_SNAPSHOT_MAX_CHARS = 4000;
 
@@ -23,7 +24,7 @@ export function readSoulSnapshot(soulPath) {
   return {
     path: resolved,
     text: full.slice(0, SOUL_SNAPSHOT_MAX_CHARS),
-    sha256: createHash("sha256").update(full, "utf8").digest("hex"),
+    sha256: sha256(full),
     chars: full.length,
   };
 }

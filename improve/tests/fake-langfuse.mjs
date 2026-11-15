@@ -4,10 +4,10 @@
 
 import http from "node:http";
 
+import { ROOT_NAMES } from "../src/harnesses.js";
 import { langfuseClient } from "../src/langfuse.js";
 
-const ROOT_NAMES = { hermes: "Hermes turn", claude: "Conversational Turn", opencode: "opencode.turn" };
-const HOUR = 3600_000;
+export const HOUR = 3600_000;
 let counter = 0;
 const nextId = () => `obs${String((counter += 1)).padStart(6, "0")}`;
 const iso = (ms) => new Date(ms).toISOString();

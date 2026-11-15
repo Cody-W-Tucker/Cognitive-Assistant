@@ -4,14 +4,13 @@
 // in the same session. Nothing here reads a harness store on disk.
 
 import path from "node:path";
-import { createHash } from "node:crypto";
 
-import { langfuseClient } from "./langfuse.js";
 import { headHasSelfSentinel } from "./sentinel.js";
 import { checkpointKey, readSessionCheckpoint } from "./state.js";
+import { sha256 } from "./util.js";
 
 /** Root observation name per harness. */
-const ROOT_NAMES = { hermes: "Hermes turn", claude: "Conversational Turn", opencode: "opencode.turn" };
+export const ROOT_NAMES = { hermes: "Hermes turn", claude: "Conversational Turn", opencode: "opencode.turn" };
 
 export const SUPPORTED_HARNESSES = Object.keys(ROOT_NAMES);
 
@@ -65,7 +64,7 @@ function byStart(a, b) {
 function rootsRevision(harness, id, roots) {
   if (!roots.length) return null;
   const entries = [...roots].sort(byStart).map((root) => [root.id, root.endTime ?? null]);
-  return { version: 3, source: "langfuse", harness, id, sha256: createHash("sha256").update(JSON.stringify(entries)).digest("hex") };
+  return { version: 3, source: "langfuse", harness, id, sha256: sha256(JSON.stringify(entries)) };
 }
 
 /** True for a revision this module produced; older ones came from local stores. */
@@ -87,13 +86,9 @@ function sessionFromRoots(harness, id, roots) {
     id,
     cwd,
     startedAtMs: starts.length ? Math.min(...starts) : null,
-    mtimeMs: ends.length ? Math.max(...ends) : null,
     // Langfuse has no session end; the last turn's end is the last activity.
-    endedAt: null,
-    activityKnown: true,
+    mtimeMs: ends.length ? Math.max(...ends) : null,
     source: harness === "hermes" ? platformMeta?.platform ?? null : null,
-    gitRepoRoot: null,
-    parentSessionId: null,
     revision: rootsRevision(harness, id, sorted),
   };
 }
@@ -166,18 +161,12 @@ export function observationsToEvents(harness, observations) {
   return timed.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]).map(([, , , event]) => event);
 }
 
-let ambient = null;
-/** The client from LANGFUSE_* variables, created on first use. */
-function clientOr(client) {
-  return client ?? (ambient ??= langfuseClient());
-}
-
 /**
  * Read one session: its events, its revision (from the same observations),
  * and whether it is the runtime's own session (sentinel on the first turn).
  */
-export async function readTranscript(transcript, { client = null } = {}) {
-  const observations = (await clientOr(client).observations({ sessionId: transcript.id, fields: "core,basic,io,metadata" })).sort(byStart);
+export async function readTranscript(transcript, { client }) {
+  const observations = (await client.observations({ sessionId: transcript.id, fields: "core,basic,io,metadata" })).sort(byStart);
   const roots = observations.filter((o) => o.isRootObservation && harnessOf(o) === transcript.harness);
   if (!roots.length) throw new Error(`session ${transcript.harness}:${transcript.id} not found in Langfuse`);
   const firstInput = roots[0].input;
@@ -189,20 +178,10 @@ export async function readTranscript(transcript, { client = null } = {}) {
 }
 
 /** The session's current revision, from its root observations alone. */
-export async function transcriptRevision(transcript, { client = null } = {}) {
-  const roots = (await clientOr(client).observations({ sessionId: transcript.id, isRootObservation: true, fields: "core,basic,metadata" }))
+export async function transcriptRevision(transcript, { client }) {
+  const roots = (await client.observations({ sessionId: transcript.id, isRootObservation: true, fields: "core,basic,metadata" }))
     .filter((o) => harnessOf(o) === transcript.harness);
   return rootsRevision(transcript.harness, transcript.id, roots);
-}
-
-/**
- * When a session ended, in epoch ms. Last activity wins when known; an
- * explicit end only counts for records written before sessions came from
- * Langfuse.
- */
-export function sessionEndMs(session) {
-  const explicit = typeof session?.endedAt === "number" ? session.endedAt : Date.parse(session?.endedAt);
-  return (session?.activityKnown && session?.mtimeMs) || explicit || null;
 }
 
 /**
@@ -214,7 +193,7 @@ export function sessionEndMs(session) {
  * skipped. A Langfuse failure throws: an unreachable source must never pass
  * as "no sessions".
  */
-export async function discoverTranscripts({ client = null, stateDir = null, since = "30d", harnesses = null, idleHours = 12, now = Date.now(), includeCheckpointed = null, ignoreCheckpoint = false, excludeTranscript = null } = {}) {
+export async function discoverTranscripts({ client, stateDir = null, since = "30d", harnesses = null, idleHours = 12, now = Date.now(), includeCheckpointed = null, ignoreCheckpoint = false }) {
   if (!Number.isFinite(idleHours) || idleHours < 0) throw new Error("idleHours must be a non-negative number");
   const selected = harnesses || SUPPORTED_HARNESSES;
   for (const harness of selected) {
@@ -228,7 +207,7 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
   for (const harness of selected) {
     const stats = { scanned: 0, matched: 0, self: 0, open: 0 };
     perHarness[harness] = stats;
-    const roots = await clientOr(client).observations({
+    const roots = await client.observations({
       isRootObservation: true,
       name: ROOT_NAMES[harness],
       fields: "core,basic,metadata",
@@ -241,7 +220,6 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
       sessions.get(root.sessionId).push(root);
     }
     for (const [id, group] of [...sessions]) {
-      if (excludeTranscript?.harness === harness && excludeTranscript.id === id) continue;
       stats.scanned += 1;
       if (cutoff) {
         const windowed = sessionFromRoots(harness, id, group);
@@ -252,7 +230,7 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
       }
       let full = group;
       if (cutoff) {
-        full = (await clientOr(client).observations({ sessionId: id, isRootObservation: true, fields: "core,basic,metadata" }))
+        full = (await client.observations({ sessionId: id, isRootObservation: true, fields: "core,basic,metadata" }))
           .filter((o) => harnessOf(o) === harness);
         if (!full.length) continue;
         sessions.set(id, full);
@@ -273,5 +251,5 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
     }
   }
   transcripts.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  return { transcripts, perHarness, excluded: { ...EXCLUDED_HARNESSES } };
+  return { transcripts, perHarness };
 }

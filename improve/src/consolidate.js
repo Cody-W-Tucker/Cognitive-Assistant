@@ -13,7 +13,7 @@
 import path from "node:path";
 
 import { renderPrompt } from "./prompts.js";
-import { assertMinGapEvidence, normalizeQuote, persistPrompt, readJson, writeJson } from "./state.js";
+import { ask, assertMinGapEvidence, normalizeQuote, readJson, writeJson } from "./state.js";
 
 const OPEN_GAPS_FILENAME = "open-gaps.json";
 
@@ -237,8 +237,7 @@ export async function consolidateLedger(ledger, { invoke, stateDir, runId, minGa
   let reply;
   try {
     const prompt = buildConsolidatePrompt(working);
-    persistPrompt(stateDir, { runId, name: "consolidate", prompt, meta: { stage: "consolidate" } });
-    reply = await invoke("consolidate", prompt, { ledger: working });
+    reply = await ask(invoke, "consolidate", prompt, { ledger: working }, { stateDir, runId });
   } catch (err) {
     return finish(working, 0, `consolidation failed (${err.message}); continuing with exact observation identity for this run.`, { failed: err.message });
   }

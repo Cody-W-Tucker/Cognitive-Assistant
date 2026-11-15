@@ -4,7 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-import { buildChatRequest, checkModelConfigured, extractFinalJson, invokeStage, modelConfig } from "../src/model.js";
+import { assertModelConfigured, buildChatRequest, extractFinalJson, invokeStage, modelConfig } from "../src/model.js";
 import { tmpDir } from "./helpers.mjs";
 
 async function withServer(reply, fn) {
@@ -47,9 +47,9 @@ test("request carries no tools and pins sampling", () => {
 });
 
 test("config fails closed without an endpoint and honors per-role models", () => {
-  assert.equal(checkModelConfigured({}).ok, false);
+  assert.throws(() => assertModelConfigured({}), /CA_LLM_BASE_URL is not set/);
   const env = { CA_LLM_BASE_URL: "http://x/v1/", CA_LLM_MODEL: "small", CA_LLM_MODEL_SYNTHESIS: "large" };
-  assert.equal(checkModelConfigured(env).ok, true);
+  assert.doesNotThrow(() => assertModelConfigured(env));
   assert.equal(modelConfig("analysis", env).model, "small");
   assert.equal(modelConfig("synthesis", env).model, "large");
   assert.equal(modelConfig("analysis", env).baseUrl, "http://x/v1");

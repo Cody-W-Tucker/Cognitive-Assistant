@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { capSessions, runPipeline, sessionEligible, stampEvidence } from "../src/pipeline.js";
+import { sessionMeta } from "../src/outcome.js";
+import { capSessions, runPipeline } from "../src/pipeline.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { readJson } from "../src/state.js";
+import { HOUR } from "./fake-langfuse.mjs";
 import { invokeWith, setup } from "./helpers.mjs";
 
-const HOUR = 3600_000;
 const run = (env, options = {}) => runPipeline({ ...env, since: "all", analyzer: "mock", ...options });
 
 describe("run with the mock analyzer", () => {
@@ -176,20 +177,17 @@ describe("run with the mock analyzer", () => {
 });
 
 it("uses start and metadata with safe fallbacks", () => {
-  const session = { startedAtMs: 100, mtimeMs: 200, endedAt: 300, source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p" };
-  assert.deepEqual(stampEvidence({ status: "ok" }, session, { model: "mock" }), { status: "ok", sessionAt: 100, startedAt: 100, endedAt: "1970-01-01T00:00:00.300Z", source: "cli", cwd: "/a", gitRepoRoot: "/b", parentSessionId: "p", rubric: { model: "mock" } });
-  assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200, activityKnown: true }, {}).endedAt, "1970-01-01T00:00:00.200Z");
-  assert.equal(stampEvidence({}, { mtimeMs: 200 }, {}).sessionAt, 200);
-  assert.equal(stampEvidence({}, {}, {}).startedAt, null);
-  assert.equal(stampEvidence({}, { harness: "hermes", mtimeMs: 200 }, {}).sessionAt, null);
+  const session = { startedAtMs: 100, mtimeMs: 200, source: "cli", cwd: "/a" };
+  assert.deepEqual(sessionMeta(session), { sessionAt: 100, startedAt: 100, endedAt: "1970-01-01T00:00:00.200Z", source: "cli", cwd: "/a", gitRepoRoot: null, parentSessionId: null });
+  assert.equal(sessionMeta({ harness: "hermes", mtimeMs: 200 }).endedAt, "1970-01-01T00:00:00.200Z");
+  assert.equal(sessionMeta({ mtimeMs: 200 }).sessionAt, 200);
+  assert.equal(sessionMeta({}).startedAt, null);
+  assert.equal(sessionMeta({}).endedAt, null);
+  assert.equal(sessionMeta({ harness: "hermes", mtimeMs: 200 }).sessionAt, null);
 });
 
 it("gates every harness on idle time and leaves open sessions off the cursor", async () => {
   const now = Date.now();
-  assert.equal(sessionEligible({ harness: "hermes", mtimeMs: now }, now, 12), false);
-  assert.equal(sessionEligible({ harness: "claude", mtimeMs: now }, now, 12), false);
-  assert.equal(sessionEligible({ harness: "opencode", mtimeMs: now - 12 * HOUR - 1 }, now, 12), true);
-  assert.equal(sessionEligible({ harness: "hermes" }, now, 12), false);
   const env = setup(0);
   env.langfuse.add("hermes", "open", { start: now - 5 * 60_000 });
   env.langfuse.add("opencode", "open-oc", { start: now - 5 * 60_000 });

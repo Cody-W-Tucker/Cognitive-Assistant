@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import json
-import os
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from core import experience, improve, living_soul, outcome
 from core.paths import improve_dir, soul_dir
@@ -168,18 +166,18 @@ class AutoCycleTests(CAHomeTestCase):
         improve.auto_cycle(proposal=proposal, policy=FIVE)
         start = T0 + timedelta(days=7)
         self._set_activations([(T0, 1)])
-        before = outcome.session_outcomes()
+        before = outcome.collect()[0]
         for i in range(10):
             _write_evidence(f"codex{i}", start + timedelta(minutes=i), miss=True, harness="codex")
-        self.assertEqual(outcome.session_outcomes(), before)
+        self.assertEqual(outcome.collect()[0], before)
 
     def test_source_allowlist_excludes_unknown_and_missing(self) -> None:
         self._set_activations([(T0, 1)])
         for source in ("desktop", "tui", "cli", "cron", "api_server", "subagent", None):
             _write_evidence(str(source), T0, miss=True, source=source)
-        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 3, "misses": 3}})
-        self.assertEqual(outcome.session_outcomes(sources={"cron"}), {1: {"sessions": 1, "misses": 1}})
-        self.assertEqual(outcome.session_outcomes(sources=set()), {})
+        self.assertEqual(outcome.collect()[0], {1: {"sessions": 3, "misses": 3}})
+        self.assertEqual(outcome.collect(outcome.OutcomePolicy(sources=frozenset({"cron"})))[0], {1: {"sessions": 1, "misses": 1}})
+        self.assertEqual(outcome.collect(outcome.OutcomePolicy(sources=frozenset()))[0], {})
 
     def test_qualified_evidence_wins_over_legacy_before_filtering(self) -> None:
         self._set_activations([(T0, 1)])
@@ -187,19 +185,19 @@ class AutoCycleTests(CAHomeTestCase):
         path = improve_dir() / "evidence" / "hermes:same.json"
         legacy = json.loads((path.parent / "same.json").read_text(encoding="utf-8"))
         path.write_text(json.dumps({**legacy, "outcome": {**legacy["outcome"], "label": "advanced"}}), encoding="utf-8")
-        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 0}})
+        self.assertEqual(outcome.collect()[0], {1: {"sessions": 1, "misses": 0}})
         path.write_text(json.dumps({**legacy, "source": "cron"}), encoding="utf-8")
-        self.assertEqual(outcome.session_outcomes(), {})
+        self.assertEqual(outcome.collect()[0], {})
         path.write_text(json.dumps({**legacy, "status": "failed"}), encoding="utf-8")
-        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 1, "misses": 1}})
+        self.assertEqual(outcome.collect()[0], {1: {"sessions": 1, "misses": 1}})
     def test_unclear_and_unscored_do_not_count(self) -> None:
         self._set_activations([(T0, 1)])
         _write_evidence("unclear", T0, True, label="unclear")
         _write_evidence("unscored", T0, True, scored=False)
-        self.assertEqual(outcome.session_outcomes(), {})
+        self.assertEqual(outcome.collect()[0], {})
         _write_evidence("advanced", T0, True, label="advanced")
         _write_evidence("regressed", T0, False, label="regressed")
-        self.assertEqual(outcome.session_outcomes(), {1: {"sessions": 2, "misses": 1}})
+        self.assertEqual(outcome.collect()[0], {1: {"sessions": 2, "misses": 1}})
 
     def test_unscored_generations_are_pending(self) -> None:
         proposal = self.run_mock_proposal()

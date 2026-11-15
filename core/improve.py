@@ -16,12 +16,11 @@ import shutil
 import subprocess
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from core import experience, journal, living_soul, outcome, paths
-from core.paths import INTERACTION_POSTURE_PATH, REPO_ROOT, atomic_write, improve_dir
+from core.paths import INTERACTION_POSTURE_PATH, REPO_ROOT, append_jsonl, atomic_write, improve_dir, utc_now
 
 RUNTIME_BIN = REPO_ROOT / "improve" / "bin" / "ca-improve.js"
 
@@ -337,12 +336,12 @@ def _rejection_row(at: str, proposal_id: str, edit_id: str, reason: str, record:
     }
 
 
+def _rejections_path() -> Path:
+    return improve_dir() / "rejections.jsonl"
+
+
 def _append_rejections(rows: List[Dict]) -> None:
-    path = improve_dir() / "rejections.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row) + "\n")
+    append_jsonl(_rejections_path(), rows, sort_keys=False)
 
 
 def _write_decisions(
@@ -358,18 +357,18 @@ def _write_decisions(
     A half-applied proposal would leave records the next SOUL compile adopts
     with no review on record, so a failure puts everything back.
     """
-    rejections_path = improve_dir() / "rejections.jsonl"
-    touched = [experience.record_path(edit["record"]["id"]) for edit in accepted] + [rejections_path, _proposal_path()]
+    proposal_id = proposal.get("id", "?")
+    touched = [experience.record_path(edit["record"]["id"]) for edit in accepted] + [_rejections_path(), _proposal_path()]
     backups = {path: path.read_bytes() if path.exists() else None for path in touched}
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = utc_now()
     try:
         for edit in accepted:
-            written.append(str(experience.write(edit["record"], edit, proposal.get("id", "?"))))
+            written.append(str(experience.write(edit["record"], edit, proposal_id)))
         _append_rejections(
             [
                 _rejection_row(
                     now,
-                    proposal.get("id", "?"),
+                    proposal_id,
                     edit["id"],
                     reasons.get(edit["id"], "other"),
                     {**(edit.get("record") or {}), "title": (edit.get("record") or {}).get("title") or edit.get("title", "")},
@@ -422,7 +421,7 @@ def auto_cycle(*, proposal: Dict, policy: outcome.OutcomePolicy = outcome.Outcom
     if verdict["verdict"] == "revert":
         added = list(verdict.get("added", []))
         reason = f"miss rate rose (z={verdict.get('z')})"
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        now = utc_now()
         rows = []
         for record_id in added:
             stored = experience.read(record_id)

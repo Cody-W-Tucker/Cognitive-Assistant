@@ -3,7 +3,7 @@
 // here against the ledger once; the proposal trusts what passes.
 
 import { renderPrompt } from "./prompts.js";
-import { persistPrompt } from "./state.js";
+import { ask } from "./state.js";
 
 const BODY_MAX_CHARS = 2000;
 const RECORD_ID = /^exp-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*-[A-Za-z0-9]{12}$/;
@@ -132,8 +132,7 @@ export async function annotate(plans, { invoke, stateDir, runId, ledger, evidenc
   let reply;
   try {
     const prompt = renderAnnotatePrompt(plans, { runId, ledger, evidenceIndex, soul });
-    persistPrompt(stateDir, { runId, name: "annotate", prompt, meta: { stage: "annotate" } });
-    reply = await invoke("annotate", prompt, { plans, ledger, evidenceIndex });
+    reply = await ask(invoke, "annotate", prompt, { plans, ledger, evidenceIndex }, { stateDir, runId });
   } catch (err) {
     return fail(err.message);
   }

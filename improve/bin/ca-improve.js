@@ -60,7 +60,7 @@ async function main() {
   const minGapEvidence = flags["min-gap-evidence"] ?? 2;
   const since = flags.since || "30d";
   const analyzer = flags.analyzer || "model";
-  const tui = flags.tui ? startTui({ since, analyzer }) : null;
+  const tui = flags.tui ? startTui({ since }) : null;
   try {
     const proposal =
       command === "run"

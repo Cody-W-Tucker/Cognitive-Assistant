@@ -3,10 +3,10 @@ import path from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 
-import { discoverTranscripts, readTranscript, sessionEndMs } from "./harnesses.js";
+import { discoverTranscripts, readTranscript } from "./harnesses.js";
+import { ATTACHED_MARKER, DAY_MS, time } from "./util.js";
 
 const execFileAsync = promisify(execFile);
-const DAY_MS = 86400_000;
 const MESSAGE_LIMIT = 2000;
 const MAX_SESSIONS = 8;
 const MAX_TOUCHED = 60;
@@ -17,12 +17,7 @@ const SOURCES = new Set(["desktop", "tui", "cli"]);
 // Do not include attached context, tools, or unbounded transcript text.
 function message(text) {
   if (typeof text !== "string") return "";
-  return text.split("--- Attached Context ---", 1)[0].trim().slice(0, MESSAGE_LIMIT);
-}
-
-function time(value) {
-  if (value === null || value === undefined || value === "") return NaN;
-  return typeof value === "number" ? value : Date.parse(value);
+  return text.split(ATTACHED_MARKER, 1)[0].trim().slice(0, MESSAGE_LIMIT);
 }
 
 function samePath(a, b) {
@@ -118,18 +113,17 @@ export async function collectFollowup({ session, firstUserMessage = "", matureDa
 
   const located = (typeof root === "string" && path.isAbsolute(root)) || (typeof cwd === "string" && path.isAbsolute(cwd));
   const pool = (typeof candidates === "function" ? await candidates() : candidates)
-    ?? (await discoverTranscripts({ client, stateDir, since: "all", ignoreCheckpoint: true, excludeTranscript: { harness: session.harness, id: session.transcriptId } })).transcripts;
+    ?? (await discoverTranscripts({ client, stateDir, since: "all", ignoreCheckpoint: true })).transcripts;
   const later = [];
   for (const candidate of pool) {
     if (candidate.harness === session.harness && candidate.id === (session.transcriptId ?? session.id)) continue;
     if (candidate.harness === "hermes") {
-      if (!SOURCES.has(candidate.source) || candidate.parentSessionId) continue;
+      if (!SOURCES.has(candidate.source)) continue;
     } else if (!located || (root ? !samePath(root, repoRoot(candidate)) : !samePath(cwd, candidate.cwd))) continue;
     const began = time(candidate.startedAtMs);
-    const ended = sessionEndMs(candidate) ?? NaN;
-    // mtime also guards against a stale endedAt followed by later activity.
-    const modified = time(candidate.mtimeMs);
-    if (!Number.isFinite(began) || !Number.isFinite(ended) || !Number.isFinite(modified) || began < start || began > end || ended < began || ended > end || modified < began || modified > end) continue;
+    // The last turn's end is the session's end.
+    const ended = time(candidate.mtimeMs);
+    if (!Number.isFinite(began) || !Number.isFinite(ended) || began < start || began > end || ended < began || ended > end) continue;
     later.push({ candidate, began });
   }
   later.sort((a, b) => a.began - b.began);

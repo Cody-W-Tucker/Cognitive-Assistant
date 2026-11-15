@@ -5,11 +5,6 @@
 # Nix Builds
 result
 
-.ipynb_checkpoints/
-
-# Swarms
-agent_workspace/
-
 data
 
 __pycache__

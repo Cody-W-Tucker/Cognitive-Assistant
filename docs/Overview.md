@@ -61,10 +61,11 @@ core/                 the Python pipeline and CLI (python -m core)
   living_soul.py      living SOUL generations
   outcome.py          per-generation session outcome check
   journal.py          private lineage journal
+  langfuse_review.py  Langfuse review queue refill (review-queue)
 improve/              Node improvement runtime (zero dependencies)
   bin/ca-improve.js   runtime CLI called by core/improve.py
-  src/                harnesses, distill, analyze, fold, consolidate, synthesize, annotate
-  prompts/            analysis, consolidate, synthesis, annotate prompts
+  src/                harnesses, distill, analyze, outcome, fold, consolidate, synthesize, annotate, propose
+  prompts/            analysis, outcome, consolidate, synthesis, annotate prompts
 profiles/<name>/      profile inputs: questions.csv, prompts/
 profiles/alignment/   prompts for the translation layer and alignment spec
 workspaces/<name>/    profile data/ (gitignored) and artifacts/

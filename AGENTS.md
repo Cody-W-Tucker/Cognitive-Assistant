@@ -60,6 +60,7 @@ python -m core improve-outcome [--since 70d --dry-run]   # score outcomes; dry r
 python -m core improve-apply [--proposal <id> --decisions "e1=accepted e2=rejected:too-narrow"]
 python -m core improve-synthesize
 python -m core journal-compact
+python -m core review-queue [--dry-run]                  # refill the Langfuse review queue
 python -m core soul compile|status|rollback <n>|link <hermes-home>
 ```
 

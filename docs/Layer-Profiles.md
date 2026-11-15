@@ -9,7 +9,6 @@ scripts and no separate config class.
 | Field | Meaning |
 | --- | --- |
 | `name` | Profile id; also the directory name under `profiles/`, `workspaces/` and `workspaces/skills/` |
-| `display_name` | Human-readable label |
 | `qmd_collections` | QMD collections `ask-questions` retrieves from |
 | `prompt_files` | Logical prompt name -> file in `profiles/<name>/prompts/` |
 | `skill_specs` | `SkillSpec(slug, source_group, source_headings)`: one per generated skill |

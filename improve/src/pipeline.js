@@ -3,16 +3,14 @@
 // repo, tracked files, or live Hermes.
 
 import path from "node:path";
-import { createHash } from "node:crypto";
 
 import { analyzeTraces, loadContexts } from "./analyze.js";
 import { consolidateLedger, saveOpenGaps } from "./consolidate.js";
 import { distill } from "./distill.js";
 import { foldEvidence } from "./fold.js";
-import { discoverTranscripts, readTranscript, SUPPORTED_HARNESSES } from "./harnesses.js";
+import { discoverTranscripts, readTranscript } from "./harnesses.js";
 import { langfuseClient } from "./langfuse.js";
-import { mockInvoke } from "./mock.js";
-import { assertModelConfigured, modelInvoke } from "./model.js";
+import { resolveInvoke } from "./model.js";
 import { outcomeSnapshot, runOutcome, sessionMeta } from "./outcome.js";
 import { loadPrompt } from "./prompts.js";
 import { propose } from "./propose.js";
@@ -28,6 +26,7 @@ import {
   timestampId,
   writeJson,
 } from "./state.js";
+import { mapPool, sha256 } from "./util.js";
 
 /**
  * An unreadable session becomes a failed trace, retried next run rather than
@@ -52,21 +51,8 @@ async function collectTrace(transcript, client) {
     },
     distilled: distill(events, transcript),
     // Cut from the same observations as the trace; scoring later checks the session is unchanged.
-    outcomeSnapshot: revision ? outcomeSnapshot(transcript, events, revision) : null,
+    outcomeSnapshot: outcomeSnapshot(transcript, events, revision),
   };
-}
-
-async function mapPool(items, jobs, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      out[index] = await fn(items[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(Number(jobs) || 4, items.length)) }, worker));
-  return out;
 }
 
 /**
@@ -84,15 +70,6 @@ function countByHarness(transcripts) {
   const counts = {};
   for (const t of transcripts) counts[t.harness] = (counts[t.harness] || 0) + 1;
   return counts;
-}
-
-/** Langfuse records no session end: a session is finished once it has been idle long enough. */
-export function sessionEligible(transcript, now, idleHours) {
-  return Number.isFinite(transcript.mtimeMs) && now - transcript.mtimeMs > idleHours * 3600000;
-}
-
-export function stampEvidence(record, session, rubric) {
-  return { ...record, ...sessionMeta(session), rubric };
 }
 
 /**
@@ -122,28 +99,24 @@ export async function runPipeline({
   if (analyzer !== "model" && analyzer !== "mock") throw new Error(`improve-run: --analyzer must be model or mock (got ${JSON.stringify(analyzer)})`);
   if (maxSessions !== null && !(Number.isInteger(Number(maxSessions)) && Number(maxSessions) > 0)) throw new Error("--max-sessions must be a positive integer");
   const cap = maxSessions === null ? null : Number(maxSessions);
-  if (idleHours === null || String(idleHours).trim() === "" || !Number.isFinite(Number(idleHours)) || Number(idleHours) < 0) throw new Error("--idle-hours must be a non-negative number");
+  const idle = idleHours === null || String(idleHours).trim() === "" ? NaN : Number(idleHours);
+  if (!Number.isFinite(idle) || idle < 0) throw new Error("--idle-hours must be a non-negative number");
   const soul = readSoulSnapshot(soulPath);
-  const customInvoke = Boolean(invoke);
-  if (!invoke) {
-    if (analyzer === "mock") invoke = mockInvoke;
-    else {
-      assertModelConfigured();
-      invoke = modelInvoke(stateDir);
-    }
-  }
+  const injected = invoke;
+  let model;
+  ({ invoke, model } = resolveInvoke({ invoke, analyzer, stateDir, role: "analysis" }));
   client ??= langfuseClient();
   initStateDir(stateDir);
   const runId = timestampId("run");
 
-  emit("discover:start", { harnesses: harnesses || SUPPORTED_HARNESSES });
+  emit("discover:start");
   const needsMetadata = (t) => {
     if (t.harness !== "hermes") return false;
     const evidence = readSessionEvidence(stateDir, t.harness, t.id);
     return evidence?.status === "ok" && (evidence.startedAt == null || evidence.source == null);
   };
   const now = Date.now();
-  const discovery = await discoverTranscripts({ client, stateDir, since, harnesses, idleHours: Number(idleHours), now, includeCheckpointed: needsMetadata });
+  const discovery = await discoverTranscripts({ client, stateDir, since, harnesses, idleHours: idle, now, includeCheckpointed: needsMetadata });
   for (const t of discovery.transcripts) {
     if (!needsMetadata(t) || t.startedAtMs == null || !t.source) continue;
     const evidence = readSessionEvidence(stateDir, t.harness, t.id);
@@ -157,22 +130,21 @@ export async function runPipeline({
   }
   // Sessions already analyzed (say, under an older checkpoint value) are re-checkpointed, never re-analyzed.
   const analyzed = discovery.transcripts.filter((t) => readSessionEvidence(stateDir, t.harness, t.id)?.status === "ok");
-  const eligible = discovery.transcripts.filter((t) => !analyzed.includes(t) && sessionEligible(t, now, Number(idleHours)));
-  const transcripts = capSessions(eligible, cap);
+  // Discovery returns only sessions idle for `idleHours`, so the rest are all eligible.
+  const transcripts = capSessions(discovery.transcripts.filter((t) => !analyzed.includes(t)), cap);
   const perHarness = countByHarness(transcripts);
   emit("discover:done", { transcripts: transcripts.length, perHarness });
 
-  emit("analyze:start", { total: transcripts.length, pending: transcripts.length, analyzer });
+  emit("analyze:start", { pending: transcripts.length, analyzer });
   const traces = await mapPool(transcripts, jobs, (t) => collectTrace(t, client));
   // Session time travels with the evidence so outcomes can be attributed to
   // the living SOUL generation that was active when the session happened.
   const sessions = new Map(transcripts.map((t) => [checkpointKey(t), t]));
   const contexts = loadContexts({ soulPath, posturePath, experiencePath });
-  const sha = (value) => createHash("sha256").update(value).digest("hex");
   const rubric = {
-    promptSha: sha(loadPrompt("analysis")),
-    contextSha: sha(JSON.stringify([contexts.soulBaseline, contexts.interactionPosture, contexts.experienceRecords])),
-    model: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_ANALYSIS || process.env.CA_LLM_MODEL || null),
+    promptSha: sha256(loadPrompt("analysis")),
+    contextSha: sha256(JSON.stringify([contexts.soulBaseline, contexts.interactionPosture, contexts.experienceRecords])),
+    model,
   };
   const tally = { done: 0, ok: 0, failed: 0, skipped: 0 };
   const records = await analyzeTraces(traces, {
@@ -187,7 +159,7 @@ export async function runPipeline({
       // A failed or skipped re-analysis never replaces earlier good evidence.
       if (record.status === "ok" || readSessionEvidence(stateDir, record.harness, record.transcriptId)?.status !== "ok") {
         const snapshot = traces.find((t) => t.harness === record.harness && t.transcriptId === record.transcriptId)?.outcomeSnapshot;
-        writeJson(file, { ...stampEvidence(record, session, rubric), outcomeSnapshot: snapshot ?? null });
+        writeJson(file, { ...record, ...sessionMeta(session), rubric, outcomeSnapshot: snapshot ?? null });
       }
       tally.done += 1;
       tally[record.status] += 1;
@@ -197,7 +169,7 @@ export async function runPipeline({
   emit("analyze:done", { ...tally });
 
   // Sessions that cannot be scored yet stay without an outcome and never stop the run.
-  await runOutcome({ client, stateDir, since: "all", limit: cap, analyzer, invoke, modelName: customInvoke ? "custom" : analyzer === "mock" ? "mock" : (process.env.CA_LLM_MODEL_OUTCOME || process.env.CA_LLM_MODEL) });
+  await runOutcome({ client, stateDir, since: "all", limit: cap, analyzer, invoke: injected });
   const evidenceRecords = readEvidenceRecords(stateDir);
   emit("fold:start");
   const consolidation = await consolidateLedger(foldEvidence(evidenceRecords, { minGapEvidence: floor }), {

@@ -14,7 +14,6 @@ from core.skill_engine import (
     find_skill,
     generate_hermes_enhancement,
     iter_skills,
-    validate_skill_slug,
 )
 
 DEFAULT_HERMES_SKILLS_DIR = Path("/var/lib/hermes/.hermes/skills")
@@ -38,7 +37,6 @@ def _candidate_skill_files(
         skill_dir = hermes_path.parent if hermes_path.name == "SKILL.md" else hermes_path
         if skill_dir.name == skill_name:
             candidate_files.append(skill_dir / "SKILL.md")
-        candidate_files.append(hermes_path / skill_name / "SKILL.md")
         candidate_dirs.append(hermes_path)
 
     candidate_dirs.append(DEFAULT_HERMES_SKILLS_DIR)
@@ -205,7 +203,6 @@ def _merge_or_backup_write(
 
 def _run_single_skill(skill_name: str, hermes_path: Path | None, apply: bool) -> str:
     """Preview or apply one skill's enhancement: "updated", "skipped" or "failed"."""
-    validate_skill_slug(skill_name)
     local_skill_path = find_skill(skill_name)
     hermes_skill_path = _locate_hermes_skill(skill_name, hermes_path)
     if local_skill_path is None or hermes_skill_path is None:

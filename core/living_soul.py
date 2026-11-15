@@ -24,12 +24,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from core import experience, journal, paths
-from core.paths import atomic_write, soul_dir
+from core.paths import append_jsonl, atomic_write, read_jsonl, soul_dir, utc_now
 
 ABSORBED_FILENAME = "absorbed.json"
 LEARNED_HEADING = "## Learned in use"
@@ -116,30 +115,24 @@ def compose(bootstrap_text: str, records: List[Dict[str, str]], prefix: str = ""
 
 def activations() -> List[Dict]:
     """Ordered (at, generation) history of which generation Hermes was running."""
-    path = soul_dir() / "activations.jsonl"
-    if not path.exists():
-        return []
-    rows = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            rows.append(json.loads(line))
-        except ValueError:
-            continue
-    return rows
+    return read_jsonl(soul_dir() / "activations.jsonl")
+
+
+def _swap_symlink(link: Path, target: str, tmp_name: str) -> None:
+    """Point ``link`` at ``target`` atomically via a temporary link."""
+    tmp = link.with_name(f"{tmp_name}-{os.getpid()}")
+    tmp.unlink(missing_ok=True)
+    os.symlink(target, tmp)
+    os.replace(tmp, link)
 
 
 def _point_current(generation_file: Path) -> None:
     number = int(generation_file.stem)
     previous = current_generation()
     link = current_path()
-    tmp = link.with_name(f".current-{os.getpid()}")
-    tmp.unlink(missing_ok=True)
-    os.symlink(os.path.relpath(generation_file, link.parent), tmp)
-    os.replace(tmp, link)
+    _swap_symlink(link, os.path.relpath(generation_file, link.parent), ".current")
     if not previous or previous.get("generation") != number:
-        row = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "generation": number}
-        with open(soul_dir() / "activations.jsonl", "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, sort_keys=True) + "\n")
+        append_jsonl(soul_dir() / "activations.jsonl", [{"at": utc_now(), "generation": number}])
 
 
 def list_generations() -> List[Dict]:
@@ -155,6 +148,19 @@ def current_generation() -> Optional[Dict]:
         return None
     meta = link.resolve().with_suffix(".json")
     return json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else None
+
+
+def _journal_compiled(meta: Dict, reason: str) -> None:
+    journal.record(
+        "soul_compiled",
+        {
+            "generation": meta["generation"],
+            "output_ref": meta["sha256"],
+            "bootstrap_ref": meta["bootstrapSha256"],
+            "record_ids": meta["records"],
+            "reason": reason[:80],
+        },
+    )
 
 
 def compile_soul(*, reason: str = "compile") -> Dict:
@@ -180,16 +186,7 @@ def compile_soul(*, reason: str = "compile") -> Dict:
         changed = not current or current["generation"] != same["generation"]
         _point_current(generations_dir() / f"{same['generation']:04d}.md")
         if changed:
-            journal.record(
-                "soul_compiled",
-                {
-                    "generation": same["generation"],
-                    "output_ref": sha,
-                    "bootstrap_ref": same["bootstrapSha256"],
-                    "record_ids": same["records"],
-                    "reason": reason[:80],
-                },
-            )
+            _journal_compiled(same, reason)
         return {**same, "changed": changed}
     number = max((g["generation"] for g in existing), default=0) + 1
     record_ids = [record["id"] for record in records]
@@ -200,7 +197,7 @@ def compile_soul(*, reason: str = "compile") -> Dict:
         "sha256": sha,
         "bootstrapSha256": bootstrap_sha,
         "records": record_ids,
-        "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "createdAt": utc_now(),
         "reason": reason,
         # What changed relative to the generation it replaces; the outcome
         # check attributes a regression to exactly these records.
@@ -213,16 +210,7 @@ def compile_soul(*, reason: str = "compile") -> Dict:
     atomic_write(generation_file, text)
     atomic_write(generation_file.with_suffix(".json"), json.dumps(meta, indent=2, sort_keys=True) + "\n")
     _point_current(generation_file)
-    journal.record(
-        "soul_compiled",
-        {
-            "generation": number,
-            "output_ref": sha,
-            "bootstrap_ref": bootstrap_sha,
-            "record_ids": record_ids,
-            "reason": reason[:80],
-        },
-    )
+    _journal_compiled(meta, reason)
     return {**meta, "changed": True}
 
 
@@ -247,8 +235,5 @@ def link_into(hermes_home: Path) -> Path:
     """Make ``<hermes_home>/SOUL.md`` a symlink to the living SOUL."""
     link = Path(hermes_home) / "SOUL.md"
     link.parent.mkdir(parents=True, exist_ok=True)
-    tmp = link.with_name(f".SOUL.md-{os.getpid()}")
-    tmp.unlink(missing_ok=True)
-    os.symlink(current_path(), tmp)
-    os.replace(tmp, link)
+    _swap_symlink(link, str(current_path()), ".SOUL.md")
     return link

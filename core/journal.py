@@ -23,11 +23,10 @@ import os
 import re
 import sys
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
-from core.paths import improve_dir
+from core.paths import improve_dir, utc_now
 
 JOURNAL_DIRNAME = "journal"
 EVENTS_FILENAME = "events.jsonl"
@@ -95,9 +94,6 @@ MAX_STRING_CHARS = 2000
 MAX_ID_CHARS = 200
 MAX_SOURCES = 50
 
-_FORBIDDEN_LOWERED = frozenset(str(k).lower() for k in FORBIDDEN_KEYS)
-
-
 def _normalize_key(key: Any) -> str:
     """Lowercase and strip _, -, space so equivalent spellings match."""
     return re.sub(r"[_\-\s]+", "", str(key).lower())
@@ -120,24 +116,6 @@ _CREDENTIAL_SUBSTRINGS = frozenset(
 )
 
 # Lifecycle id/count refs that contain a raw stem but carry no raw content.
-_SAFE_EXPLICIT_KEYS = frozenset(
-    {
-        "run_id",
-        "proposal_id",
-        "edit_id",
-        "record_id",
-        "transcript_count",
-        "edit_count",
-        "sources",
-        "source_refs",
-        "analyzer",
-        "resume",
-        "reason",
-        "kind",
-        "title",
-        "note",
-    }
-)
 _SAFE_SUFFIXES = ("_id", "_ids", "_count", "_counts", "_ref", "_refs")
 
 
@@ -150,11 +128,7 @@ def _is_forbidden_key(key: Any) -> bool:
     if any(sub in normalized for sub in _CREDENTIAL_SUBSTRINGS):
         return True
     parts = [p for p in re.split(r"[_\-\s]+", lowered) if p]
-    if any(p in _FORBIDDEN_LOWERED for p in parts):
-        if lowered in _SAFE_EXPLICIT_KEYS or lowered.endswith(_SAFE_SUFFIXES):
-            return False
-        return True
-    return False
+    return any(p in FORBIDDEN_KEYS for p in parts) and not lowered.endswith(_SAFE_SUFFIXES)
 
 
 def _check_key(key: Any) -> None:
@@ -184,10 +158,6 @@ def _restrict_file(path: Path) -> None:
         pass
 
 
-def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 def _check_view_text(value: str, field: str) -> None:
     """Pattern checks for derived views regardless of aggregate size.
 
@@ -200,7 +170,7 @@ def _check_view_text(value: str, field: str) -> None:
         raise ValueError(f"journal view {field!r} contains credentials")
 
 
-def _physical_line_count(events_path: Path, fallback: int) -> int:
+def _physical_line_count(events_path: Path) -> int:
     """Count physical nonempty JSONL lines so IDs stay unique with corruption.
 
     ``read_events`` skips malformed lines; counting raw nonempty lines keeps
@@ -209,7 +179,7 @@ def _physical_line_count(events_path: Path, fallback: int) -> int:
     try:
         raw = events_path.read_text(encoding="utf-8")
     except OSError:
-        return fallback
+        return 0
     return sum(1 for line in raw.splitlines() if line.strip())
 
 
@@ -294,8 +264,6 @@ def sanitize_sources(values: Any) -> List[str]:
 def read_events(state_dir: Path) -> List[Dict[str, Any]]:
     """Tolerant read of journal events: missing/malformed lines are skipped."""
     path = journal_dir(Path(state_dir)) / EVENTS_FILENAME
-    if not path.exists():
-        return []
     events: List[Dict[str, Any]] = []
     try:
         raw = path.read_text(encoding="utf-8")
@@ -307,7 +275,7 @@ def read_events(state_dir: Path) -> List[Dict[str, Any]]:
             continue
         try:
             parsed = json.loads(stripped)
-        except (json.JSONDecodeError, ValueError):
+        except ValueError:
             continue
         if not isinstance(parsed, dict):
             continue
@@ -339,11 +307,11 @@ def append_event(state_dir: Path, event_type: str, payload: Dict[str, Any]) -> D
     base = Path(state_dir)
     with _locked(base) as directory:
         events_path = directory / EVENTS_FILENAME
-        next_index = _physical_line_count(events_path, fallback=len(read_events(base))) + 1
+        next_index = _physical_line_count(events_path) + 1
         event = {
             "id": f"evt-{next_index:06d}",
             "type": event_type,
-            "at": _utcnow(),
+            "at": utc_now(),
             "payload": json.loads(json.dumps(payload, sort_keys=True)),
         }
         with open(events_path, "a", encoding="utf-8") as handle:
