@@ -30,8 +30,8 @@ improve-run  ->  <CA home>/improve/proposal.json  ->  improve-apply  ->  experie
   sessions in-process via `src/outcome.js` before proposing (see [Delayed
   outcome scoring](#delayed-outcome-scoring)).
 
-The runtime writes only under its state directory. Session stores are opened
-read-only, and nothing in the repo or in Hermes is modified.
+The runtime writes only under its state directory. Sessions are read from
+Langfuse over its public API, and nothing in the repo or in Hermes is modified.
 
 ## Stages of `improve-run`
 
@@ -86,19 +86,19 @@ read-only, and nothing in the repo or in Hermes is modified.
   writes `proposal.json`. An unapplied proposal it replaces is archived to
   `proposals/<id>.json`.
 
-Discovery skips an unfinished Hermes session until it has ended or been idle
-for 12 hours (`--idle-hours`), without advancing the cursor, and a session with
+Discovery skips a session still active within `--idle-hours` (default 12
+hours), without advancing the cursor, and a session with
 successful evidence is never analyzed again. The session list is filtered
-before any messages are read, so a run reads the transcripts of new sessions,
-not of the whole store. Distillation keeps the head and the tail of a long
-trace around an elision marker, and includes Hermes tool calls.
+before any observations are read, so a run reads the transcripts of new sessions,
+not of every session in the window. Distillation keeps the head and the tail of a long
+trace around an elision marker, and includes tool calls.
 
 Evidence carries `sessionAt` (session start), `startedAt`, `endedAt`,
 `source`, `cwd`, `gitRepoRoot` and `parentSessionId`, plus
-`rubric: {promptSha, contextSha, model}`. `endedAt` is the session's last
-activity when the store records it: Hermes stamps `ended_at` when it reaps an
-idle session, which can be weeks after the person stopped. `cwd` and
-`gitRepoRoot` are optional; most Hermes sessions have neither. The prompt hash identifies the
+`rubric: {promptSha, contextSha, model}`. Langfuse records no session end,
+so `endedAt` stays null and the last turn's end time (`mtimeMs`) is the last
+known activity. `cwd` and
+`gitRepoRoot` are optional; only Claude sessions record a `cwd`. The prompt hash identifies the
 analysis template; the context hash identifies rendered SOUL, posture and
 records contexts. Older evidence may lack these fields. See
 [Living SOUL](Living-SOUL.md#outcome-check-and-autonomous-changes) for how
@@ -261,10 +261,9 @@ ended:
   `plans/feature-2.md`.
 
 The trace is a snapshot taken when the session was analyzed, used only while
-the session's transcript is unchanged since. For SQLite stores the revision
-covers that session's messages, not its session row or the rest of the
-database, so Hermes reaping an idle session does not invalidate it; new
-messages do. Header-only OpenCode exports cannot be verified and are excluded.
+the session's transcript is unchanged since. The revision is a hash of the
+session's ordered root observation ids and end times, so a new turn or a
+late-arriving end time invalidates it while other sessions' observations do not.
 
 A session that cannot be scored (no known end, a changed transcript, an
 invalid reply, a model error) is left without an outcome. Nothing is written

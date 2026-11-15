@@ -145,7 +145,7 @@ def synthesize_resume(*, min_gap_evidence: int = 2) -> Dict:
 def score_outcomes(*, since: str = "all", limit: Optional[int] = None, dry_run: bool = False,
                    rescore: bool = False, mature_days: float = 3, analyzer: str = "model") -> Dict:
     """Score mature sessions or write a private preview without changing evidence."""
-    flags =["--since", since, "--mature-days", str(mature_days), "--analyzer", analyzer]
+    flags = ["--since", since, "--mature-days", str(mature_days), "--analyzer", analyzer]
     if limit is not None:
         flags += ["--limit", str(limit)]
     if dry_run:
