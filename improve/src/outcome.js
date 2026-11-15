@@ -108,16 +108,18 @@ export async function runOutcome({ client = null, stateDir, since = "all", limit
     try {
       const session = unanalyzed ?? { harness: record.harness, id: record.transcriptId };
       let snapshot = unanalyzed ? null : record.outcomeSnapshot;
+      let revision = null;
       if (!isLangfuseRevision(snapshot?.revision)) {
         const read = await readTranscript(session, { client });
         if (read.self) throw new Error("the runtime's own session");
         snapshot = outcomeSnapshot(session, read.events, read.revision);
+        revision = read.revision;
         if (!unanalyzed && !dryRun) {
           record = { ...record, outcomeSnapshot: snapshot };
           writeJson(evidencePath(record), record);
         }
       }
-      const revision = await transcriptRevision(session, { client });
+      revision ??= await transcriptRevision(session, { client });
       if (!revision || JSON.stringify(snapshot.revision) !== JSON.stringify(revision)) throw new Error("original session changed since its snapshot");
       const { trace, firstUserMessage, texts, touched } = snapshot;
       if (typeof trace !== "string" || !Array.isArray(texts)) throw new Error("invalid original session snapshot");

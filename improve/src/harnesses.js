@@ -78,8 +78,10 @@ function sessionFromRoots(harness, id, roots) {
   const sorted = [...roots].sort(byStart);
   const starts = sorted.map((root) => ms(root.startTime)).filter((v) => v !== null);
   const ends = sorted.map((root) => ms(root.endTime) ?? ms(root.startTime)).filter((v) => v !== null);
-  const meta = sorted[0].metadata || {};
-  const cwd = harness === "claude" && typeof meta.cwd === "string" && path.isAbsolute(meta.cwd) ? meta.cwd : null;
+  const metas = sorted.map((root) => root.metadata || {});
+  const cwdMeta = metas.find((meta) => typeof meta.cwd === "string" && path.isAbsolute(meta.cwd));
+  const platformMeta = metas.find((meta) => typeof meta.platform === "string");
+  const cwd = harness === "claude" ? cwdMeta?.cwd ?? null : null;
   return {
     harness,
     id,
@@ -89,7 +91,7 @@ function sessionFromRoots(harness, id, roots) {
     // Langfuse has no session end; the last turn's end is the last activity.
     endedAt: null,
     activityKnown: true,
-    source: harness === "hermes" ? (typeof meta.platform === "string" ? meta.platform : null) : null,
+    source: harness === "hermes" ? platformMeta?.platform ?? null : null,
     gitRepoRoot: null,
     parentSessionId: null,
     revision: rootsRevision(harness, id, sorted),
@@ -135,25 +137,33 @@ function toolResult(output) {
  * started, its assistant text at its end.
  */
 export function observationsToEvents(harness, observations) {
+  const roots = [...observations].filter((o) => o.isRootObservation && harnessOf(o) === harness).sort(byStart);
+  const turnOf = new Map(roots.map((root, index) => [root.id, index]));
+  const seqOf = (o) => {
+    if (o.isRootObservation) return turnOf.get(o.id) ?? 0;
+    if (o.parentObservationId !== undefined && turnOf.has(o.parentObservationId)) return turnOf.get(o.parentObservationId);
+    return roots.length;
+  };
   const timed = [];
-  for (const o of observations) {
+  [...observations].sort(byStart).forEach((o) => {
+    const seq = seqOf(o);
     const start = ms(o.startTime) ?? 0;
     if (o.isRootObservation && harnessOf(o) === harness) {
       const user = roleText(o.input, "user").trim();
       const assistant = roleText(o.output, "assistant").trim();
-      if (user) timed.push([start, 0, { kind: "message", role: "user", text: user }]);
-      if (assistant) timed.push([ms(o.endTime) ?? start, 2, { kind: "message", role: "assistant", text: assistant }]);
+      if (user) timed.push([start, seq, 0, { kind: "message", role: "user", text: user }]);
+      if (assistant) timed.push([ms(o.endTime) ?? start, seq, 2, { kind: "message", role: "assistant", text: assistant }]);
     } else if (o.type === "TOOL") {
       const result = toolResult(o.output);
-      timed.push([start, 1, {
+      timed.push([start, seq, 1, {
         kind: "tool",
         name: String(o.name || "tool").replace(/^Tool:\s*/, ""),
         input: parse(o.input),
         ...(result !== undefined ? { result } : {}),
       }]);
     }
-  }
-  return timed.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , event]) => event);
+  });
+  return timed.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]).map(([, , , event]) => event);
 }
 
 let ambient = null;
@@ -200,7 +210,7 @@ export function sessionEndMs(session) {
 }
 
 /**
- * Discover finished sessions from Langfuse root observations started inside
+ * Discover finished sessions with at least one root observation started inside
  * the `since` window. Langfuse has no session end, so a session counts as
  * finished once it has been idle for `idleHours`. Sessions rooted under
  * `stateDir` count as `self` and are dropped (the sentinel check happens on
@@ -234,9 +244,16 @@ export async function discoverTranscripts({ client = null, stateDir = null, sinc
       if (!sessions.has(root.sessionId)) sessions.set(root.sessionId, []);
       sessions.get(root.sessionId).push(root);
     }
-    for (const [id, group] of sessions) {
+    for (const [id, group] of [...sessions]) {
       if (excludeTranscript?.harness === harness && excludeTranscript.id === id) continue;
-      const session = sessionFromRoots(harness, id, group);
+      let full = group;
+      if (cutoff) {
+        full = (await clientOr(client).observations({ sessionId: id, isRootObservation: true, fields: "core,basic,metadata" }))
+          .filter((o) => harnessOf(o) === harness);
+        if (!full.length) continue;
+        sessions.set(id, full);
+      }
+      const session = sessionFromRoots(harness, id, full);
       stats.scanned += 1;
       if (isUnder(session.cwd, stateDir)) {
         stats.self += 1;

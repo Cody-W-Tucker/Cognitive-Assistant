@@ -114,6 +114,19 @@ test("a snapshot cut from a local store is re-cut once from Langfuse; a later tu
   assert.deepEqual(readJson(file).outcomeSnapshot, saved, "a changed session is not re-cut");
 });
 
+test("a re-cut snapshot is verified without an extra pre-check fetch", async () => {
+  const dir = tmp("outcome-recut-calls-");
+  const end = Date.parse("2026-01-01T00:00:00Z");
+  const lf = fakeLangfuse();
+  lf.add("hermes", "x", { start: end - 60_000, turns: [{ user: "Fix the bug", assistant: "Fixed" }] });
+  const file = evidenceFile(dir, "x", "hermes");
+  writeJson(file, { harness: "hermes", transcriptId: "x", status: "ok", endedAt: new Date(end).toISOString(), outcomeSnapshot: { revision: { version: 2 }, trace: "stale", texts: ["stale"] } });
+  lf.calls.length = 0;
+  const options = { client: lf.client, stateDir: dir, now: end + 4 * DAY, collect: async () => followup, invoke: async () => reply };
+  assert.equal((await runOutcome(options)).scored, 1);
+  assert.equal(lf.calls.filter((q) => q.sessionId === "x").length, 2, "read plus one post-collect revision check");
+});
+
 test("snapshots keep only the session reference", () => {
   const snapshot = outcomeSnapshot({ harness: "claude", id: "x", cwd: "/p" }, [{ kind: "message", role: "user", text: "hi" }], { source: "langfuse" });
   assert.deepEqual(snapshot.location, { harness: "claude", id: "x" });

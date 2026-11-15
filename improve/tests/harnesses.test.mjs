@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { cutoffMs, discoverTranscripts, isLangfuseRevision, readTranscript, sessionEndMs, transcriptRevision } from "../src/harnesses.js";
+import { cutoffMs, discoverTranscripts, isLangfuseRevision, observationsToEvents, readTranscript, sessionEndMs, transcriptRevision } from "../src/harnesses.js";
 import { langfuseClient, langfuseConfig } from "../src/langfuse.js";
 import { SELF_SESSION_SENTINEL } from "../src/sentinel.js";
 import { writeJson } from "./helpers.mjs";
@@ -51,6 +51,37 @@ describe("discovery from Langfuse root observations", () => {
     const { transcripts } = await discoverTranscripts({ client: lf.client, since: "30d", harnesses: ["hermes"], now });
     assert.deepEqual(transcripts.map((t) => t.id), ["recent"]);
     assert.equal(lf.calls[0].fromStartTime, new Date(cutoffMs("30d", now)).toISOString());
+  });
+
+  it("builds a session straddling --since from its full roots", async () => {
+    const lf = fakeLangfuse();
+    lf.add("hermes", "s", { start: ago(24 * 40), turns: [{ user: "old ask", assistant: "old reply" }] });
+    lf.add("hermes", "s", { start: ago(24 * 2), turns: [{ user: "new ask", assistant: "new reply" }] });
+    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "30d", harnesses: ["hermes"], now });
+    assert.deepEqual(transcripts.map((t) => t.id), ["s"]);
+    assert.equal(transcripts[0].startedAtMs, ago(24 * 40));
+    assert.deepEqual(transcripts[0].revision, await transcriptRevision({ harness: "hermes", id: "s" }, { client: lf.client }));
+  });
+
+  it("takes the session directory from the first turn that carries it", async () => {
+    const lf = fakeLangfuse();
+    lf.add("claude", "s", { start: ago(30), cwd: "/work/repo", turns: [{ user: "a", assistant: "b" }, { user: "c", assistant: "d" }] });
+    lf.observations.find((o) => o.isRootObservation).metadata = { source: "claude-code" };
+    const { transcripts } = await discoverTranscripts({ client: lf.client, since: "all", now });
+    assert.equal(transcripts[0].cwd, "/work/repo");
+  });
+
+  it("orders a turn's assistant text before the next turn's user text at a shared boundary", () => {
+    const turn = (id, startTime, endTime, user, assistant) => ({
+      id, sessionId: "s", type: "CHAIN", name: "Conversational Turn", isRootObservation: true, environment: "default",
+      metadata: { source: "claude-code" }, startTime, endTime,
+      input: JSON.stringify({ role: "user", content: user }), output: JSON.stringify({ role: "assistant", content: assistant }),
+    });
+    const events = observationsToEvents("claude", [
+      turn("r1", "2026-11-01T00:00:00.000Z", "2026-11-01T00:01:00.000Z", "A", "B"),
+      turn("r2", "2026-11-01T00:01:00.000Z", "2026-11-01T00:02:00.000Z", "C", "D"),
+    ]);
+    assert.deepEqual(events.map((e) => e.text), ["A", "B", "C", "D"]);
   });
 
   it("leaves sessions active within the idle window for later", async () => {
