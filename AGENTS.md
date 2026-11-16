@@ -25,72 +25,16 @@ Runtime state (improvement pass, experience records, living SOUL) lives under
 CA home (`$CA_HOME`, default `$XDG_DATA_HOME/cognitive-assistant`), never in
 the repo. See `docs/Workspaces-and-Generated-Artifacts.md`.
 
-## CLI
-
-Profile-specific build commands take `--profile existential|operational`.
-
-```bash
-# Shared commands
-python -m core list-profiles
-python -m core enhance-skill
-python -m core build-translation-layer
-python -m core build-alignment-spec
-
-# Existential profile workflow
-python -m core --profile existential ask-questions
-python -m core --profile existential build-prompts
-python -m core --profile existential build-skills
-
-# Operational profile workflow
-python -m core --profile operational ingest-corpus                 # batch
-python -m core --profile operational ask-questions
-python -m core --profile operational build-prompts
-python -m core --profile operational build-skills
-python -m core --profile operational build-tool-specs
-
-# Profile-aware validation
-python -m core --profile <name> health-check
-
-# Everything after ask-questions, for every profile
-python -m core update
-
-# Improvement loop and living SOUL (state under CA home)
-python -m core improve-run [--headless [--auto]]
-python -m core improve-outcome [--since 70d --dry-run]   # score outcomes; dry run is the backtest
-python -m core improve-apply [--proposal <id> --decisions "e1=accepted e2=rejected:too-narrow"]
-python -m core improve-synthesize
-python -m core journal-compact
-python -m core review-queue [--dry-run]                  # refill the Langfuse review queue
-python -m core soul compile|status|rollback <n>|link <hermes-home>
-```
-
-Full flag reference: `docs/CLI-and-Command-Reference.md`.
-
-Subcommands that don't apply to a profile (e.g. `build-tool-specs --profile existential`)
-fail with a clear error rather than silently no-op.
-
-`build-skills` writes canonical generated skills to
-`workspaces/skills/<profile>/<skill>/SKILL.md` and deletes skills in that
-profile folder the profile no longer declares. Manual imports live under
-purpose categories like `workspaces/skills/workflow/<skill>/SKILL.md`.
-`build-translation-layer` reads from both profiles and writes the orchestrator
-translation layer (`INTERACTION_POSTURE.md` and `SOUL.md`, plus
-`absorbed.json` naming the lineage records it took in) to
-`workspaces/alignment/artifacts/`.
-`build-alignment-spec` reads unified skills and writes the alignment spec.
-`update` runs `build-prompts`, `build-skills` and (where supported)
-`build-tool-specs` for one or all profiles, then the cross-profile stages
-(`build-translation-layer` + `build-alignment-spec`). It does not run
-`ingest-corpus` or `ask-questions`.
-
-See `profiles/alignment/README.md` and `docs/Alignment-Artifacts.md` for details.
-
 ## Tests
 
 ```bash
 nix develop --command python -m unittest discover -s tests -v   # all Python tests
 nix develop --command bash -c 'cd improve && npm test'           # Node runtime tests
 ```
+
+Before presenting results as verified, independently rerun the relevant checks; do not
+rely on delegated-worker reports. For repository-wide changes, run both full suites
+above; targeted tests do not replace them.
 
 `tests/` has no `__init__.py`: use `discover -s tests` (not `-t .`), or name
 modules directly, e.g. `python -m unittest tests.test_improve`.
@@ -109,10 +53,11 @@ UPPER_CASE for constants.
 **Configuration:** Environment variables for secrets (.env):
 `<PROVIDER>_API_KEY` / `_MODEL` / `_MAX_OUTPUT` for bootstrap stages
 (`core/llm.py`), `CA_LLM_*` for the improvement runtime (`improve/src/model.js`).
-The improvement runtime reads harness sessions only from Langfuse
+**Session source:** The improvement runtime reads harness sessions only from Langfuse
 (`LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL`, `improve/src/langfuse.js`),
 never from harness stores on disk; runtime tests use a fake Langfuse
-(`improve/tests/fake-langfuse.mjs`, `tests/fixtures.py`).
+(`improve/tests/fake-langfuse.mjs`, `tests/fixtures.py`). Do not add local
+harness-store discovery or readers.
 All layer-specific behavior is declared once in `core/config.py` as a
 `LayerProfile` and looked up by name; its paths derive from its name. Shared
 locations (skill store, alignment artifacts, CA home) are in `core/paths.py`.
